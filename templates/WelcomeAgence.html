@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenue chez Dimotec Diagnostics</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #ed891a;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .button {
+            display: inline-block;
+            background-color: #ed891a;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                Bienvenue chez Dimotec Diagnostics
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour <strong>{{nomResponsable}}</strong>,</p>
+
+                <p>Félicitations 🎉 votre agence <strong>{{nomCommercial}}</strong> a bien été enregistrée sur notre plateforme <strong>Dimotec Diagnostics</strong>.</p>
+
+                <p>Votre compte est actuellement <strong>en attente d’activation</strong>.  
+                Notre équipe procédera à la validation de vos informations dans les plus brefs délais.</p>
+
+                <p>Une fois votre compte activé, vous recevrez un e-mail de confirmation vous permettant d’accéder à votre espace professionnel.</p>
+
+                <p>Voici un récapitulatif de vos informations :</p>
+                <ul>
+                    <li><strong>Email de connexion :</strong> {{emailConnexion}}</li>
+                    <li><strong>Téléphone :</strong> {{telephone}}</li>
+                    <li><strong>Adresse :</strong> {{adresse}}</li>
+                </ul>
+
+                <p>Si vous avez la moindre question, notre équipe reste à votre disposition.</p>
+
+                <p>
+                    <a href="https://dimotec.fr" class="button">Visiter notre site</a>
+                </p>
+
+                <p>Cordialement,<br>
+                L’équipe <strong>Dimotec Diagnostics</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Dimotec Diagnostics. Tous droits réservés.<br>
+                contact@dimotec.fr | 04 00 00 00 00
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

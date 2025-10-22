@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Devis</title>
+<style>
+  :root {
+    --green-600: #16a34a;
+    --green-700: #15803d;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-400: #9ca3af;
+    --gray-500: #6b7280;
+    --gray-600: #4b5563;
+    --gray-700: #374151;
+    --gray-800: #1f2937;
+    --black: #000;
+    --yellow-100: #fef3c7;
+  }
+
+  body {
+    font-family: Arial, sans-serif;
+    background: #f9fafb;
+    color: var(--gray-800);
+    margin: 0;
+    padding: 0;
+  }
+
+  .container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+
+  .header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--gray-200);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+
+  .header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+  }
+
+  .btn-add-client {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background-color: var(--black);
+    color: white;
+    font-size: 0.875rem;
+    font-weight: 600;
+    padding: 8px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: box-shadow 0.2s;
+  }
+
+  .btn-add-client:hover {
+    box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+  }
+
+  .devis-card {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 16px;
+    padding: 24px;
+    margin-bottom: 24px;
+    transition: box-shadow 0.2s;
+  }
+
+  .devis-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  }
+
+  .devis-header {
+    display: flex;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    border-bottom: 1px solid var(--gray-200);
+    padding-bottom: 16px;
+    margin-bottom: 16px;
+  }
+
+  .devis-header h2 {
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--green-600);
+    margin-bottom: 4px;
+  }
+
+  .text-right {
+    text-align: right;
+  }
+
+  .details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .details-grid h3 {
+    font-size: 0.875rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--gray-600);
+    margin-bottom: 4px;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 24px;
+  }
+
+  table th, table td {
+    padding: 8px 12px;
+    border: 1px solid var(--gray-200);
+  }
+
+  table th {
+    background-color: var(--green-600);
+    color: white;
+    text-align: left;
+  }
+
+  table td.text-right {
+    text-align: right;
+  }
+
+  table td.text-center {
+    text-align: center;
+  }
+
+  .total-container {
+    display: flex;
+    justify-content: flex-end;
+  }
+
+  .total-box {
+    width: 33%;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    overflow: hidden;
+  }
+
+  .total-box div {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px 16px;
+  }
+
+  .total-box .total-ttc {
+    background-color: var(--yellow-100);
+    font-weight: bold;
+  }
+
+  .mentions {
+    margin-top: 24px;
+    border-top: 1px solid var(--gray-200);
+    padding-top: 16px;
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    line-height: 1.4;
+  }
+
+  .signature-section {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 32px;
+    margin-top: 40px;
+  }
+
+  .signature-box {
+    background-color: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 16px;
+    padding: 24px;
+  }
+
+  .signature-box h3 {
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+
+  .signature-input {
+    border-bottom: 1px solid var(--gray-400);
+    outline: none;
+    background: transparent;
+    padding: 2px 4px;
+    width: 120px;
+  }
+
+  .signature-canvas-container {
+    position: relative;
+    border: 2px dashed var(--gray-300);
+    border-radius: 8px;
+    overflow: hidden;
+    background: white;
+    height: 224px;
+    margin-top: 12px;
+  }
+
+  .signature-canvas-container button {
+    position: absolute;
+    top: 4px;
+    right: 4px;
+    width: 24px;
+    height: 24px;
+    background: red;
+    color: white;
+    border-radius: 50%;
+    cursor: pointer;
+  }
+
+  .footer {
+    margin-top: 40px;
+    border-top: 1px solid var(--gray-200);
+    padding-top: 12px;
+    font-size: 11px;
+    color: var(--gray-500);
+    text-align: center;
+    line-height: 1.3;
+  }
+
+  .documents-annexes a {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--green-700);
+    text-decoration: none;
+  }
+
+  .documents-annexes a:hover {
+    text-decoration: underline;
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+
+  <!-- Devis -->
+  <div class="devis-card">
+    <div class="devis-header">
+      <div>
+        <h2>DIMOTEC Diagnostic</h2>
+        <p class="text-sm text-gray-600 leading-tight">
+         298 rue d'Alco
+<br>
+          34080 Montpellier
+<br>
+          SIRET 921 392 775 00018
+<br>
+         Tél : 04 67 60 50 18
+
+
+        </p>
+      </div>
+      <div class="text-right">
+        <p><span class="text-green-700">DEVIS N° {{ numeroDevis }}</span></p>
+        <p>Date : {{ dateCreation }}</p>
+        <p>{{ prenomClient }} {{ nomClient }}</p>
+        <p>{{ emailClient }}</p>
+        <p>{{ telClient }}</p>
+      </div>
+    </div>
+
+    <div class="details-grid">
+      <div>
+        <h3>Identification du bien</h3>
+        <p>{{ nomBien }} de {{ surfaceBien }}</p>
+
+        <h3>Adresse</h3>
+        <p>
+          {{ adresseBien }}<br>
+          {{ villeBien }} {{ codePostalBien }}<br>
+          {{ etageBien }}<br>
+          {{ complementAdresseBien }}
+        </p>
+      </div>
+
+      <div>
+        <p>Numéro fiscal du bien :</p>
+        <p>{{ numeroFiscalBien }}</p>
+      </div>
+    </div>
+
+    <div class="overflow-x-auto">
+      <table>
+        <thead>
+          <tr>
+            <th>Désignation</th>
+            <th class="text-center">Quantité</th>
+            <th class="text-right">Prix HT</th>
+            <th class="text-right">TVA</th>
+            <th class="text-right">Prix TTC</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Pack : {{ packNom }}</td>
+            <td class="text-center">1</td>
+            <td class="text-right">{{ totalAvantRemise }}</td>
+            <td class="text-right">20%</td>
+            <td class="text-right">{{ totalTTC }}</td>
+          </tr>
+          <tr>
+            <td>Diagnostic : {{ diagnosticNom }}</td>
+            <td class="text-center">1</td>
+            <td class="text-right">{{ diagnosticPrixHT }}</td>
+            <td class="text-right">20%</td>
+            <td class="text-right">{{ diagnosticPrixTTC }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="total-container">
+      <div class="total-box">
+        <div><span>Hors taxe</span><span>{{ totalAvantRemise }}</span></div>
+        <div class="total-ttc"><span>Total TTC</span><span>{{ totalTTCApresRemise }}</span></div>
+      </div>
+    </div>
+
+    <div class="mentions">
+      {{ mentionsImportantes }}
+    </div>
+
+    <div class="signature-section">
+      <div class="signature-box">
+        <h3>Bon pour accord à nous renvoyer</h3>
+        <div class="flex items-center gap-2 text-sm">
+          <span>Fait à {{ villeSignature }}</span>
+        
+          <span>le {{ dateSignature }}</span>
+         
+        </div>
+        <p>Signature du client :</p>
+        <div class="signature-canvas-container">
+         
+          <canvas width="400" height="200"></canvas>
+        </div>
+      </div>
+      <div class="signature-box">
+        <img src="{{ logoEntreprise }}" alt="Signature entreprise" class="w-64">
+      </div>
+    </div>
+
+    <div class="footer">
+      <p>
+        <strong>{{ nomEntreprise }}</strong> - {{ adresseEntreprise }} - {{ villeEntreprise }}
+        SIRET {{ siretEntreprise }} - Tél. {{ telEntreprise }}<br>
+        {{ emailEntreprise }}
+      </p>
+    </div>
+  </div>
+
+</div>
+
+</body>
+</html>

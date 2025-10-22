@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Votre devis est prêt</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222; /* Couleur principale de la marque */
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #ed891a; /* Couleur accent de la marque */
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            font-size: 24px;
+        }
+        .content {
+            padding: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .button {
+            display: inline-block;
+            background-color: #ed891a; /* Couleur accent de la marque */
+            color: #ffffff;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                Dimotec Diagnostics
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour {{nomClient}},</p>
+                
+                <p>Nous sommes ravis de vous informer que votre devis est maintenant prêt. Vous pouvez le consulter pour valider les détails et procéder aux prochaines étapes.</p>
+                
+                <p>Pour accéder à votre devis, veuillez cliquer sur le bouton ci-dessous :</p>
+                
+                <p>
+                    <a href="{{lienDevis}}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
+                        Consulter le devis
+                    </a>
+                </p>
+                
+                <p>Si vous avez des questions ou besoin de modifications, n'hésitez pas à nous contacter.</p>
+                
+                <p>Cordialement,<br>
+                L'équipe Dimotec Diagnostics</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Dimotec Diagnostics. Tous droits réservés.<br>
+                [Adresse email] | [Numéro de téléphone]
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
