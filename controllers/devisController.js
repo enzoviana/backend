@@ -251,7 +251,7 @@ exports.createDevis = async (req, res) => {
 
     // 💌 Envoi de l’e-mail si le payeur est le client
     if (data.payer === "client") {
-      const lienDevis = `https://dimotec.fr/devis/${devis._id}`; // 🔗 À adapter à ton frontend
+      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`; // 🔗 À adapter à ton frontend
       await sendEmail({
         to: client.email,
         subject: `Votre devis ${devis.numero} est prêt`,

@@ -72,6 +72,43 @@ exports.login = async (req, res) => {
   }
 };
 
+/**
+ * VERIFY TOKEN
+ */
+exports.verifyToken = async (req, res) => {
+  try {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return res.status(401).json({ valid: false, message: "Token manquant" });
+    }
+
+    const token = authHeader.split(" ")[1];
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Tu peux aussi vérifier que l’admin existe toujours :
+    const admin = await Admin.findById(decoded.id);
+    if (!admin) {
+      return res.status(401).json({ valid: false, message: "Utilisateur introuvable" });
+    }
+
+    res.status(200).json({
+      valid: true,
+      admin: {
+        id: admin._id,
+        nom: admin.nom,
+        prenom: admin.prenom,
+        email: admin.email,
+        role: admin.role
+      }
+    });
+  } catch (error) {
+    console.error("❌ Erreur de vérification du token :", error.message);
+    res.status(401).json({ valid: false, message: "Token invalide ou expiré" });
+  }
+};
+
+
 
 /**
  * GET ADMIN DETAILS

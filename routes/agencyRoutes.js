@@ -10,6 +10,8 @@ const upload = require('../middlewares/upload');
 
 // Login agence
 router.post('/login', agencyController.login);
+router.get('/verify-token', agencyController.verifyToken);
+
 router.post(
   '/register',
   upload.fields([

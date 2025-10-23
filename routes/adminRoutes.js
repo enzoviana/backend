@@ -15,6 +15,7 @@ router.post('/register', adminController.register);
 router.post('/login', adminController.login);
 
 router.get('/me', authMiddleware, adminController.getAdminDetails);
+router.get("/verify-token",  adminController.verifyToken);
 
 
 // Modifier infos admin (protégé)

@@ -76,6 +76,54 @@ exports.login = async (req, res) => {
   }
 };
 
+/**
+ * VERIFY TOKEN AGENCE
+ */
+exports.verifyToken = async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split(" ")[1]; // Récupère le token du header
+
+    if (!token) {
+      return res.status(401).json({ valid: false, message: "Token manquant" });
+    }
+
+    // Vérifie et décode le token
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Recherche de l'agence correspondante
+    const agence = await Agence.findById(decoded.agenceId).select(
+      "nom_commercial admin.email statut logo"
+    );
+
+    if (!agence) {
+      return res.status(404).json({ valid: false, message: "Agence introuvable" });
+    }
+
+    // Si le statut est bloqué, suspendu ou en attente → refuser l'accès
+    if (["bloqué", "suspendu", "en_attente"].includes(agence.statut)) {
+      return res.status(403).json({
+        valid: false,
+        message: "Votre compte est inactif. Contactez le support.",
+      });
+    }
+
+    // ✅ Token valide
+    res.json({
+      valid: true,
+      agence: {
+        id: agence._id,
+        nom_commercial: agence.nom_commercial,
+        email: agence.admin.email,
+        statut: agence.statut,
+        logo: agence.logo,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Erreur lors de la vérification du token :", error);
+    res.status(401).json({ valid: false, message: "Token invalide ou expiré" });
+  }
+};
+
 
 
 /**
