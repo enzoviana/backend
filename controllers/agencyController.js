@@ -387,6 +387,7 @@ exports.getCagnotteEtReduction = async (req, res) => {
 exports.filterPacks = async (req, res) => {
   try {
     const { typeBien, typeOperation, annee, surface } = req.body;
+    console.log(req.body)
 
     if (!typeBien || !typeOperation || !surface) {
       return res.status(400).json({ message: "Type de bien, type d'opération et surface sont requis." });
@@ -412,7 +413,8 @@ exports.filterPacks = async (req, res) => {
     const surfaceMatch = surface.match(/(\d+)-(\d+)/);
     const surfaceMinDemande = surfaceMatch ? parseInt(surfaceMatch[1], 10) : 0;
     const surfaceMaxDemande = surfaceMatch ? parseInt(surfaceMatch[2], 10) : surfaceMinDemande;
-    console.log("🔹 Surface demandée min/max :", surfaceMinDemande, "/", surfaceMaxDemande);
+    console.log("🔹 Surface demandée :", typeBien === "appartement" ? typeAppartement : `${surfaceMinDemande}-${surfaceMaxDemande}`);
+
 
     // Recherche packs
     const packs = await Pack.find({ typeBien, typeOperation, trancheAnnee: tranche })
@@ -466,6 +468,7 @@ exports.filterPacks = async (req, res) => {
 exports.filterDiagnostics = async (req, res) => {
   try {
     const { typeBien, typeOperation, annee, surface } = req.body;
+    console.log(req.body);
 
     if (!typeBien || !typeOperation || !annee || !surface) {
       return res.status(400).json({
@@ -473,49 +476,77 @@ exports.filterDiagnostics = async (req, res) => {
       });
     }
 
-    // --- Récupération de l'agence depuis le middleware ---
     const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || 'autre').toLowerCase();
-    console.log("🔹 Secteur de l'agence :", secteur);
+    const secteur = (agence?.alerte_secteur || "autre").toLowerCase();
 
-    // --- Déterminer la tranche d'année ---
+    // --- Déterminer la tranche d’année ---
     let tranche;
     switch (annee) {
-      case 'Avant 1949': tranche = 'avant_1949'; break;
-      case 'De 1949 à 30 Juin 1997': tranche = '1949_1997'; break;
-      case 'Du 1 Juillet 1997 + 15 ans': tranche = '1997_plus15'; break;
-      case 'Moins de 15 ans': tranche = 'moins_15ans'; break;
-      default: tranche = 'moins_15ans';
+      case "Avant 1949": tranche = "avant_1949"; break;
+      case "De 1949 à 30 Juin 1997": tranche = "1949_1997"; break;
+      case "Du 1 Juillet 1997 + 15 ans": tranche = "1997_plus15"; break;
+      case "Moins de 15 ans":
+      case "Après 2010": tranche = "moins_15ans"; break;
+      default: tranche = "moins_15ans";
     }
 
     console.log("🔹 Tranche année :", tranche);
+    console.log("🔹 Type :", typeBien, "-", typeOperation);
 
-    // --- Déterminer les diagnostics obligatoires selon la règle métier ---
+    // --- Diagnostics obligatoires ---
     let diagnosticsObligatoires = [];
-
-    if (typeBien === "maison") {
-      if (tranche === "avant_1949") {
-        diagnosticsObligatoires = ["DPE", "TERMITE", "ELECTRICITE", "PLOMB"];
-      } else if (tranche === "1949_1997") {
-        diagnosticsObligatoires = ["DPE", "TERMITE", "ELECTRICITE"];
-      } else if (tranche === "1997_plus15") {
-        diagnosticsObligatoires = ["DPE", "TERMITE", "ELECTRICITE"];
-      } else if (tranche === "moins_15ans") {
-        diagnosticsObligatoires = ["DPE", "TERMITE"];
+    if (typeOperation === "vente") {
+      if (typeBien === "maison" || typeBien === "appartement") {
+        switch (tranche) {
+          case "avant_1949":
+            diagnosticsObligatoires = ["DPE", "Termites", "Electricité", "Gaz", "Amiante", "Plomb", "ERP", "Surface"];
+            break;
+          case "1949_1997":
+            diagnosticsObligatoires = ["DPE", "Termites", "Electricité", "Gaz", "Amiante", "ERP", "Surface"];
+            break;
+          case "1997_plus15":
+            diagnosticsObligatoires = ["DPE", "Termites", "Electricité", "Gaz", "ERP", "Surface"];
+            break;
+          case "moins_15ans":
+            diagnosticsObligatoires = ["DPE", "Termites", "ERP", "Surface"];
+            break;
+        }
       }
-    } else if (typeBien === "appartement") {
-      diagnosticsObligatoires = ["DPE", "ELECTRICITE"];
+    } else if (typeOperation === "location") {
+      if (typeBien === "maison") {
+        diagnosticsObligatoires = tranche === "avant_1949"
+          ? ["DPE", "Surface", "ERP", "Electricité/Gaz", "Plomb"]
+          : ["DPE", "Surface", "ERP", "Electricité/Gaz"];
+      } else if (typeBien === "appartement") {
+        diagnosticsObligatoires = tranche === "avant_1949"
+          ? ["DPE", "Surface", "ERP", "Electricité/Gaz", "DAPP (amiante)", "Plomb"]
+          : tranche === "1949_1997"
+          ? ["DPE", "Surface", "ERP", "Electricité/Gaz", "DAPP (amiante)"]
+          : ["DPE", "Surface", "ERP", "Electricité/Gaz"];
+      }
     }
 
     console.log("🔹 Diagnostics obligatoires :", diagnosticsObligatoires);
 
-    // --- Extraction de la plage de surface ---
-    const surfaceMatch = surface.match(/(\d+)-(\d+)/);
-    const surfaceMinDemande = surfaceMatch ? parseInt(surfaceMatch[1], 10) : 0;
-    const surfaceMaxDemande = surfaceMatch ? parseInt(surfaceMatch[2], 10) : surfaceMinDemande;
+    // --- Calcul surface ---
+    let surfaceMinDemande = 0;
+    let surfaceMaxDemande = 0;
+    let typeAppartement = null;
+
+    if (typeBien === "maison") {
+      const match = surface.match(/(\d+)-(\d+)/);
+      surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
+      surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+    } else if (typeBien === "appartement") {
+      // Surface envoyée par le front correspond au type d'appartement (T1, T2, ... ou "<20m2")
+      typeAppartement = surface;
+      surfaceMinDemande = 0;
+      surfaceMaxDemande = 0; // on n'utilise pas les min/max pour les appartements
+    }
+
     console.log("🔹 Surface demandée :", surfaceMinDemande, "-", surfaceMaxDemande);
 
-    // --- Rechercher les diagnostics correspondants ---
+    // --- Récupérer diagnostics ---
     const allDiagnostics = await Diagnostic.find({
       typeBien: typeBien.toLowerCase(),
       typeOperation: typeOperation.toLowerCase(),
@@ -525,65 +556,56 @@ exports.filterDiagnostics = async (req, res) => {
       return res.status(404).json({ message: "Aucun diagnostic trouvé pour ces critères." });
     }
 
-    // --- Fonction de normalisation (accents, casse, espaces) ---
-    const normalize = (str) =>
-      str
-        ?.toString()
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[\u0300-\u036f]/g, "")
-        .trim();
+    const normalize = str => str?.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/s$/, "").trim();
 
-    // --- Filtrer uniquement ceux requis selon les règles ---
-    const diagnosticsFiltres = allDiagnostics.filter(d => {
-      const diagName = normalize(d.nom);
-      return diagnosticsObligatoires.some(name => diagName.includes(normalize(name)));
-    });
+    const diagnosticsFiltres = allDiagnostics.filter(d =>
+      diagnosticsObligatoires.some(name =>
+        normalize(d.nom).includes(normalize(name)) || normalize(name).includes(normalize(d.nom))
+      )
+    );
+
+    console.log("🔹 Diagnostics filtrés :");
+    diagnosticsFiltres.forEach(d => console.log(`- ${d.nom} (${d.typeBien} / ${d.typeOperation})`));
 
     if (!diagnosticsFiltres.length) {
-      console.log("❌ Aucun diagnostic correspondant aux règles métier trouvé.");
-      return res.status(404).json({ message: "Aucun diagnostic requis pour cette configuration." });
+      return res.status(404).json({ message: "Aucun diagnostic obligatoire trouvé pour cette configuration." });
     }
 
-    // --- Ajouter le tarif selon la surface et le secteur ---
+    // --- Ajouter le tarif ---
     const diagnosticsAvecTarif = diagnosticsFiltres.map(diag => {
       let tarifTrouve = null;
-      let plageSurface = null;
 
-      if (diag.tarifsParSurface?.length) {
+      if (typeBien === "maison" && diag.tarifsParSurface?.length) {
+        // Maison : on utilise la plage surface
         for (let tps of diag.tarifsParSurface) {
           if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
             tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
-            plageSurface = `${tps.surfaceMin}-${tps.surfaceMax}`;
             break;
           }
         }
-
-        // 🔸 Fallback : si aucun tarif exact trouvé, prendre le plus proche
-        if (!tarifTrouve) {
-          const tarifLePlusProche = diag.tarifsParSurface
-            .sort((a, b) => Math.abs(surfaceMinDemande - a.surfaceMin) - Math.abs(surfaceMinDemande - b.surfaceMin))[0];
-          tarifTrouve = tarifLePlusProche?.tarifs?.[secteur] ?? tarifLePlusProche?.tarifs?.autre ?? null;
-          plageSurface = `${tarifLePlusProche?.surfaceMin}-${tarifLePlusProche?.surfaceMax}`;
+      } else if (typeBien === "appartement" && diag.tarifsParAppartement?.length) {
+        // Appartement : on utilise le type d'appartement
+        const tarifObj = diag.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+        if (tarifObj) {
+          tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? null;
         }
       }
 
-      console.log(`💰 Diagnostic : ${diag.nom}`);
-      console.log(`   → Plage surface : ${plageSurface || "aucune"}`);
-      console.log(`   → Tarif trouvé (${secteur}) : ${tarifTrouve ?? "non trouvé"}`);
+      console.log(`🔹 ${diag.nom} : tarif = ${tarifTrouve}`);
 
       return {
         ...diag.toObject(),
-        tarifPourSurface: tarifTrouve
+        tarifPourSurface: tarifTrouve,
       };
     });
-
-    console.log(`✅ ${diagnosticsAvecTarif.length} diagnostics filtrés avec tarif.`);
 
     res.json({
       diagnostics: diagnosticsAvecTarif,
       tranche,
-      diagnosticsObligatoires
+      diagnosticsObligatoires,
+      surfaceMinDemande,
+      surfaceMaxDemande,
+      typeAppartement
     });
 
   } catch (error) {
@@ -591,6 +613,9 @@ exports.filterDiagnostics = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors du filtrage des diagnostics." });
   }
 };
+
+
+
 
 
 /**
@@ -642,5 +667,151 @@ exports.filterSupplementsByTypeBien = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors du filtrage des suppléments." });
   }
 };
+
+
+// ------------------------ MDP REINITAILISATION ------------------------------- //
+
+
+const crypto = require('crypto');
+
+/**
+ * DEMANDE DE RÉINITIALISATION DU MOT DE PASSE
+ * Envoie un e-mail avec un lien contenant un token temporaire
+ */
+exports.forgotPassword = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // Recherche de l'agence par email (admin ou contact)
+    const agence = await Agence.findOne({
+      $or: [
+        { 'admin.email': email },
+        { 'emails_contact.email': email }
+      ]
+    });
+
+    if (!agence) {
+      return res.status(404).json({ message: "Aucun compte trouvé avec cet email." });
+    }
+
+    // Génération d’un token aléatoire
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // Stockage temporaire du token dans la BDD (valide 1h)
+    agence.admin.resetPasswordToken = resetTokenHash;
+    agence.admin.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1h
+    await agence.save();
+
+    // Lien de réinitialisation (frontend)
+    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+
+    // Envoi de l’e-mail
+    await sendEmail({
+      to: agence.admin.email,
+      subject: "Réinitialisation de votre mot de passe - Dimotec Diagnostics",
+      template: "ResetPassword.html", // ton template HTML dans /templates/ResetPassword.html
+      variables: {
+        nomClient: agence.admin.nom || agence.nom_responsable,
+        lienReinitialisation: resetUrl
+      }
+    });
+
+    res.json({ message: "Un e-mail de réinitialisation a été envoyé à votre adresse." });
+  } catch (error) {
+    console.error("❌ Erreur forgotPassword :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la demande de réinitialisation." });
+  }
+};
+
+/**
+ * VÉRIFICATION DU TOKEN DE RÉINITIALISATION
+ */
+exports.verifyResetToken = async (req, res) => {
+  try {
+    const { token } = req.params;
+    console.log("🔹 Token reçu du frontend :", token);
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    console.log("🔹 Token hashé :", tokenHash);
+
+    const agence = await Agence.findOne({
+      'admin.resetPasswordToken': tokenHash,
+      'admin.resetPasswordExpires': { $gt: Date.now() }
+    });
+
+    console.log("🔹 Agence trouvée :", agence ? agence._id : "Aucune agence trouvée");
+    console.log("🔹 Date actuelle :", new Date());
+    if (agence) {
+      console.log("🔹 Date d'expiration du token :", new Date(agence.admin.resetPasswordExpires));
+    }
+
+    if (!agence) {
+      return res.status(400).json({ message: "Token invalide ou expiré." });
+    }
+
+    res.json({ message: "Token valide.", email: agence.admin.email });
+  } catch (error) {
+    console.error("❌ Erreur verifyResetToken :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la vérification du token." });
+  }
+};
+
+
+/**
+ * DÉFINITION D’UN NOUVEAU MOT DE PASSE
+ */
+exports.resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { mot_de_passe } = req.body;
+
+    console.log("🔹 Token reçu pour reset :", token);
+    console.log("🔹 Mot de passe reçu :", mot_de_passe);
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    console.log("🔹 Token hashé :", tokenHash);
+
+    const agence = await Agence.findOne({
+      'admin.resetPasswordToken': tokenHash,
+      'admin.resetPasswordExpires': { $gt: Date.now() }
+    });
+
+    console.log("🔹 Agence trouvée :", agence ? agence._id : "Aucune agence trouvée");
+    if (agence) {
+      console.log("🔹 Date actuelle :", new Date());
+      console.log("🔹 Date d'expiration du token :", new Date(agence.admin.resetPasswordExpires));
+    }
+
+    if (!agence) {
+      return res.status(400).json({ message: "Token invalide ou expiré." });
+    }
+
+    // ✅ Mise à jour du mot de passe directement
+    // Le pre('save') dans AdminSchema va hash automatiquement
+    agence.admin.mot_de_passe = mot_de_passe;
+    agence.admin.resetPasswordToken = undefined;
+    agence.admin.resetPasswordExpires = undefined;
+    await agence.save();
+
+    console.log("✅ Mot de passe réinitialisé pour l'agence :", agence._id);
+
+    // Envoi d’un email de confirmation
+    await sendEmail({
+      to: agence.admin.email,
+      subject: "Votre mot de passe a été modifié - Dimotec Diagnostics",
+      template: "PasswordChanged.html",
+      variables: {
+        nomClient: agence.admin.nom || agence.nom_responsable
+      }
+    });
+
+    res.json({ message: "Mot de passe réinitialisé avec succès." });
+  } catch (error) {
+    console.error("❌ Erreur resetPassword :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la réinitialisation du mot de passe." });
+  }
+};
+
 
 

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Confirmation de validation du devis</title>
+    <title>Nouvel ordre de mission créé</title>
     <style>
         body {
             margin: 0;
@@ -58,19 +58,27 @@
             <td class="content">
                 <p>Bonjour {{nomClient}},</p>
 
-                <p>Nous vous remercions d’avoir validé votre devis n° <strong>{{numeroDevis}}</strong>.</p>
+                <p>Nous avons le plaisir de vous informer qu’un <strong>ordre de mission</strong> a été créé pour votre compte.</p>
 
-                <p>Notre équipe va désormais planifier l’intervention selon les informations convenues. Vous recevrez prochainement un message de confirmation avec les détails de la date et de l’heure du rendez-vous.</p>
+                <p>📄 <strong>Numéro d’ordre de mission :</strong> {{numero}}<br>
+                🧾 <strong>Référence du devis associé :</strong> {{devisNumero}}<br>
+                🏢 <strong>Agence en charge :</strong> {{nomAgence}}<br>
+                📆 <strong>Date de création :</strong> {{dateCreation}}</p>
 
-                <p>Vous pouvez consulter à tout moment les informations de votre devis en cliquant sur le bouton ci-dessous :</p>
+                <p><strong>Description :</strong><br>
+                {{description}}</p>
+
+                <p>Statut actuel de la mission : <strong>{{statut}}</strong></p>
+
+                <p>Vous pouvez consulter les détails complets de votre mission en cliquant sur le bouton ci-dessous :</p>
 
                 <p>
-                    <a href="{{lienDevis}}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
-                        Consulter mon devis
+                    <a href="{{lienMission}}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
+                        Consulter l’ordre de mission
                     </a>
                 </p>
 
-                <p>Nous restons à votre disposition pour toute question complémentaire ou information sur la suite de votre dossier.</p>
+                <p>Nous restons à votre disposition pour toute question ou précision supplémentaire.</p>
 
                 <p>Cordialement,<br>
                 L’équipe Dimotec Diagnostics</p>

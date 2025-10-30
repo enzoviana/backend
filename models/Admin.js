@@ -68,8 +68,13 @@ const AdminSchema = new Schema({
 
   // champs utiles supplémentaires
   role: { type: String, default: 'admin' },
-  isActive: { type: Boolean, default: true }
-}, {
+  isActive: { type: Boolean, default: true },
+    // 🔹 Champs pour la réinitialisation du mot de passe
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpires: { type: Date, default: null }
+}, 
+
+{
   timestamps: true // createdAt, updatedAt
 });
 

@@ -91,7 +91,7 @@ surfaceMaison: {
 ],
   agenceId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "Agency",
+    ref: "Agence",
     required: true,
   },
 
@@ -129,6 +129,12 @@ surfaceMaison: {
   accesClientExpire: {
     type: Date,
     default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 jours
+  },
+
+  /* 📄 PDF généré et stocké sur Cloudinary */
+  pdfUrl: {
+    type: String,
+    default: null, // sera rempli après upload sur Cloudinary
   },
 });
 

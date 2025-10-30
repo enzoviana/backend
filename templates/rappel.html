@@ -48,40 +48,38 @@
     </style>
 </head>
 <body>
-    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
-        <tr>
-            <td class="header">
-                Dimotec Diagnostics
-            </td>
-        </tr>
-        <tr>
-            <td class="content">
-                <p>Bonjour [Nom du destinataire],</p>
-                
-                <p>Nous vous contactons pour vous rappeler que nous vous avons envoyé un devis il y a quelques jours. Nous n'avons pas encore reçu de retour de votre part et nous tenons à vous assurer que nous sommes là pour répondre à toutes vos questions.</p>
-                
-                <p>Ce devis est toujours valide et prêt à être consulté. N'hésitez pas à le revoir pour confirmer les détails ou procéder à la signature.</p>
-                
-                <p>Pour accéder à votre devis, veuillez cliquer sur le bouton ci-dessous :</p>
-                
-                <p>
-                    <a href="[Lien vers le devis]" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
-                        Consulter le devis
-                    </a>
-                </p>
-                
-                <p>Si vous avez besoin de modifications ou d'informations supplémentaires, contactez-nous au plus vite.</p>
-                
-                <p>Cordialement,<br>
-                L'équipe Dimotec Diagnostics</p>
-            </td>
-        </tr>
-        <tr>
-            <td class="footer">
-                © 2025 Dimotec Diagnostics. Tous droits réservés.<br>
-                [Adresse email] | [Numéro de téléphone]
-            </td>
-        </tr>
-    </table>
+  <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+    <tr>
+      <td class="header">
+        Dimotec Diagnostics
+      </td>
+    </tr>
+    <tr>
+      <td class="content">
+        <p>Bonjour {{ nomClient }},</p>
+
+        <p>Nous revenons vers vous concernant votre devis n° <strong>{{ numeroDevis }}</strong>. Nous n’avons pas encore reçu de réponse de votre part.</p>
+
+        <p>Ce devis est toujours disponible. Si vous avez des questions ou souhaitez y apporter des modifications, nous sommes à votre disposition.</p>
+
+        <p>Vous pouvez consulter votre devis directement en cliquant sur le bouton ci-dessous :</p>
+
+        <p>
+          <a href="{{ lienDevis }}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
+            Consulter le devis
+          </a>
+        </p>
+
+        <p>Cordialement,<br>L’équipe Dimotec Diagnostics</p>
+      </td>
+    </tr>
+    <tr>
+      <td class="footer">
+        © 2025 Dimotec Diagnostics. Tous droits réservés.<br>
+        contact@dimotec.fr | 06 00 00 00 00
+      </td>
+    </tr>
+  </table>
 </body>
+
 </html>

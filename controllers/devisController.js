@@ -39,6 +39,69 @@ exports.getDevis = async (req, res) => {
   }
 };
 
+/**
+ * 📧 Envoyer un rappel au client pour un devis
+ */
+exports.envoyerRappelDevis = async (req, res) => {
+  try {
+    console.log("📥 Requête reçue pour envoyer un rappel");
+
+    const { id } = req.params;
+    console.log("🔍 ID du devis :", id);
+
+    // ✅ Trouver le devis
+    const devis = await Devis.findById(id);
+    console.log("📄 Devis trouvé :", devis ? "OUI" : "NON");
+
+    if (!devis) {
+      console.log("❌ Aucun devis trouvé avec cet ID");
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    // ✅ Vérification email client
+    console.log("📧 Email client :", devis.client?.email || "Aucun email");
+    if (!devis.client?.email) {
+      console.log("❌ Devis sans email client → envoi annulé");
+      return res.status(400).json({ message: "Ce devis n'a pas d'e-mail client associé." });
+    }
+
+    // 🔗 Lien client
+    const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+    console.log("🔗 Lien du devis envoyé au client :", lienDevis);
+
+    // 💌 Envoi e-mail
+    console.log("📨 Envoi de l'e-mail en cours...");
+    await sendEmail({
+      to: devis.client.email,
+      subject: `Rappel concernant votre devis ${devis.numero}`,
+      template: "rappel.html",
+      variables: {
+        nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+        numeroDevis: devis.numero,
+        lienDevis
+      }
+    });
+    console.log("✅ E-mail envoyé avec succès");
+
+    // 🕒 Mise à jour date de dernière relance
+    devis.derniereRelance = new Date();
+    await devis.save();
+    console.log("🗂 Dernière relance mise à jour :", devis.derniereRelance);
+
+    console.log("✅ Processus de rappel terminé avec succès");
+    return res.status(200).json({
+      message: "✅ Rappel envoyé avec succès.",
+      derniereRelance: devis.derniereRelance
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur lors de l'envoi du rappel :", error);
+    return res.status(500).json({ message: "Erreur serveur lors de l'envoi du rappel." });
+  }
+};
+
+
+
 
 /**
  * 🧾 Créer un nouveau devis
@@ -103,28 +166,35 @@ exports.createDevis = async (req, res) => {
       }
       totalAvantRemise = Number(tarifTrouve) || 0;
     } else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
-      const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
-      totalAvantRemise = diagnostics.reduce((sum, d) => {
-        let surfaceMin = 0,
-          surfaceMax = 0;
-        if (data.surfaceMaison) {
-          const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-          surfaceMin = match ? parseInt(match[1], 10) : 0;
-          surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-        }
+  const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
+  totalAvantRemise = diagnostics.reduce((sum, d) => {
+    let tarifTrouve = 0;
 
-        let tarifTrouve = null;
-        if (d.tarifsParSurface?.length) {
-          for (let tps of d.tarifsParSurface) {
-            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-              tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
-              break;
-            }
-          }
+    if (data.bien === "maison" && d.tarifsParSurface?.length) {
+      let surfaceMin = 0,
+          surfaceMax = 0;
+      if (data.surfaceMaison) {
+        const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+        surfaceMin = match ? parseInt(match[1], 10) : 0;
+        surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+      }
+
+      for (let tps of d.tarifsParSurface) {
+        if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+          tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
+          break;
         }
-        return sum + (Number(tarifTrouve) || 0);
-      }, 0);
-    } else if (data.type === "audit") {
+      }
+    } else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
+      const typeAppart = data.surfaceAppartement; // T1, T2...
+      const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+      if (tarifAppart) tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
+    }
+
+    return sum + (Number(tarifTrouve) || 0);
+  }, 0);
+}
+ else if (data.type === "audit") {
       const tarifsAudit = {
         "0 - 70 m²": 300,
         "71 - 90 m²": 350,
@@ -213,41 +283,53 @@ exports.createDevis = async (req, res) => {
       await client.save();
     }
 
-    // ✅ Si le payeur est l’agence
-    if (data.payer === "agence") {
-      const facture = new Facture({
-        devisId: devis._id,
-        agenceId: devis.agenceId,
-        numero: `F-${Date.now()}`,
-        clientId: client._id,
-        montantHT: devis.montantTTC,
-        montantTTC: devis.montantTTC,
-        statut: "Envoyée",
-      });
-      await facture.save();
+// ✅ Si le payeur est l’agence
+if (data.payer === "agence") {
+  const facture = new Facture({
+    devisId: devis._id,
+    agenceId: devis.agenceId,
+    numero: `F-${Date.now()}`,
+    clientId: client._id,
+    montantHT: devis.montantTTC,
+    montantTTC: devis.montantTTC,
+    statut: "Envoyée",
+  });
+  await facture.save();
 
-      const ordre = new OrdreMission({
-        devisId: devis._id,
-        agenceId: devis.agenceId,
-        numero: `OM-${Date.now()}`,
-        clientId: client._id,
-        description: `Ordre de mission pour le devis ${devis._id}`,
-        statut: "En cours",
-      });
-      await ordre.save();
+  const ordre = new OrdreMission({
+    devisId: devis._id,
+    agenceId: devis.agenceId,
+    numero: `OM-${Date.now()}`,
+    clientId: client._id,
+    description: `Ordre de mission pour le devis ${devis._id}`,
+    statut: "Commande",
+  });
 
-      const agence = await Agence.findById(devis.agenceId);
-      if (agence) {
-        const montantCagnotte = devis.montantTTC * 0.03;
-        agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
-        await agence.save();
-      }
+  // 🔹 Ajouter le fichier de consentement s’il existe
+  if (req.file) {
+    ordre.fichiersClient.push({
+      nom: req.file.originalname,
+      url: req.file.path,
+      public_id: req.file.filename || req.file.public_id,
+      dateDepot: new Date(),
+    });
+  }
 
-      return res.status(201).json({
-        message: "✅ Devis créé et accepté automatiquement (payeur agence).",
-        devis,
-      });
-    }
+  await ordre.save();
+
+  const agence = await Agence.findById(devis.agenceId);
+  if (agence) {
+    const montantCagnotte = devis.montantTTC * 0.03;
+    agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
+    await agence.save();
+  }
+
+  return res.status(201).json({
+    message: "✅ Devis créé et accepté automatiquement (payeur agence).",
+    devis,
+  });
+}
+
 
     // 💌 Envoi de l’e-mail si le payeur est le client
     if (data.payer === "client") {
@@ -327,7 +409,7 @@ exports.accepterDevisViaLien = async (req, res) => {
       numero: `OM-${Date.now()}`,
       clientId,
       description: `Ordre de mission pour le devis ${devis.numero}`,
-      statut: "En cours"
+      statut: "Commande"
     });
     await ordre.save();
     console.log("✅ Ordre de mission créé :", ordre.numero);
@@ -357,8 +439,75 @@ exports.accepterDevisViaLien = async (req, res) => {
   }
 };
 
+// 🔹 Upload PDF d'un devis vers Cloudinary
+exports.uploadPdfDevis = async (req, res) => {
+  try {
+    const { devisId } = req.params;
+
+    if (!req.file) {
+      return res.status(400).json({ message: "Aucun fichier PDF reçu." });
+    }
+
+    const pdfUrl = req.file.path; // URL Cloudinary
+
+    // Mettre à jour le devis avec le lien du PDF
+    const devis = await Devis.findByIdAndUpdate(
+      devisId,
+      { pdfUrl },
+      { new: true }
+    );
+
+    if (!devis) {
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    return res.status(200).json({
+      message: "PDF du devis uploadé avec succès !",
+      pdfUrl,
+      devis
+    });
+  } catch (err) {
+    console.error("❌ Erreur uploadPdfDevis :", err);
+    return res.status(500).json({ message: "Erreur lors de l'upload du PDF." });
+  }
+};
 
 
+// 🔹 Upload signature image (base64 → Cloudinary)
+exports.uploadSignature = async (req, res) => {
+  try {
+    const { devisId } = req.params;
+    const { image, ville, date } = req.body;
+
+    if (!image) return res.status(400).json({ message: "Signature manquante." });
+
+    // Upload Cloudinary (image base64)
+    const cloudinary = require("../config/cloudinary"); // adapte si ton chemin diffère
+
+    const result = await cloudinary.uploader.upload(image, {
+      folder: "signatures_devis",
+      public_id: `signature_${devisId}`,
+      overwrite: true
+    });
+
+    const devis = await Devis.findByIdAndUpdate(
+      devisId,
+      { signatureUrl: result.secure_url, signatureVille: ville, signatureDate: date },
+      { new: true }
+    );
+
+    if (!devis) return res.status(404).json({ message: "Devis introuvable." });
+
+    return res.status(200).json({
+      message: "✅ Signature enregistrée",
+      signatureUrl: result.secure_url
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur uploadSignature :", error);
+    return res.status(500).json({ message: "Erreur lors de l’upload de la signature." });
+  }
+};
 
 
 
@@ -367,34 +516,82 @@ exports.accepterDevisViaLien = async (req, res) => {
 exports.getDevisViaLien = async (req, res) => {
   try {
     const { key } = req.params;
+    console.log("🟢 [getDevisViaLien] Lien reçu :", key);
 
-    // Récupération des devis associés à la clé
+    // Récupération du devis
     const devis = await Devis.find({ accesClientKey: key })
-      .populate("client") // récupère toutes les infos du client
-      .populate("pack") // si pack existant
-      .populate("diagnosticsSelectionnes"); // si diagnostics existants
-      // tu peux ajouter d'autres populates si nécessaire
+      .populate("client")
+      .populate("pack")
+      .populate("diagnosticsSelectionnes")
+      .populate({
+        path: "agenceId",
+        model: "Agence", // ⚠️ Vérifie que ton modèle s'appelle bien "Agence"
+        select:
+          "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut",
+      });
 
-    // Vérification de l’existence du lien
+    console.log("📦 Devis trouvés :", devis.length);
+
+    // Vérification existence
     if (!devis || devis.length === 0) {
+      console.warn("❌ Aucun devis trouvé pour la clé :", key);
       return res.status(404).json({ message: "Lien invalide ou expiré." });
     }
 
-    // Vérification d’expiration du lien
-    if (devis[0].accesClientExpire && devis[0].accesClientExpire < new Date()) {
+    // Vérification d’expiration
+    const premierDevis = devis[0];
+    console.log("⏱️ Date d’expiration du lien :", premierDevis.accesClientExpire);
+    if (premierDevis.accesClientExpire && premierDevis.accesClientExpire < new Date()) {
+      console.warn("⚠️ Lien expiré :", key);
       return res.status(403).json({ message: "Lien expiré." });
     }
 
-    // Envoi direct de tous les devis trouvés
+    // Vérifie si l’agence est bien peuplée
+    console.log("🏢 Agence ID :", premierDevis.agenceId?._id || premierDevis.agenceId);
+    console.log("🏢 Agence complète :", premierDevis.agenceId);
+
+    // Calcul automatique des tarifs
+    const devisAvecTarifs = devis.map((d, i) => {
+      console.log(`\n📋 Traitement du devis #${i + 1} (${d.numero})`);
+
+      // Adresse par défaut si vide
+      if (!d.adresseBien || !d.adresseBien.adresse) {
+        console.log("📍 Adresse bien vide, utilisation de l’adresse client");
+        d.adresseBien = {
+          adresse: d.client?.adresse || "",
+          codePostal: d.client?.codePostal || "",
+          ville: d.client?.ville || "",
+          etage: "",
+          complement: ""
+        };
+      }
+
+      // Ajout des tarifs
+      d.diagnosticsSelectionnes = d.diagnosticsSelectionnes.map(diag => {
+        const surface = d.surfaceAppartement || d.surfaceMaison || "<20m2>";
+        const tarifObj = diag.tarifsParAppartement?.find(t => t.typeAppartement === surface);
+        const tarif = tarifObj ? tarifObj.tarifs.var : 0;
+        console.log(`💰 ${diag.nom} → surface: ${surface} → tarif: ${tarif}`);
+        diag.prixHT = tarif;
+        return diag;
+      });
+
+      return d;
+    });
+
+    console.log("✅ Tous les devis traités avec succès.\n");
+
     return res.status(200).json({
       message: "✅ Devis récupérés",
-      devis,
+      devis: devisAvecTarifs,
     });
+
   } catch (error) {
-    console.error("Erreur accès devis via lien :", error);
+    console.error("🚨 Erreur accès devis via lien :", error);
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 

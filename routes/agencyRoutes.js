@@ -5,6 +5,7 @@ const devisController = require('../controllers/devisController')
 const adminController = require('../controllers/adminController');
 const clientController = require("../controllers/clientController");
 const missionController = require("../controllers/missionController");
+const dashboardController = require("../controllers/agencyDashboard")
 const agencyAuth = require('../middlewares/agencyAuth');
 const upload = require('../middlewares/upload');
 
@@ -20,6 +21,16 @@ router.post(
   ]),
   agencyController.register
 );
+
+// 🔹 Mot de passe oublié / réinitialisation
+router.post('/forgot-password', agencyController.forgotPassword);
+router.post('/reset-password/:token', agencyController.resetPassword);
+
+
+// ---------------------- DEVIS ----------------------
+
+
+
 router.get('/devis', agencyAuth, devisController.getDevis);
 router.post(
   '/devis',
@@ -63,5 +74,9 @@ router.get('/me/cagnotte', agencyAuth, agencyController.getCagnotteEtReduction);
 
 router.get('/me', agencyAuth, agencyController.getInfosAgence);
 router.put('/me', agencyAuth, agencyController.updateInfosAgence);
+
+
+// ---------------------- Dashboard ----------------------
+router.get("/dashboard", agencyAuth, dashboardController.getDashboardAgence);
 
 module.exports = router;

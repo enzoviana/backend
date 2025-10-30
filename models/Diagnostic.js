@@ -1,9 +1,23 @@
 const mongoose = require("mongoose");
 
-// Schéma pour les tarifs selon la surface
+// Schéma pour les tarifs selon la surface (maisons)
 const tarifSurfaceSchema = new mongoose.Schema({
   surfaceMin: { type: Number, required: true },
   surfaceMax: { type: Number, required: true },
+  tarifs: {
+    var: { type: Number, required: true },
+    herault: { type: Number, required: true },
+    autre: { type: Number, default: 0 },
+  },
+});
+
+// Schéma pour les tarifs selon le type d'appartement
+const tarifAppartementSchema = new mongoose.Schema({
+  typeAppartement: { 
+    type: String, 
+    enum: ["<20m2", "T1", "T2", "T3", "T4", "T5"], 
+    required: true 
+  },
   tarifs: {
     var: { type: Number, required: true },
     herault: { type: Number, required: true },
@@ -34,8 +48,9 @@ const diagnosticSchema = new mongoose.Schema({
     required: true,
   },
 
-  // Tarifs selon la surface
-  tarifsParSurface: [tarifSurfaceSchema],
+  // Tarifs selon le type de bien
+  tarifsParSurface: { type: [tarifSurfaceSchema], default: undefined },       // pour maisons
+  tarifsParAppartement: { type: [tarifAppartementSchema], default: undefined }, // pour appartements
 
   // Diagnostics obligatoires dans des packs
   obligatoireDansPacks: [{ type: mongoose.Schema.Types.ObjectId, ref: "Pack" }],

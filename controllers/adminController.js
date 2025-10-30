@@ -770,3 +770,117 @@ exports.getAllPacks = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors de la récupération des packs." });
   }
 };
+
+
+
+
+// ------------------------ MDP RÉINITIALISATION ADMIN ------------------------------- //
+
+
+/**
+ * DEMANDE DE RÉINITIALISATION DU MOT DE PASSE ADMIN
+ */
+exports.forgotPasswordAdmin = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    const admin = await Admin.findOne({ email });
+    if (!admin) {
+      return res.status(404).json({ message: "Aucun compte admin trouvé avec cet email." });
+    }
+
+    // Génération d’un token aléatoire
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+
+    // Stockage du token et expiration (1h)
+    admin.resetPasswordToken = resetTokenHash;
+    admin.resetPasswordExpires = Date.now() + 60 * 60 * 1000;
+    await admin.save();
+
+    // Lien de réinitialisation
+    const resetUrl = `${process.env.FRONTEND_URL}/admin/reset-password/${resetToken}`;
+
+    await sendEmail({
+      to: admin.email,
+      subject: "Réinitialisation de votre mot de passe - Admin",
+      template: "ResetPassword.html",
+      variables: {
+        nomClient: admin.nom,
+        lienReinitialisation: resetUrl
+      }
+    });
+
+    res.json({ message: "Un e-mail de réinitialisation a été envoyé à votre adresse." });
+  } catch (error) {
+    console.error("❌ Erreur forgotPasswordAdmin :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la demande de réinitialisation." });
+  }
+};
+
+/**
+ * VÉRIFICATION DU TOKEN DE RÉINITIALISATION ADMIN
+ */
+exports.verifyResetTokenAdmin = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const admin = await Admin.findOne({
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!admin) {
+      return res.status(400).json({ message: "Token invalide ou expiré." });
+    }
+
+    res.json({ message: "Token valide.", email: admin.email });
+  } catch (error) {
+    console.error("❌ Erreur verifyResetTokenAdmin :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la vérification du token." });
+  }
+};
+
+/**
+ * DÉFINITION D’UN NOUVEAU MOT DE PASSE ADMIN
+ */
+exports.resetPasswordAdmin = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { mot_de_passe } = req.body;
+
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+
+    const admin = await Admin.findOne({
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: Date.now() }
+    });
+
+    if (!admin) {
+      return res.status(400).json({ message: "Token invalide ou expiré." });
+    }
+
+    // 🔹 Hash du mot de passe avant de sauvegarder
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(mot_de_passe, salt);
+
+    admin.mot_de_passe = hashedPassword;
+    admin.resetPasswordToken = undefined;
+    admin.resetPasswordExpires = undefined;
+    await admin.save();
+
+    // Email de confirmation
+    await sendEmail({
+      to: admin.email,
+      subject: "Votre mot de passe a été modifié - Admin",
+      template: "PasswordChanged.html",
+      variables: { nomClient: admin.nom }
+    });
+
+    res.json({ message: "Mot de passe réinitialisé avec succès." });
+  } catch (error) {
+    console.error("❌ Erreur resetPasswordAdmin :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la réinitialisation du mot de passe." });
+  }
+};

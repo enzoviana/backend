@@ -26,7 +26,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/agency', agencyRoutes);
 app.use('/api/client', devisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-
+app.use('/api/devis', devisRoutes)
 // Test route
 app.get('/', (req, res) => {
   res.send('API est en ligne !');

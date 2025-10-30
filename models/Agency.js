@@ -8,11 +8,16 @@ const { Schema } = mongoose;
 const AdminSchema = new Schema({
   nom: { type: String, required: true },
   prenom: { type: String, default: 'Admin' },
-  email: { type: String, required: true, unique: true }, // Email pour connexion
+  email: { type: String, required: true, unique: true },
   mot_de_passe: { type: String, required: true },
   telephone_portable: { type: String, required: true },
   role: { type: String, default: 'admin' },
-  photo_profil: { type: String, default: null } // ✅ Nouvelle propriété optionnelle
+  photo_profil: { type: String, default: null },
+
+  // 🔹 Champs pour la réinitialisation du mot de passe
+  resetPasswordToken: { type: String, default: null },
+  resetPasswordExpires: { type: Date, default: null }
+
 }, { _id: true });
 
 // Hash du mot de passe admin avant sauvegarde
@@ -47,17 +52,12 @@ const AgenceSchema = new Schema({
     required: true
   },
 
-  // ✅ Simplification des emails de contact
   emails_contact: [
-    {
-      email: { type: String, required: true }
-    }
+    { email: { type: String, required: true } }
   ],
 
-  // ✅ Logo entreprise (optionnel)
   logo: { type: String, default: null },
 
-  // ✅ Statut de gestion
   statut: {
     type: String,
     enum: ['actif', 'bloqué', 'en_attente', 'suspendu'],
@@ -69,7 +69,6 @@ const AgenceSchema = new Schema({
   clients: [{ type: Schema.Types.ObjectId, ref: 'Client' }],
   devis: [{ type: Schema.Types.ObjectId, ref: 'Devis' }],
 
-  // Données de suivi interne
   ca_estime: { type: Number, default: 0 },
   cagnotte: { type: Number, default: 0 },
   reduction: { type: Number, default: 0, min: 0, max: 100 }

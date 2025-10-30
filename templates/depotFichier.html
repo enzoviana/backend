@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Confirmation de validation du devis</title>
+    <title>Dépôt de vos fichiers pour le diagnostic</title>
     <style>
         body {
             margin: 0;
@@ -58,19 +58,28 @@
             <td class="content">
                 <p>Bonjour {{nomClient}},</p>
 
-                <p>Nous vous remercions d’avoir validé votre devis n° <strong>{{numeroDevis}}</strong>.</p>
+                <p>Dans le cadre de la préparation de votre <strong>diagnostic immobilier</strong> (référence : {{numeroDevis}}), nous vous invitons à déposer les documents nécessaires au bon déroulement de la mission.</p>
 
-                <p>Notre équipe va désormais planifier l’intervention selon les informations convenues. Vous recevrez prochainement un message de confirmation avec les détails de la date et de l’heure du rendez-vous.</p>
+                <p>Ces fichiers peuvent inclure, par exemple :</p>
 
-                <p>Vous pouvez consulter à tout moment les informations de votre devis en cliquant sur le bouton ci-dessous :</p>
+                <ul>
+                    <li>Plans du bien ou du bâtiment concerné,</li>
+                    <li>Ancien rapport de diagnostic (si existant),</li>
+                    <li>Photos ou documents techniques pertinents,</li>
+                    <li>Toute information utile à la réalisation du diagnostic.</li>
+                </ul>
+
+                <p>Pour déposer vos fichiers en toute sécurité, cliquez sur le bouton ci-dessous :</p>
 
                 <p>
-                    <a href="{{lienDevis}}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
-                        Consulter mon devis
+                    <a href="{{lienDepot}}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
+                        Déposer mes fichiers
                     </a>
                 </p>
 
-                <p>Nous restons à votre disposition pour toute question complémentaire ou information sur la suite de votre dossier.</p>
+                <p>Merci de nous transmettre ces éléments avant le <strong>{{dateLimite}}</strong> afin de ne pas retarder la planification de votre intervention.</p>
+
+                <p>En cas de difficulté ou de question, notre équipe reste disponible pour vous accompagner.</p>
 
                 <p>Cordialement,<br>
                 L’équipe Dimotec Diagnostics</p>

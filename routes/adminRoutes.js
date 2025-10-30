@@ -17,6 +17,10 @@ router.post('/login', adminController.login);
 router.get('/me', authMiddleware, adminController.getAdminDetails);
 router.get("/verify-token",  adminController.verifyToken);
 
+// 🔹 Mot de passe oublié / réinitialisation admin
+router.post('/forgot-password', adminController.forgotPasswordAdmin);
+router.get('/verify-reset-token/:token', adminController.verifyResetTokenAdmin);
+router.post('/reset-password/:token', adminController.resetPasswordAdmin);
 
 // Modifier infos admin (protégé)
 router.put('/update', authMiddleware, adminController.updateAdmin);
