@@ -597,7 +597,6 @@ exports.createPack = async (req, res) => {
  */
 exports.updateDiagnostic = async (req, res) => {
   try {
-    console.log("✏️ [updateDiagnostic] Requête reçue :", req.params.id, req.body);
     const { id } = req.params;
     const {
       nom,
@@ -605,6 +604,7 @@ exports.updateDiagnostic = async (req, res) => {
       typeOperation,
       trancheAnnee,
       tarifsParSurface,
+      tarifsParAppartement,
       erpOffert,
       supplementsDisponibles,
       obligatoireDansPacks
@@ -613,7 +613,6 @@ exports.updateDiagnostic = async (req, res) => {
     const diagnostic = await Diagnostic.findById(id);
     if (!diagnostic) return res.status(404).json({ message: "Diagnostic introuvable." });
 
-    // ✏️ Modification des champs simples
     if (nom) diagnostic.nom = nom;
     if (typeBien) diagnostic.typeBien = typeBien;
     if (typeOperation) diagnostic.typeOperation = typeOperation;
@@ -622,29 +621,42 @@ exports.updateDiagnostic = async (req, res) => {
     if (Array.isArray(supplementsDisponibles)) diagnostic.supplementsDisponibles = supplementsDisponibles;
     if (Array.isArray(obligatoireDansPacks)) diagnostic.obligatoireDansPacks = obligatoireDansPacks;
 
-    // ✏️ Modification des tarifs par surface
-    if (Array.isArray(tarifsParSurface) && tarifsParSurface.length) {
+    // ✅ Tarifs maison
+    if (Array.isArray(tarifsParSurface)) {
       diagnostic.tarifsParSurface = tarifsParSurface.map(t => ({
-        surfaceMin: t.surfaceMin ?? 0,
-        surfaceMax: t.surfaceMax ?? 0,
+        _id: t._id || undefined,
+        surfaceMin: Number(t.surfaceMin ?? 0),
+        surfaceMax: Number(t.surfaceMax ?? 0),
         tarifs: {
-          var: t.tarifs?.var ?? 0,
-          herault: t.tarifs?.herault ?? 0,
-          autre: t.tarifs?.autre ?? 0
+          var: Number(t.tarifs?.var ?? 0),
+          herault: Number(t.tarifs?.herault ?? 0),
+          autre: Number(t.tarifs?.autre ?? 0),
+        }
+      }));
+    }
+
+    // ✅ Tarifs appartement (la partie manquante !)
+    if (Array.isArray(tarifsParAppartement)) {
+      diagnostic.tarifsParAppartement = tarifsParAppartement.map(t => ({
+        _id: t._id || undefined,
+        typeAppartement: t.typeAppartement ?? "<20m2",
+        tarifs: {
+          var: Number(t.tarifs?.var ?? 0),
+          herault: Number(t.tarifs?.herault ?? 0),
+          autre: Number(t.tarifs?.autre ?? 0),
         }
       }));
     }
 
     await diagnostic.save();
-    console.log("✅ [updateDiagnostic] Diagnostic mis à jour :", diagnostic);
     res.json({ message: "Diagnostic mis à jour.", diagnostic });
+
   } catch (err) {
-    console.error("❌ [updateDiagnostic] Erreur :", err);
-    res.status(500).json({
-      message: "Erreur serveur lors de la modification du diagnostic.",
-    });
+    res.status(500).json({ message: "Erreur serveur lors de la modification du diagnostic." });
   }
 };
+
+
 
 
 /**

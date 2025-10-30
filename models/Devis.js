@@ -120,6 +120,26 @@ surfaceMaison: {
     default: Date.now,
   },
 
+  /* 🔐 Consentements */
+cgvAccepted: {
+  type: Boolean,
+  default: false,
+},
+rgpdAccepted: {
+  type: Boolean,
+  default: false,
+},
+dateAcceptation: {
+  type: Date,
+  default: null,
+},
+
+/* 📍 Lieu où le devis a été fait */
+faitA: {
+  type: String,
+  default: "", // vide par défaut, à remplir lors de l'acceptation
+},
+
   /* 🔐 Accès client */
   accesClientKey: {
     type: String,

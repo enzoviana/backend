@@ -363,19 +363,48 @@ if (data.payer === "agence") {
 exports.accepterDevisViaLien = async (req, res) => {
   try {
     const { key, devisId } = req.params;
-    console.log("🔹 acceptAndSign appelé avec :", { key, devisId });
+    const { ville, date, numeroFiscalBien } = req.body;
+    console.log("🔹 acceptAndSign appelé avec :", { key, devisId, ville, date, numeroFiscalBien });
 
     const devis = await Devis.findOne({ _id: devisId, accesClientKey: key });
     if (!devis) {
       console.log("❌ Devis introuvable ou clé invalide.");
       return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
     }
-    console.log("✅ Devis trouvé :", devis._id);
+    console.log("✅ Devis trouvé :", devis._id, "Statut avant update :", devis.statut);
 
-    // Mettre à jour le statut du devis
+    // 🔹 Mettre à jour le statut du devis et les champs ville / date / numéro fiscal
     devis.statut = "Accepté";
+
+    if (ville) {
+      devis.faitA = ville;
+      console.log("📍 faitA mis à jour :", devis.faitA);
+    }
+
+    if (date) {
+      devis.dateAcceptation = new Date(date);
+      console.log("📅 dateAcceptation mis à jour :", devis.dateAcceptation);
+    }
+
+    if (numeroFiscalBien) {
+      devis.numeroFiscalBien = numeroFiscalBien;
+      console.log("💰 numeroFiscalBien mis à jour :", devis.numeroFiscalBien);
+    }
+
+    // ✅ Forcer CGV et RGPD à true
+    devis.cgvAccepted = true;
+    devis.rgpdAccepted = true;
+    console.log("✅ CGV et RGPD mis à jour :", { cgvAccepted: devis.cgvAccepted, rgpdAccepted: devis.rgpdAccepted });
+
     await devis.save();
-    console.log("✅ Statut du devis mis à jour :", devis.statut);
+    console.log("✅ Devis sauvegardé :", {
+      statut: devis.statut,
+      faitA: devis.faitA,
+      dateAcceptation: devis.dateAcceptation,
+      numeroFiscalBien: devis.numeroFiscalBien,
+      cgvAccepted: devis.cgvAccepted,
+      rgpdAccepted: devis.rgpdAccepted
+    });
 
     // 🔹 Récupérer le client réel
     let clientId = devis.clientId;
@@ -427,7 +456,7 @@ exports.accepterDevisViaLien = async (req, res) => {
 
     console.log("✅ Tout s'est bien passé. Retour au frontend.");
     return res.status(200).json({ 
-      message: "✅ Devis accepté, facture et ordre de mission créés, cagnotte mise à jour", 
+      message: "✅ Devis accepté, CGV/RGPD validés, facture et ordre de mission créés, cagnotte mise à jour", 
       devis, 
       facture, 
       ordre, 
@@ -438,6 +467,8 @@ exports.accepterDevisViaLien = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
+
 
 // 🔹 Upload PDF d'un devis vers Cloudinary
 exports.uploadPdfDevis = async (req, res) => {
