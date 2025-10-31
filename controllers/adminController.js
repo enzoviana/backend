@@ -710,9 +710,6 @@ exports.updateDiagnostic = async (req, res) => {
 
 
 
-/**
- * ✏️ Modifier un pack avec diagnostics et tarifs
- */
 exports.updatePack = async (req, res) => {
   try {
     console.log("✏️ [updatePack] Requête reçue :", req.params.id, req.body);
@@ -721,10 +718,11 @@ exports.updatePack = async (req, res) => {
       nom,
       typeBien,
       typeOperation,
+      diagnostics,
       tarifs,
       tarifsParSurface,
       tarifsParAppartement,
-      diagnostics,
+      trancheAnnee,
       obligatoireDansPacks,
       erpOffert,
       supplementsDisponibles
@@ -733,19 +731,20 @@ exports.updatePack = async (req, res) => {
     const pack = await Pack.findById(id);
     if (!pack) return res.status(404).json({ message: "Pack introuvable." });
 
-    // Mise à jour des champs principaux
+    // Champs principaux
     if (nom !== undefined) pack.nom = nom;
     if (typeBien !== undefined) pack.typeBien = typeBien;
     if (typeOperation !== undefined) pack.typeOperation = typeOperation;
+    if (trancheAnnee !== undefined) pack.trancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : [];
 
-    // Mise à jour des tarifs globaux
+    // Tarifs globaux
     if (tarifs) {
-      pack.tarifs.var = tarifs.var ?? pack.tarifs.var;
-      pack.tarifs.herault = tarifs.herault ?? pack.tarifs.herault;
-      pack.tarifs.autre = tarifs.autre ?? pack.tarifs.autre;
+      pack.tarifs.var = Number(tarifs.var ?? pack.tarifs.var);
+      pack.tarifs.herault = Number(tarifs.herault ?? pack.tarifs.herault);
+      pack.tarifs.autre = Number(tarifs.autre ?? pack.tarifs.autre);
     }
 
-    // Mise à jour des tarifs détaillés
+    // Tarifs détaillés
     if (typeBien === "maison" && Array.isArray(tarifsParSurface)) {
       pack.tarifsParSurface = tarifsParSurface.map(t => ({
         _id: t._id || undefined,
@@ -771,12 +770,18 @@ exports.updatePack = async (req, res) => {
       }));
     }
 
-    // Diagnostics associés
-    if (diagnostics !== undefined) pack.diagnostics = diagnostics;
+    // Diagnostics : vérifier qu'ils existent
+    if (Array.isArray(diagnostics)) {
+      const validDiagnostics = await Diagnostic.find({ _id: { $in: diagnostics } });
+      if (validDiagnostics.length !== diagnostics.length) {
+        return res.status(400).json({ message: "Certains diagnostics sont introuvables." });
+      }
+      pack.diagnostics = validDiagnostics.map(d => d._id);
+    }
 
     // Champs supplémentaires
     if (obligatoireDansPacks !== undefined) pack.obligatoireDansPacks = obligatoireDansPacks;
-    if (erpOffert !== undefined) pack.erpOffert = erpOffert;
+    if (erpOffert !== undefined) pack.erpOffert = Boolean(erpOffert);
     if (supplementsDisponibles !== undefined) pack.supplementsDisponibles = supplementsDisponibles;
 
     await pack.save();
@@ -787,7 +792,6 @@ exports.updatePack = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors de la modification du pack." });
   }
 };
-
 
 /**
  * 🗑️ Supprimer un diagnostic
