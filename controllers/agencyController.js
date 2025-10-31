@@ -704,7 +704,7 @@ exports.forgotPassword = async (req, res) => {
     await agence.save();
 
     // Lien de réinitialisation (frontend)
-    const resetUrl = `${process.env.FRONTEND_URL}/reset-password/${resetToken}`;
+    const resetUrl = `https://client-dimotec.datafuse.fr/reset-password/${resetToken}`;
 
     // Envoi de l’e-mail
     await sendEmail({
