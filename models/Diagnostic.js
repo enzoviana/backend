@@ -42,11 +42,11 @@ const diagnosticSchema = new mongoose.Schema({
   },
 
   // Tranche d'année selon le type de bien
-  trancheAnnee: {
-    type: String,
-    enum: ["avant_1949", "1949_1997", "1997_plus15", "moins_15", "toutes"],
-    required: true,
-  },
+trancheAnnee: [{
+  type: String,
+  enum: ["avant_1949", "1949_1997", "1juillet1997_plus15", "moins_15", "toutes"],
+  required: true,
+}],
 
   // Tarifs selon le type de bien
   tarifsParSurface: { type: [tarifSurfaceSchema], default: undefined },       // pour maisons
