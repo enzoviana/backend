@@ -8,7 +8,7 @@ const OrdreMission = require('../models/OrdreMission');
 const Agence = require('../models/Agency');
 const sendEmail = require("../utils/sendEmails"); // <-- Vérifie le bon chemin selon ton projet
 const path = require("path");
-
+const Supplement = require("../models/Supplement")
 /**
  * Récupérer tous les devis de l'utilisateur connecté
  * req.admin ou req.agence doit être défini par le middleware
@@ -138,7 +138,11 @@ exports.createDevis = async (req, res) => {
       await client.save();
     }
 
-    const secteur = (req.agence?.alerte_secteur || "autre").toLowerCase();
+    const secteur = (req.agence?.alerte_secteur || "autre")
+  .toLowerCase()
+  .normalize("NFD")        // décompose les caractères accentués
+  .replace(/[\u0300-\u036f]/g, ""); // supprime les accents
+
 
     // 💰 Calcul du montant avant remise
     let totalAvantRemise = 0;
@@ -165,7 +169,7 @@ exports.createDevis = async (req, res) => {
         }
       }
       totalAvantRemise = Number(tarifTrouve) || 0;
-    } else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
+} else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
   const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
   totalAvantRemise = diagnostics.reduce((sum, d) => {
     let tarifTrouve = 0;
@@ -193,7 +197,11 @@ exports.createDevis = async (req, res) => {
 
     return sum + (Number(tarifTrouve) || 0);
   }, 0);
+
+  // 🔹 Ajouter les frais de déplacement pour un diagnostic
+  totalAvantRemise += 55;
 }
+
  else if (data.type === "audit") {
       const tarifsAudit = {
         "0 - 70 m²": 300,
@@ -549,40 +557,44 @@ exports.getDevisViaLien = async (req, res) => {
     const { key } = req.params;
     console.log("🟢 [getDevisViaLien] Lien reçu :", key);
 
-    // Récupération du devis
+    // 🔹 Récupération du devis
     const devis = await Devis.find({ accesClientKey: key })
       .populate("client")
-      .populate("pack")
+      .populate({
+        path: "pack",
+        populate: [
+          { path: "diagnostics", model: "Diagnostic" },
+          { path: "supplementsDisponibles", model: "Supplement" }
+        ]
+      })
       .populate("diagnosticsSelectionnes")
+      .populate("supplementsSelectionnes")
       .populate({
         path: "agenceId",
-        model: "Agence", // ⚠️ Vérifie que ton modèle s'appelle bien "Agence"
-        select:
-          "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut",
+        model: "Agence",
+        select: "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut reduction",
       });
 
-    console.log("📦 Devis trouvés :", devis.length);
+    console.log("📦 Nombre de devis trouvés :", devis.length);
 
-    // Vérification existence
     if (!devis || devis.length === 0) {
-      console.warn("❌ Aucun devis trouvé pour la clé :", key);
+      console.warn("❌ Aucun devis trouvé pour cette clé");
       return res.status(404).json({ message: "Lien invalide ou expiré." });
     }
 
-    // Vérification d’expiration
     const premierDevis = devis[0];
     console.log("⏱️ Date d’expiration du lien :", premierDevis.accesClientExpire);
+
     if (premierDevis.accesClientExpire && premierDevis.accesClientExpire < new Date()) {
       console.warn("⚠️ Lien expiré :", key);
       return res.status(403).json({ message: "Lien expiré." });
     }
 
-    // Vérifie si l’agence est bien peuplée
-    console.log("🏢 Agence ID :", premierDevis.agenceId?._id || premierDevis.agenceId);
-    console.log("🏢 Agence complète :", premierDevis.agenceId);
+    const secteur = premierDevis.agenceId?.alerte_secteur?.toLowerCase() || "autre";
+    console.log("🏢 Secteur pour calcul des tarifs :", secteur);
 
-    // Calcul automatique des tarifs
-    const devisAvecTarifs = devis.map((d, i) => {
+    // 🔹 Traitement de chaque devis
+    const devisAvecDetails = devis.map((d, i) => {
       console.log(`\n📋 Traitement du devis #${i + 1} (${d.numero})`);
 
       // Adresse par défaut si vide
@@ -597,24 +609,65 @@ exports.getDevisViaLien = async (req, res) => {
         };
       }
 
-      // Ajout des tarifs
-      d.diagnosticsSelectionnes = d.diagnosticsSelectionnes.map(diag => {
-        const surface = d.surfaceAppartement || d.surfaceMaison || "<20m2>";
-        const tarifObj = diag.tarifsParAppartement?.find(t => t.typeAppartement === surface);
-        const tarif = tarifObj ? tarifObj.tarifs.var : 0;
-        console.log(`💰 ${diag.nom} → surface: ${surface} → tarif: ${tarif}`);
-        diag.prixHT = tarif;
-        return diag;
-      });
+      // 🔹 Diagnostics inclus dans le pack
+      if (d.type === "pack_complet") {
+        console.log("📦 Type de devis : pack_complet");
+        if (d.pack?.diagnostics?.length) {
+          console.log(`🔹 Diagnostics dans le pack (${d.pack.diagnostics.length})`);
+          d.diagnosticsSelectionnes = d.pack.diagnostics.map(diag => {
+            if (!diag) {
+              console.warn("⚠️ Diagnostic null trouvé dans le pack");
+              return { nom: "", prixHT: 0 };
+            }
+
+            let tarif = 0;
+            const surface = d.surfaceMaison || d.surfaceAppartement || "<20m2>";
+
+            if (diag.tarifsParSurface?.length) {
+              const tranche = diag.tarifsParSurface.find(
+                t => surface >= t.surfaceMin && surface <= t.surfaceMax
+              );
+              tarif = tranche ? tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0 : 0;
+            } else if (diag.tarifsParAppartement?.length) {
+              const tranche = diag.tarifsParAppartement.find(t => t.typeAppartement === surface);
+              tarif = tranche ? tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0 : 0;
+            }
+
+            console.log(`💰 Diagnostic : ${diag.nom} → tarif calculé : ${tarif}`);
+            return { nom: diag.nom || "", prixHT: tarif };
+          });
+        } else {
+          console.log("⚠️ Aucun diagnostic trouvé dans le pack");
+        }
+      }
+
+      // 🔹 Suppléments sélectionnés avec détails
+      if (Array.isArray(d.supplementsSelectionnes)) {
+        console.log(`🔹 Suppléments sélectionnés : ${d.supplementsSelectionnes.length}`);
+        d.supplementsSelectionnes = d.supplementsSelectionnes.map(sup => {
+          if (!sup) {
+            console.warn("⚠️ Supplément null trouvé");
+            return null;
+          }
+          console.log(`💰 Supplément : ${sup.nom || "nom manquant"}`);
+          return {
+            nom: sup.nom || "",
+            typeBien: sup.typeBien || "",
+            tarifs: sup.tarifs || {}
+          };
+        }).filter(Boolean);
+      } else {
+        console.log("⚠️ Aucun supplément sélectionné");
+        d.supplementsSelectionnes = [];
+      }
 
       return d;
     });
 
-    console.log("✅ Tous les devis traités avec succès.\n");
-
+    console.log("✅ Tous les devis traités avec succès");
     return res.status(200).json({
       message: "✅ Devis récupérés",
-      devis: devisAvecTarifs,
+      devis: devisAvecDetails,
     });
 
   } catch (error) {
@@ -622,6 +675,9 @@ exports.getDevisViaLien = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
+
+
 
 
 

@@ -338,24 +338,25 @@ exports.getCagnotteEtReduction = async (req, res) => {
     let agence;
 
     if (req.admin) {
-      // 🧑‍💼 Admin → récupération d'une agence (exemple : première agence)
       console.log("Admin connecté, récupération globale possible");
-      agence = await Agence.findOne().select("nom_commercial cagnotte reduction telephone_fixe emails_contact ca_estime");
+      agence = await Agence.findOne().select("nom_commercial cagnotte reduction telephone_fixe emails_contact ca_estime alerte_secteur");
       if (!agence) return res.status(404).json({ message: "Aucune agence trouvée." });
 
     } else if (req.agence) {
-      // 🏢 Agence → uniquement sa propre agence
       const agenceId = req.agence._id;
       console.log("Agence connectée, récupération de ses données :", agenceId);
-      agence = await Agence.findById(agenceId).select("nom_commercial cagnotte reduction telephone_fixe emails_contact ca_estime");
+      agence = await Agence.findById(agenceId).select("nom_commercial cagnotte reduction telephone_fixe emails_contact ca_estime alerte_secteur");
       if (!agence) return res.status(404).json({ message: "Agence introuvable." });
 
     } else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
-    // Formater les emails pour ne renvoyer que la liste simple ou par type
     const emails = agence.emails_contact?.map(e => ({ type: e.type, email: e.email })) || [];
+    
+    // ✅ Ajouter le secteur
+    const secteur = (agence.alerte_secteur || 'autre').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+
 
     return res.status(200).json({
       message: "✅ Informations récupérées avec succès",
@@ -364,7 +365,8 @@ exports.getCagnotteEtReduction = async (req, res) => {
       emails: emails,
       ca_estime: agence.ca_estime || 0,
       cagnotte: agence.cagnotte || 0,
-      reduction: agence.reduction || 0
+      reduction: agence.reduction || 0,
+      secteur
     });
 
   } catch (error) {
@@ -374,6 +376,7 @@ exports.getCagnotteEtReduction = async (req, res) => {
     });
   }
 };
+
 
 
 
@@ -395,7 +398,11 @@ exports.filterPacks = async (req, res) => {
 
     // Récupération de l'agence depuis le middleware
     const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || 'autre').toLowerCase();
+   const secteur = (agence?.alerte_secteur || 'autre')
+  .toLowerCase()
+  .normalize('NFD')           // Décompose les caractères accentués
+  .replace(/[\u0300-\u036f]/g, ''); // Supprime les accents
+
     console.log("🔹 Secteur de l'agence :", secteur);
 
     // Mapping année front -> tranche backend
@@ -633,7 +640,11 @@ exports.filterSupplementsByTypeBien = async (req, res) => {
 
     // Récupération de l'agence depuis le middleware
     const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || 'autre').toLowerCase();
+   const secteur = (agence?.alerte_secteur || 'autre')
+  .toLowerCase()
+  .normalize('NFD')           // Décompose les caractères accentués
+  .replace(/[\u0300-\u036f]/g, ''); // Supprime les accents
+
 
     console.log("🔹 Type de bien demandé :", typeBien);
     console.log("🔹 Secteur de l'agence :", secteur);
