@@ -389,61 +389,69 @@ exports.getCagnotteEtReduction = async (req, res) => {
  */
 exports.filterPacks = async (req, res) => {
   try {
-    const { typeBien, typeOperation, annee, surface } = req.body;
-    console.log(req.body)
+    const { typeBien, typeOperation, annee, surface, installationGaz } = req.body;
+    console.log("💡 Requête reçue :", req.body);
 
-    if (!typeBien || !typeOperation || !surface) {
-      return res.status(400).json({ message: "Type de bien, type d'opération et surface sont requis." });
+    if (!typeBien || !typeOperation || !annee || !surface) {
+      return res.status(400).json({ message: "Type de bien, type d'opération, année et surface sont requis." });
     }
 
-    // Récupération de l'agence depuis le middleware
+    // Agence (secteur prix)
     const agence = req.agence;
-   const secteur = (agence?.alerte_secteur || 'autre')
-  .toLowerCase()
-  .normalize('NFD')           // Décompose les caractères accentués
-  .replace(/[\u0300-\u036f]/g, ''); // Supprime les accents
+    const secteur = (agence?.alerte_secteur || "autre")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+    console.log("🔹 Secteur agence :", secteur);
 
-    console.log("🔹 Secteur de l'agence :", secteur);
+    // ✅ Le front envoie directement la bonne tranche
+    const tranche = annee;
 
-    // Mapping année front -> tranche backend
-    let tranche;
-    switch (annee) {
-      case 'Avant 1949': tranche = 'avant_1949'; break;
-      case 'De 1949 à 30 Juin 1997': tranche = '1949_1997'; break;
-      case 'Du 1 Juillet 1997 + 15 ans': tranche = '1997_plus15'; break;
-      case 'Moins de 15 ans': tranche = 'moins_15ans'; break;
-      default: tranche = 'moins_15ans';
+    // --- Surface ou type appartement ---
+    let surfaceMinDemande = 0;
+    let surfaceMaxDemande = 0;
+    let typeAppartement = null;
+
+    if (typeBien === "maison") {
+      const match = surface.match(/(\d+)-(\d+)/);
+      surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
+      surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+      console.log(`🔹 Surface maison : ${surfaceMinDemande}-${surfaceMaxDemande}`);
+    } else if (typeBien === "appartement") {
+      typeAppartement = surface;
+      console.log(`🔹 Type appartement : ${typeAppartement}`);
     }
-    console.log("🔹 Tranche année calculée :", tranche);
 
-    // Extraction de la plage de surface
-    const surfaceMatch = surface.match(/(\d+)-(\d+)/);
-    const surfaceMinDemande = surfaceMatch ? parseInt(surfaceMatch[1], 10) : 0;
-    const surfaceMaxDemande = surfaceMatch ? parseInt(surfaceMatch[2], 10) : surfaceMinDemande;
-    console.log("🔹 Surface demandée :", typeBien === "appartement" ? typeAppartement : `${surfaceMinDemande}-${surfaceMaxDemande}`);
+    // --- Récupération des packs ---
+    const packs = await Pack.find({
+      typeBien: typeBien.toLowerCase(),
+      typeOperation: typeOperation.toLowerCase(),
+      trancheAnnee: { $in: [tranche, "toutes"] }
+    }).populate("diagnostics");
 
-
-    // Recherche packs
-    const packs = await Pack.find({ typeBien, typeOperation, trancheAnnee: tranche })
-      .populate('diagnostics');
+    console.log("📦 Packs récupérés :", packs.length);
 
     if (!packs.length) {
-      console.log("❌ Aucun pack trouvé pour ces critères :", { typeBien, typeOperation, tranche });
       return res.status(404).json({ message: "Aucun pack trouvé pour ces critères." });
     }
 
-    console.log(`🔹 ${packs.length} pack(s) trouvé(s) pour ces critères`);
-
-    // Calcul tarif par surface + secteur avec chevauchement des plages
+    // --- Ajout du tarif pack ---
     const packsAvecTarif = packs.map(pack => {
       let tarifTrouve = null;
 
-      if (pack.tarifsParSurface?.length) {
+      if (typeBien === "maison" && pack.tarifsParSurface?.length) {
         for (let tps of pack.tarifsParSurface) {
           if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
-            tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? null;
+            tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
+            console.log(`💥 Tarif pack trouvé pour maison (${pack.nom}) :`, tarifTrouve);
             break;
           }
+        }
+      } else if (typeBien === "appartement" && pack.tarifsParAppartement?.length) {
+        const tarifObj = pack.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+        if (tarifObj) {
+          tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? null;
+          console.log(`💥 Tarif pack trouvé pour appartement (${pack.nom}) :`, tarifTrouve);
         }
       }
 
@@ -453,12 +461,55 @@ exports.filterPacks = async (req, res) => {
       };
     });
 
-    // Récupération de tous les diagnostics avec seulement le nom
+    // --- Liste des diagnostics ---
     const allDiagnostics = await Diagnostic.find({}, { nom: 1 });
+
+    // --- Calcul tarif Diagnostic Gaz si applicable ---
+    let diagnosticGazTarif = null;
+    console.log("💡 Chauffage Gaz reçu :", installationGaz);
+
+    if (installationGaz === true) {
+      const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
+      console.log("💡 Diagnostic Gaz trouvé :", diagGaz);
+
+      if (diagGaz) {
+        if (typeBien === "maison" && diagGaz.tarifsParSurface?.length) {
+          console.log("💡 Tarifs par surface Diagnostic Gaz :", diagGaz.tarifsParSurface);
+          for (let tps of diagGaz.tarifsParSurface) {
+            console.log(`💡 Vérification tranche surface : ${tps.surfaceMin}-${tps.surfaceMax}`);
+            if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
+              diagnosticGazTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
+              console.log("💥 Tarif Diagnostic Gaz trouvé :", diagnosticGazTarif);
+              break;
+            }
+          }
+        }
+
+        if (typeBien === "appartement" && diagGaz.tarifsParAppartement?.length) {
+          console.log("💡 Tarifs par appartement Diagnostic Gaz :", diagGaz.tarifsParAppartement);
+          const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+          if (tps) {
+            diagnosticGazTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
+            console.log("💥 Tarif Diagnostic Gaz appartement trouvé :", diagnosticGazTarif);
+          }
+        }
+      } else {
+        console.log("⚠️ Aucun diagnostic Gaz trouvé dans la base");
+      }
+
+      console.log("🔥 Tarif Diagnostic Gaz final :", diagnosticGazTarif);
+    } else {
+      console.log("⚠️ Chauffage Gaz non actif, pas de tarif Gaz calculé");
+    }
 
     res.json({
       packs: packsAvecTarif,
-      diagnostics: allDiagnostics
+      diagnostics: allDiagnostics,
+      diagnosticGazTarif,
+      tranche,
+      surfaceMinDemande,
+      surfaceMaxDemande,
+      typeAppartement
     });
 
   } catch (error) {
@@ -466,6 +517,9 @@ exports.filterPacks = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors de la récupération des packs." });
   }
 };
+
+
+
 
 /**
  * Récupère les diagnostics à la carte correspondant aux infos envoyées
@@ -484,58 +538,12 @@ exports.filterDiagnostics = async (req, res) => {
     }
 
     const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || "autre").toLowerCase();
+    const secteur = (agence?.alerte_secteur || "autre")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
-    // --- Déterminer la tranche d’année ---
-    let tranche;
-    switch (annee) {
-      case "Avant 1949": tranche = "avant_1949"; break;
-      case "De 1949 à 30 Juin 1997": tranche = "1949_1997"; break;
-      case "Du 1 Juillet 1997 + 15 ans": tranche = "1997_plus15"; break;
-      case "Moins de 15 ans":
-      case "Après 2010": tranche = "moins_15ans"; break;
-      default: tranche = "moins_15ans";
-    }
-
-    console.log("🔹 Tranche année :", tranche);
-    console.log("🔹 Type :", typeBien, "-", typeOperation);
-
-    // --- Diagnostics obligatoires ---
-    let diagnosticsObligatoires = [];
-    if (typeOperation === "vente") {
-      if (typeBien === "maison" || typeBien === "appartement") {
-        switch (tranche) {
-          case "avant_1949":
-            diagnosticsObligatoires = ["DPE", "Termites", "Electricité", "Gaz", "Amiante", "Plomb", "ERP", "Surface"];
-            break;
-          case "1949_1997":
-            diagnosticsObligatoires = ["DPE", "Termites", "Electricité", "Gaz", "Amiante", "ERP", "Surface"];
-            break;
-          case "1997_plus15":
-            diagnosticsObligatoires = ["DPE", "Termites", "Electricité", "Gaz", "ERP", "Surface"];
-            break;
-          case "moins_15ans":
-            diagnosticsObligatoires = ["DPE", "Termites", "ERP", "Surface"];
-            break;
-        }
-      }
-    } else if (typeOperation === "location") {
-      if (typeBien === "maison") {
-        diagnosticsObligatoires = tranche === "avant_1949"
-          ? ["DPE", "Surface", "ERP", "Electricité/Gaz", "Plomb"]
-          : ["DPE", "Surface", "ERP", "Electricité/Gaz"];
-      } else if (typeBien === "appartement") {
-        diagnosticsObligatoires = tranche === "avant_1949"
-          ? ["DPE", "Surface", "ERP", "Electricité/Gaz", "DAPP (amiante)", "Plomb"]
-          : tranche === "1949_1997"
-          ? ["DPE", "Surface", "ERP", "Electricité/Gaz", "DAPP (amiante)"]
-          : ["DPE", "Surface", "ERP", "Electricité/Gaz"];
-      }
-    }
-
-    console.log("🔹 Diagnostics obligatoires :", diagnosticsObligatoires);
-
-    // --- Calcul surface ---
+    // Surface
     let surfaceMinDemande = 0;
     let surfaceMaxDemande = 0;
     let typeAppartement = null;
@@ -545,74 +553,54 @@ exports.filterDiagnostics = async (req, res) => {
       surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
       surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
     } else if (typeBien === "appartement") {
-      // Surface envoyée par le front correspond au type d'appartement (T1, T2, ... ou "<20m2")
-      typeAppartement = surface;
-      surfaceMinDemande = 0;
-      surfaceMaxDemande = 0; // on n'utilise pas les min/max pour les appartements
+      typeAppartement = surface; // ex: T2, T3, <20m2
     }
 
-    console.log("🔹 Surface demandée :", surfaceMinDemande, "-", surfaceMaxDemande);
-
-    // --- Récupérer diagnostics ---
-    const allDiagnostics = await Diagnostic.find({
-      typeBien: typeBien.toLowerCase(),
-      typeOperation: typeOperation.toLowerCase(),
+    // ✅ Maintenant on récupère uniquement par tranche envoyée
+    const diagnostics = await Diagnostic.find({
+      typeBien,
+      typeOperation,
+      trancheAnnee: { $in: [annee, "toutes"] }
     });
 
-    if (!allDiagnostics.length) {
+    if (!diagnostics.length) {
       return res.status(404).json({ message: "Aucun diagnostic trouvé pour ces critères." });
     }
 
-    const normalize = str => str?.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/s$/, "").trim();
-
-    const diagnosticsFiltres = allDiagnostics.filter(d =>
-      diagnosticsObligatoires.some(name =>
-        normalize(d.nom).includes(normalize(name)) || normalize(name).includes(normalize(d.nom))
-      )
-    );
-
-    console.log("🔹 Diagnostics filtrés :");
-    diagnosticsFiltres.forEach(d => console.log(`- ${d.nom} (${d.typeBien} / ${d.typeOperation})`));
-
-    if (!diagnosticsFiltres.length) {
-      return res.status(404).json({ message: "Aucun diagnostic obligatoire trouvé pour cette configuration." });
-    }
-
-    // --- Ajouter le tarif ---
-    const diagnosticsAvecTarif = diagnosticsFiltres.map(diag => {
+    // Ajout des tarifs correspondant
+    const diagnosticsAvecTarif = diagnostics.map(diag => {
       let tarifTrouve = null;
 
+      // Maison => tarif par surface
       if (typeBien === "maison" && diag.tarifsParSurface?.length) {
-        // Maison : on utilise la plage surface
         for (let tps of diag.tarifsParSurface) {
           if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
             tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
             break;
           }
         }
-      } else if (typeBien === "appartement" && diag.tarifsParAppartement?.length) {
-        // Appartement : on utilise le type d'appartement
+      }
+
+      // Appartement => tarif par type T1, T2...
+      if (typeBien === "appartement" && diag.tarifsParAppartement?.length) {
         const tarifObj = diag.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
         if (tarifObj) {
           tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? null;
         }
       }
 
-      console.log(`🔹 ${diag.nom} : tarif = ${tarifTrouve}`);
-
       return {
         ...diag.toObject(),
-        tarifPourSurface: tarifTrouve,
+        tarifPourSurface: tarifTrouve
       };
     });
 
     res.json({
       diagnostics: diagnosticsAvecTarif,
-      tranche,
-      diagnosticsObligatoires,
       surfaceMinDemande,
       surfaceMaxDemande,
-      typeAppartement
+      typeAppartement,
+      tranche: annee
     });
 
   } catch (error) {
@@ -620,6 +608,7 @@ exports.filterDiagnostics = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors du filtrage des diagnostics." });
   }
 };
+
 
 
 

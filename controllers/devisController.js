@@ -108,11 +108,9 @@ exports.envoyerRappelDevis = async (req, res) => {
  */
 exports.createDevis = async (req, res) => {
   try {
-   
-   console.log("===== Nouveau devis reçu =====", req.body);
+    console.log("===== Nouveau devis reçu =====", req.body);
     let data = req.body.data ? JSON.parse(req.body.data) : req.body;
 
-    
     if (!data.client || !data.type || !data.bien) {
       return res.status(400).json({ message: "Client, type de devis et type de bien requis." });
     }
@@ -120,7 +118,7 @@ exports.createDevis = async (req, res) => {
     const agenceId = req.agence?._id;
     if (!agenceId) return res.status(401).json({ message: "Agence non authentifiée." });
 
-    // 🔎 Préparer les données client correctement
+    // 🔎 Préparer les données client
     const clientPayload = {
       ...data.client,
       telephone: data.client.tel || data.client.telephone || "",
@@ -139,20 +137,19 @@ exports.createDevis = async (req, res) => {
     }
 
     const secteur = (req.agence?.alerte_secteur || "autre")
-  .toLowerCase()
-  .normalize("NFD")        // décompose les caractères accentués
-  .replace(/[\u0300-\u036f]/g, ""); // supprime les accents
-
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
     // 💰 Calcul du montant avant remise
     let totalAvantRemise = 0;
 
+    // --- Pack complet ---
     if (data.type === "pack_complet" && data.pack) {
       const pack = await Pack.findById(data.pack).populate("diagnostics");
       if (!pack) return res.status(400).json({ message: "Pack invalide." });
 
-      let surfaceMin = 0,
-        surfaceMax = 0;
+      let surfaceMin = 0, surfaceMax = 0;
       if (data.surfaceMaison) {
         const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
         surfaceMin = match ? parseInt(match[1], 10) : 0;
@@ -169,40 +166,41 @@ exports.createDevis = async (req, res) => {
         }
       }
       totalAvantRemise = Number(tarifTrouve) || 0;
-} else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
-  const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
-  totalAvantRemise = diagnostics.reduce((sum, d) => {
-    let tarifTrouve = 0;
+    } 
+    // --- Diagnostics ---
+    else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
+      const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
+      totalAvantRemise = diagnostics.reduce((sum, d) => {
+        let tarifTrouve = 0;
 
-    if (data.bien === "maison" && d.tarifsParSurface?.length) {
-      let surfaceMin = 0,
-          surfaceMax = 0;
-      if (data.surfaceMaison) {
-        const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-        surfaceMin = match ? parseInt(match[1], 10) : 0;
-        surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-      }
+        if (data.bien === "maison" && d.tarifsParSurface?.length) {
+          let surfaceMin = 0, surfaceMax = 0;
+          if (data.surfaceMaison) {
+            const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+            surfaceMin = match ? parseInt(match[1], 10) : 0;
+            surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+          }
 
-      for (let tps of d.tarifsParSurface) {
-        if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-          tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
-          break;
+          for (let tps of d.tarifsParSurface) {
+            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+              tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
+              break;
+            }
+          }
+        } else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
+          const typeAppart = data.surfaceAppartement;
+          const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+          if (tarifAppart) tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
         }
-      }
-    } else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
-      const typeAppart = data.surfaceAppartement; // T1, T2...
-      const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
-      if (tarifAppart) tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
-    }
 
-    return sum + (Number(tarifTrouve) || 0);
-  }, 0);
+        return sum + (Number(tarifTrouve) || 0);
+      }, 0);
 
-  // 🔹 Ajouter les frais de déplacement pour un diagnostic
-  totalAvantRemise += 55;
-}
-
- else if (data.type === "audit") {
+      // 🔹 Ajouter les frais de déplacement
+      totalAvantRemise += 55;
+    } 
+    // --- Audit ---
+    else if (data.type === "audit") {
       const tarifsAudit = {
         "0 - 70 m²": 300,
         "71 - 90 m²": 350,
@@ -229,6 +227,30 @@ exports.createDevis = async (req, res) => {
       totalAvantRemise += totalSupplements;
     }
 
+    // --- Diagnostic Gaz si applicable ---
+    let tarifGaz = 0;
+    if (data.installationGaz === true) {
+      const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
+      if (diagGaz) {
+        if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
+          const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+          const surfaceMin = match ? parseInt(match[1], 10) : 0;
+          const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+          for (let tps of diagGaz.tarifsParSurface) {
+            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+              tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+              break;
+            }
+          }
+        } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
+          const typeAppart = data.surfaceAppartement;
+          const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+          if (tps) tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+        }
+      }
+      totalAvantRemise += tarifGaz;
+    }
+
     // 💸 Calculs financiers
     const reductionPourcent = Number(data.reductionPourcent) || 0;
     const montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
@@ -236,12 +258,7 @@ exports.createDevis = async (req, res) => {
     const totalFinal = Math.max(totalApresReduction - montantCagnotteUtilisee, 0);
     const montantTTC = totalFinal;
 
-    console.log("===== Totaux calculés =====", {
-      totalAvantRemise,
-      totalApresReduction,
-      totalFinal,
-      montantTTC,
-    });
+    console.log("===== Totaux calculés =====", { totalAvantRemise, totalApresReduction, totalFinal, montantTTC });
 
     // 🧾 Création du devis
     const devis = new Devis({
@@ -270,6 +287,7 @@ exports.createDevis = async (req, res) => {
       pack: data.pack || null,
       diagnosticsSelectionnes: data.diagnosticsSelectionnes || [],
       supplementsSelectionnes,
+      chauffageGaz: data.installationGaz === true, // ✅ true/false
       numeroAdeme: data.numeroAdeme || null,
       totalAvantRemise,
       reductionPourcent,
@@ -291,80 +309,78 @@ exports.createDevis = async (req, res) => {
       await client.save();
     }
 
-// ✅ Si le payeur est l’agence
-if (data.payer === "agence") {
-  const facture = new Facture({
-    devisId: devis._id,
-    agenceId: devis.agenceId,
-    numero: `F-${Date.now()}`,
-    clientId: client._id,
-    montantHT: devis.montantTTC,
-    montantTTC: devis.montantTTC,
-    statut: "Envoyée",
-  });
-  await facture.save();
+    // ✅ Si le payeur est l’agence
+    if (data.payer === "agence") {
+      const facture = new Facture({
+        devisId: devis._id,
+        agenceId: devis.agenceId,
+        numero: `F-${Date.now()}`,
+        clientId: client._id,
+        montantHT: devis.montantTTC,
+        montantTTC: devis.montantTTC,
+        statut: "Envoyée",
+      });
+      await facture.save();
 
-  const ordre = new OrdreMission({
-    devisId: devis._id,
-    agenceId: devis.agenceId,
-    numero: `OM-${Date.now()}`,
-    clientId: client._id,
-    description: `Ordre de mission pour le devis ${devis._id}`,
-    statut: "Commande",
-  });
+      const ordre = new OrdreMission({
+        devisId: devis._id,
+        agenceId: devis.agenceId,
+        numero: `OM-${Date.now()}`,
+        clientId: client._id,
+        description: `Ordre de mission pour le devis ${devis._id}`,
+        statut: "Commande",
+      });
 
-  // 🔹 Ajouter le fichier de consentement s’il existe
-  if (req.file) {
-    ordre.fichiersClient.push({
-      nom: req.file.originalname,
-      url: req.file.path,
-      public_id: req.file.filename || req.file.public_id,
-      dateDepot: new Date(),
-    });
-  }
+      if (req.file) {
+        ordre.fichiersClient.push({
+          nom: req.file.originalname,
+          url: req.file.path,
+          public_id: req.file.filename || req.file.public_id,
+          dateDepot: new Date(),
+        });
+      }
+      await ordre.save();
 
-  await ordre.save();
+      const agence = await Agence.findById(devis.agenceId);
+      if (agence) {
+        const montantCagnotte = devis.montantTTC * 0.03;
+        agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
+        await agence.save();
+      }
 
-  const agence = await Agence.findById(devis.agenceId);
-  if (agence) {
-    const montantCagnotte = devis.montantTTC * 0.03;
-    agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
-    await agence.save();
-  }
-
-  return res.status(201).json({
-    message: "✅ Devis créé et accepté automatiquement (payeur agence).",
-    devis,
-  });
-}
-
+      return res.status(201).json({
+        message: "✅ Devis créé et accepté automatiquement (payeur agence).",
+        devis,
+      });
+    }
 
     // 💌 Envoi de l’e-mail si le payeur est le client
     if (data.payer === "client") {
-      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`; // 🔗 À adapter à ton frontend
+      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
       await sendEmail({
         to: client.email,
         subject: `Votre devis ${devis.numero} est prêt`,
-       template: "devis.html",
+        template: "devis.html",
         variables: {
           nomClient: `${client.prenom} ${client.nom}`,
-         lienDevis: lienDevis,
+          lienDevis: lienDevis,
           "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
           "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
         },
       });
     }
 
-    return res
-      .status(201)
-      .json({ message: "✅ Devis créé avec succès et e-mail envoyé au client", devis });
+    return res.status(201).json({
+      message: "✅ Devis créé avec succès et e-mail envoyé au client",
+      devis,
+    });
+
   } catch (error) {
     console.error("Erreur création devis :", error);
-    return res
-      .status(500)
-      .json({ message: "Erreur serveur lors de la création du devis." });
+    return res.status(500).json({ message: "Erreur serveur lors de la création du devis." });
   }
 };
+
 
 // 🔹 Accepter un devis via clé
 // 🔹 Accepter un devis via clé
@@ -552,13 +568,12 @@ exports.uploadSignature = async (req, res) => {
 
 // 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
+// 🔹 Accéder aux devis via clé
 exports.getDevisViaLien = async (req, res) => {
   try {
     const { key } = req.params;
-    console.log("🟢 [getDevisViaLien] Lien reçu :", key);
 
-    // 🔹 Récupération du devis
-    const devis = await Devis.find({ accesClientKey: key })
+    const devis = await Devis.findOne({ accesClientKey: key })
       .populate("client")
       .populate({
         path: "pack",
@@ -572,102 +587,113 @@ exports.getDevisViaLien = async (req, res) => {
       .populate({
         path: "agenceId",
         model: "Agence",
-        select: "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut reduction",
+        select: "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut reduction"
       });
 
-    console.log("📦 Nombre de devis trouvés :", devis.length);
-
-    if (!devis || devis.length === 0) {
-      console.warn("❌ Aucun devis trouvé pour cette clé");
+    if (!devis) {
       return res.status(404).json({ message: "Lien invalide ou expiré." });
     }
 
-    const premierDevis = devis[0];
-    console.log("⏱️ Date d’expiration du lien :", premierDevis.accesClientExpire);
+    const secteur = (devis.agenceId?.alerte_secteur || "autre")
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
-    if (premierDevis.accesClientExpire && premierDevis.accesClientExpire < new Date()) {
-      console.warn("⚠️ Lien expiré :", key);
-      return res.status(403).json({ message: "Lien expiré." });
+    const surfaceStr = devis.surfaceMaison || devis.surfaceAppartement || "0";
+    const surface = parseInt(surfaceStr.split(" ")[0], 10) || 0;
+
+    // -------- DIAGNOSTICS SELECTIONNÉS --------
+    const diagnostics = (devis.diagnosticsSelectionnes || [])
+      .filter(Boolean)
+      .map(diag => {
+        let prixTTC = 0;
+        if (devis.bien === "maison" && diag.tarifsParSurface?.length) {
+          const tranche = diag.tarifsParSurface.find(
+            t => surface >= t.surfaceMin && surface <= t.surfaceMax
+          );
+          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+        } else if (devis.bien === "appartement" && diag.tarifsParAppartement?.length) {
+          const tranche = diag.tarifsParAppartement.find(
+            t => t.typeAppartement === surfaceStr
+          );
+          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+        }
+        const prixHT = +(prixTTC / 1.2).toFixed(2);
+        return { nom: diag.nom, prixHT, prixTTC };
+      });
+
+    // -------- DIAGNOSTIC GAZ --------
+    let diagGazObj = null;
+    if (devis.chauffageGaz) {
+      const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
+      if (diagGaz) {
+        let prixTTC = 0;
+        if (devis.bien === "maison" && diagGaz.tarifsParSurface?.length) {
+          const tranche = diagGaz.tarifsParSurface.find(
+            t => surface >= t.surfaceMin && surface <= t.surfaceMax
+          );
+          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+        } else if (devis.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
+          const tranche = diagGaz.tarifsParAppartement.find(
+            t => t.typeAppartement === surfaceStr
+          );
+          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+        }
+        const prixHT = +(prixTTC / 1.2).toFixed(2);
+        diagGazObj = { nom: diagGaz.nom, prixHT, prixTTC };
+        diagnostics.push(diagGazObj); // ajouter à la liste finale
+      }
     }
 
-    const secteur = premierDevis.agenceId?.alerte_secteur?.toLowerCase() || "autre";
-    console.log("🏢 Secteur pour calcul des tarifs :", secteur);
+    // -------- SUPPLÉMENTS SELECTIONNÉS --------
+    const supplements = (devis.supplementsSelectionnes || [])
+      .filter(Boolean)
+      .map(sup => {
+        const prixTTC = sup.tarifs?.[secteur] ?? sup.tarifs?.autre ?? 0;
+        const prixHT = +(prixTTC / 1.2).toFixed(2);
+        return { nom: sup.nom, prixHT, prixTTC };
+      });
 
-    // 🔹 Traitement de chaque devis
-    const devisAvecDetails = devis.map((d, i) => {
-      console.log(`\n📋 Traitement du devis #${i + 1} (${d.numero})`);
+    // -------- PACK --------
+    let pack = null;
+    if (devis.pack) {
+      const tranche = (devis.pack.tarifsParSurface || []).find(
+        t => surface >= t.surfaceMin && surface <= t.surfaceMax
+      );
+      const prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+      const prixHT = +(prixTTC / 1.2).toFixed(2);
 
-      // Adresse par défaut si vide
-      if (!d.adresseBien || !d.adresseBien.adresse) {
-        console.log("📍 Adresse bien vide, utilisation de l’adresse client");
-        d.adresseBien = {
-          adresse: d.client?.adresse || "",
-          codePostal: d.client?.codePostal || "",
-          ville: d.client?.ville || "",
-          etage: "",
-          complement: ""
-        };
-      }
-
-      // 🔹 Diagnostics inclus dans le pack
-      if (d.type === "pack_complet") {
-        console.log("📦 Type de devis : pack_complet");
-        if (d.pack?.diagnostics?.length) {
-          console.log(`🔹 Diagnostics dans le pack (${d.pack.diagnostics.length})`);
-          d.diagnosticsSelectionnes = d.pack.diagnostics.map(diag => {
-            if (!diag) {
-              console.warn("⚠️ Diagnostic null trouvé dans le pack");
-              return { nom: "", prixHT: 0 };
-            }
-
-            let tarif = 0;
-            const surface = d.surfaceMaison || d.surfaceAppartement || "<20m2>";
-
-            if (diag.tarifsParSurface?.length) {
-              const tranche = diag.tarifsParSurface.find(
-                t => surface >= t.surfaceMin && surface <= t.surfaceMax
-              );
-              tarif = tranche ? tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0 : 0;
-            } else if (diag.tarifsParAppartement?.length) {
-              const tranche = diag.tarifsParAppartement.find(t => t.typeAppartement === surface);
-              tarif = tranche ? tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0 : 0;
-            }
-
-            console.log(`💰 Diagnostic : ${diag.nom} → tarif calculé : ${tarif}`);
-            return { nom: diag.nom || "", prixHT: tarif };
-          });
-        } else {
-          console.log("⚠️ Aucun diagnostic trouvé dans le pack");
+      const diagnosticsPack = (devis.pack.diagnostics || []).map(diag => {
+        let diagPrixTTC = 0;
+        if (devis.bien === "maison" && diag.tarifsParSurface?.length) {
+          const t = diag.tarifsParSurface.find(
+            tr => surface >= tr.surfaceMin && surface <= tr.surfaceMax
+          );
+          diagPrixTTC = t?.tarifs?.[secteur] ?? t?.tarifs?.autre ?? 0;
+        } else if (devis.bien === "appartement" && diag.tarifsParAppartement?.length) {
+          const t = diag.tarifsParAppartement.find(
+            ta => ta.typeAppartement === surfaceStr
+          );
+          diagPrixTTC = t?.tarifs?.[secteur] ?? t?.tarifs?.autre ?? 0;
         }
-      }
+        const diagPrixHT = +(diagPrixTTC / 1.2).toFixed(2);
+        return { nom: diag.nom, prixHT: diagPrixHT, prixTTC: diagPrixTTC };
+      });
 
-      // 🔹 Suppléments sélectionnés avec détails
-      if (Array.isArray(d.supplementsSelectionnes)) {
-        console.log(`🔹 Suppléments sélectionnés : ${d.supplementsSelectionnes.length}`);
-        d.supplementsSelectionnes = d.supplementsSelectionnes.map(sup => {
-          if (!sup) {
-            console.warn("⚠️ Supplément null trouvé");
-            return null;
-          }
-          console.log(`💰 Supplément : ${sup.nom || "nom manquant"}`);
-          return {
-            nom: sup.nom || "",
-            typeBien: sup.typeBien || "",
-            tarifs: sup.tarifs || {}
-          };
-        }).filter(Boolean);
-      } else {
-        console.log("⚠️ Aucun supplément sélectionné");
-        d.supplementsSelectionnes = [];
-      }
+      pack = { nom: devis.pack.nom, prixHT, prixTTC, diagnosticsPack };
+    }
 
-      return d;
-    });
+    // Conversion en objet simple pour remplacer les listes par les objets recalculés
+    const devisObj = devis.toObject();
+    devisObj.diagnosticsSelectionnes = diagnostics;
+    devisObj.supplementsSelectionnes = supplements;
+    devisObj.pack = pack;
 
-    console.log("✅ Tous les devis traités avec succès");
+    console.log("\n✅ Résultat final recalculé :", devisObj);
+
     return res.status(200).json({
-      message: "✅ Devis récupérés",
-      devis: devisAvecDetails,
+      message: "✅ Devis récupéré",
+      devis: devisObj
     });
 
   } catch (error) {
@@ -675,6 +701,18 @@ exports.getDevisViaLien = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

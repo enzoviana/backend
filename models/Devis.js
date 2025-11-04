@@ -120,6 +120,12 @@ surfaceMaison: {
     default: Date.now,
   },
 
+  chauffageGaz: {
+  type: Boolean,
+  default: false,
+},
+
+
   /* 🔐 Consentements */
 cgvAccepted: {
   type: Boolean,
