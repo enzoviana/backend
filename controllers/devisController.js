@@ -145,28 +145,40 @@ exports.createDevis = async (req, res) => {
     let totalAvantRemise = 0;
 
     // --- Pack complet ---
-    if (data.type === "pack_complet" && data.pack) {
-      const pack = await Pack.findById(data.pack).populate("diagnostics");
-      if (!pack) return res.status(400).json({ message: "Pack invalide." });
+// --- Pack complet ---
+if (data.type === "pack_complet" && data.pack) {
+  const pack = await Pack.findById(data.pack).populate("diagnostics");
+  if (!pack) return res.status(400).json({ message: "Pack invalide." });
 
-      let surfaceMin = 0, surfaceMax = 0;
-      if (data.surfaceMaison) {
-        const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-        surfaceMin = match ? parseInt(match[1], 10) : 0;
-        surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-      }
+  let tarifTrouve = 0;
 
-      let tarifTrouve = null;
-      if (pack.tarifsParSurface?.length) {
-        for (let tps of pack.tarifsParSurface) {
-          if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-            tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
-            break;
-          }
-        }
+  // 🏠 MAISON → tarifsParSurface
+  if (data.bien === "maison" && data.surfaceMaison && pack.tarifsParSurface?.length) {
+    const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+    const surfaceMin = match ? parseInt(match[1], 10) : 0;
+    const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+
+    for (let tps of pack.tarifsParSurface) {
+      if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+        tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+        break;
       }
-      totalAvantRemise = Number(tarifTrouve) || 0;
-    } 
+    }
+  }
+
+  // 🏢 APPARTEMENT → tarifsParAppartement
+  if (data.bien === "appartement" && data.surfaceAppartement && pack.tarifsParAppartement?.length) {
+    const appart = pack.tarifsParAppartement.find(
+      (t) => t.typeAppartement === data.surfaceAppartement
+    );
+    if (appart) {
+      tarifTrouve = appart.tarifs?.[secteur] ?? appart.tarifs?.autre ?? 0;
+    }
+  }
+
+  totalAvantRemise = Number(tarifTrouve) || 0;
+}
+
     // --- Diagnostics ---
     else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
       const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
@@ -607,17 +619,20 @@ exports.getDevisViaLien = async (req, res) => {
       .filter(Boolean)
       .map(diag => {
         let prixTTC = 0;
+
         if (devis.bien === "maison" && diag.tarifsParSurface?.length) {
           const tranche = diag.tarifsParSurface.find(
             t => surface >= t.surfaceMin && surface <= t.surfaceMax
           );
           prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+
         } else if (devis.bien === "appartement" && diag.tarifsParAppartement?.length) {
           const tranche = diag.tarifsParAppartement.find(
             t => t.typeAppartement === surfaceStr
           );
           prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
         }
+
         const prixHT = +(prixTTC / 1.2).toFixed(2);
         return { nom: diag.nom, prixHT, prixTTC };
       });
@@ -628,20 +643,23 @@ exports.getDevisViaLien = async (req, res) => {
       const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
       if (diagGaz) {
         let prixTTC = 0;
+
         if (devis.bien === "maison" && diagGaz.tarifsParSurface?.length) {
           const tranche = diagGaz.tarifsParSurface.find(
             t => surface >= t.surfaceMin && surface <= t.surfaceMax
           );
           prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+
         } else if (devis.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
           const tranche = diagGaz.tarifsParAppartement.find(
             t => t.typeAppartement === surfaceStr
           );
           prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
         }
+
         const prixHT = +(prixTTC / 1.2).toFixed(2);
         diagGazObj = { nom: diagGaz.nom, prixHT, prixTTC };
-        diagnostics.push(diagGazObj); // ajouter à la liste finale
+        diagnostics.push(diagGazObj);
       }
     }
 
@@ -657,25 +675,42 @@ exports.getDevisViaLien = async (req, res) => {
     // -------- PACK --------
     let pack = null;
     if (devis.pack) {
-      const tranche = (devis.pack.tarifsParSurface || []).find(
-        t => surface >= t.surfaceMin && surface <= t.surfaceMax
-      );
-      const prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+      let prixTTC = 0;
+
+      // 🏠 MAISON
+      if (devis.bien === "maison" && devis.pack.tarifsParSurface?.length) {
+        const tranche = devis.pack.tarifsParSurface.find(
+          t => surface >= t.surfaceMin && surface <= t.surfaceMax
+        );
+        prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+      }
+
+      // 🏢 APPARTEMENT (✅ la partie qui manquait)
+      if (devis.bien === "appartement" && devis.pack.tarifsParAppartement?.length) {
+        const appart = devis.pack.tarifsParAppartement.find(
+          t => t.typeAppartement === surfaceStr
+        );
+        prixTTC = appart?.tarifs?.[secteur] ?? appart?.tarifs?.autre ?? 0;
+      }
+
       const prixHT = +(prixTTC / 1.2).toFixed(2);
 
       const diagnosticsPack = (devis.pack.diagnostics || []).map(diag => {
         let diagPrixTTC = 0;
+
         if (devis.bien === "maison" && diag.tarifsParSurface?.length) {
           const t = diag.tarifsParSurface.find(
             tr => surface >= tr.surfaceMin && surface <= tr.surfaceMax
           );
           diagPrixTTC = t?.tarifs?.[secteur] ?? t?.tarifs?.autre ?? 0;
+
         } else if (devis.bien === "appartement" && diag.tarifsParAppartement?.length) {
           const t = diag.tarifsParAppartement.find(
             ta => ta.typeAppartement === surfaceStr
           );
           diagPrixTTC = t?.tarifs?.[secteur] ?? t?.tarifs?.autre ?? 0;
         }
+
         const diagPrixHT = +(diagPrixTTC / 1.2).toFixed(2);
         return { nom: diag.nom, prixHT: diagPrixHT, prixTTC: diagPrixTTC };
       });
@@ -683,13 +718,10 @@ exports.getDevisViaLien = async (req, res) => {
       pack = { nom: devis.pack.nom, prixHT, prixTTC, diagnosticsPack };
     }
 
-    // Conversion en objet simple pour remplacer les listes par les objets recalculés
     const devisObj = devis.toObject();
     devisObj.diagnosticsSelectionnes = diagnostics;
     devisObj.supplementsSelectionnes = supplements;
     devisObj.pack = pack;
-
-    console.log("\n✅ Résultat final recalculé :", devisObj);
 
     return res.status(200).json({
       message: "✅ Devis récupéré",
@@ -701,6 +733,7 @@ exports.getDevisViaLien = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 

@@ -35,7 +35,7 @@ async function sendEmail({ to, subject, template, variables = {} }) {
 
     // 📤 Envoi de l'e-mail
     await transporter.sendMail({
-      from: `"${process.env.EMAIL_SENDER_NAME || 'BookMySalon'}" <${process.env.SMTP_USER}>`,
+      from: `"${process.env.EMAIL_SENDER_NAME || 'Dimotec Diagnostic'}" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html: htmlContent
