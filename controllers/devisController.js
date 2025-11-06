@@ -9,6 +9,8 @@ const Agence = require('../models/Agency');
 const sendEmail = require("../utils/sendEmails"); // <-- Vérifie le bon chemin selon ton projet
 const path = require("path");
 const Supplement = require("../models/Supplement")
+const Admin = require("../models/Admin");
+
 /**
  * Récupérer tous les devis de l'utilisateur connecté
  * req.admin ou req.agence doit être défini par le middleware
@@ -263,6 +265,31 @@ if (data.type === "pack_complet" && data.pack) {
       totalAvantRemise += tarifGaz;
     }
 
+    // --- Diagnostic Copropriété si applicable ---
+let tarifCopro = 0;
+if (data.copropriete === true) {
+  const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // ou nom spécifique "copropriété"
+  if (diagCopro) {
+    if (data.bien === "maison" && diagCopro.tarifsParSurface?.length) {
+      const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+      const surfaceMin = match ? parseInt(match[1], 10) : 0;
+      const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+
+      for (let tps of diagCopro.tarifsParSurface) {
+        if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+          tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+          break;
+        }
+      }
+    } else if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
+      const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === data.surfaceAppartement);
+      if (tps) tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+    }
+  }
+  totalAvantRemise += tarifCopro;
+}
+
+
     // 💸 Calculs financiers
     const reductionPourcent = Number(data.reductionPourcent) || 0;
     const montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
@@ -300,6 +327,8 @@ if (data.type === "pack_complet" && data.pack) {
       diagnosticsSelectionnes: data.diagnosticsSelectionnes || [],
       supplementsSelectionnes,
       chauffageGaz: data.installationGaz === true, // ✅ true/false
+       copropriete: data.copropriete === true,  // ✅ nouveau champ
+  tarifCopropriete: tarifCopro,
       numeroAdeme: data.numeroAdeme || null,
       totalAvantRemise,
       reductionPourcent,
@@ -321,50 +350,88 @@ if (data.type === "pack_complet" && data.pack) {
       await client.save();
     }
 
-    // ✅ Si le payeur est l’agence
-    if (data.payer === "agence") {
-      const facture = new Facture({
-        devisId: devis._id,
-        agenceId: devis.agenceId,
-        numero: `F-${Date.now()}`,
-        clientId: client._id,
-        montantHT: devis.montantTTC,
-        montantTTC: devis.montantTTC,
-        statut: "Envoyée",
-      });
-      await facture.save();
+// ✅ Si le payeur est l’agence
+// ✅ Si le payeur est l’agence
+if (data.payer === "agence") {
+  const facture = new Facture({
+    devisId: devis._id,
+    agenceId: devis.agenceId,
+    numero: `F-${Date.now()}`,
+    clientId: client._id,
+    montantHT: devis.totalFinal,
+    montantTTC: devis.totalFinal,
+    statut: "Envoyée",
+  });
+  await facture.save();
 
-      const ordre = new OrdreMission({
-        devisId: devis._id,
-        agenceId: devis.agenceId,
-        numero: `OM-${Date.now()}`,
-        clientId: client._id,
-        description: `Ordre de mission pour le devis ${devis._id}`,
-        statut: "Commande",
-      });
+  const ordre = new OrdreMission({
+    devisId: devis._id,
+    agenceId: devis.agenceId,
+    numero: `OM-${Date.now()}`,
+    clientId: client._id,
+    description: `Ordre de mission pour le devis ${devis.numero}`,
+    statut: "Commande",
+  });
 
-      if (req.file) {
-        ordre.fichiersClient.push({
-          nom: req.file.originalname,
-          url: req.file.path,
-          public_id: req.file.filename || req.file.public_id,
-          dateDepot: new Date(),
-        });
-      }
-      await ordre.save();
+  if (req.file) {
+    ordre.fichiersClient.push({
+      nom: req.file.originalname,
+      url: req.file.path,
+      public_id: req.file.filename || req.file.public_id,
+      dateDepot: new Date(),
+    });
+  }
 
-      const agence = await Agence.findById(devis.agenceId);
-      if (agence) {
-        const montantCagnotte = devis.montantTTC * 0.03;
-        agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
-        await agence.save();
-      }
+  await ordre.save();
 
-      return res.status(201).json({
-        message: "✅ Devis créé et accepté automatiquement (payeur agence).",
-        devis,
-      });
-    }
+  // ✅ Emails
+  const agence = await Agence.findById(devis.agenceId);
+  const agenceEmail = agence?.emails_contact?.[0]?.email || null;
+  const dimotecEmail = "dimotec34@gmail.com";
+
+  const variables = {
+    nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+    numero: ordre.numero,
+    devisNumero: devis.numero,
+    nomAgence: agence?.nom_commercial || "",
+    dateCreation: new Date().toLocaleDateString("fr-FR"),
+    description: ordre.description,
+    statut: ordre.statut,
+    lienMission: `https://dimotec.datafuse.fr/mission/${ordre._id}`
+  };
+
+  // ✅ Envoi mail à l’agence si disponible
+  if (agenceEmail) {
+    await sendEmail({
+      to: agenceEmail,
+      subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+      template: "OrdreMission.html",
+      variables
+    });
+  }
+
+  // ✅ Envoi mail Dimotec systématique
+  await sendEmail({
+    to: dimotecEmail,
+    subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+    template: "OrdreMission.html",
+    variables
+  });
+
+  // ✅ Ajouter cagnotte
+  if (agence) {
+    const montantCagnotte = devis.totalFinal * 0.03;
+    agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
+    await agence.save();
+  }
+
+  return res.status(201).json({
+    message: "✅ Devis créé, accepté automatiquement et ordre envoyé (payeur agence).",
+    devis,
+  });
+}
+
+
 
     // 💌 Envoi de l’e-mail si le payeur est le client
     if (data.payer === "client") {
@@ -400,74 +467,40 @@ exports.accepterDevisViaLien = async (req, res) => {
   try {
     const { key, devisId } = req.params;
     const { ville, date, numeroFiscalBien } = req.body;
-    console.log("🔹 acceptAndSign appelé avec :", { key, devisId, ville, date, numeroFiscalBien });
 
     const devis = await Devis.findOne({ _id: devisId, accesClientKey: key });
-    if (!devis) {
-      console.log("❌ Devis introuvable ou clé invalide.");
-      return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
-    }
-    console.log("✅ Devis trouvé :", devis._id, "Statut avant update :", devis.statut);
+    if (!devis) return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
 
-    // 🔹 Mettre à jour le statut du devis et les champs ville / date / numéro fiscal
+    // ✅ Mise à jour du devis
     devis.statut = "Accepté";
-
-    if (ville) {
-      devis.faitA = ville;
-      console.log("📍 faitA mis à jour :", devis.faitA);
-    }
-
-    if (date) {
-      devis.dateAcceptation = new Date(date);
-      console.log("📅 dateAcceptation mis à jour :", devis.dateAcceptation);
-    }
-
-    if (numeroFiscalBien) {
-      devis.numeroFiscalBien = numeroFiscalBien;
-      console.log("💰 numeroFiscalBien mis à jour :", devis.numeroFiscalBien);
-    }
-
-    // ✅ Forcer CGV et RGPD à true
+    if (ville) devis.faitA = ville;
+    if (date) devis.dateAcceptation = new Date(date);
+    if (numeroFiscalBien) devis.numeroFiscalBien = numeroFiscalBien;
     devis.cgvAccepted = true;
     devis.rgpdAccepted = true;
-    console.log("✅ CGV et RGPD mis à jour :", { cgvAccepted: devis.cgvAccepted, rgpdAccepted: devis.rgpdAccepted });
-
     await devis.save();
-    console.log("✅ Devis sauvegardé :", {
-      statut: devis.statut,
-      faitA: devis.faitA,
-      dateAcceptation: devis.dateAcceptation,
-      numeroFiscalBien: devis.numeroFiscalBien,
-      cgvAccepted: devis.cgvAccepted,
-      rgpdAccepted: devis.rgpdAccepted
-    });
 
-    // 🔹 Récupérer le client réel
+    // 🔹 Trouver client réel si pas encore lié
     let clientId = devis.clientId;
     if (!clientId && devis.client?.email) {
       const client = await Client.findOne({ email: devis.client.email });
-      if (!client) {
-        console.log("❌ Client introuvable pour créer la facture.");
-        return res.status(400).json({ message: "Client introuvable pour créer la facture." });
-      }
+      if (!client) return res.status(400).json({ message: "Client introuvable pour créer la facture." });
       clientId = client._id;
     }
-    console.log("✅ Client trouvé ou existant :", clientId);
 
-    // 🔹 Créer une facture
+    // ✅ Création Facture
     const facture = new Facture({
       devisId: devis._id,
       agenceId: devis.agenceId,
       numero: `F-${Date.now()}`,
       clientId,
-      montantHT: devis.montantTTC,
+      montantHT: devis.montantTTC / 1.2,
       montantTTC: devis.montantTTC,
       statut: "Envoyée"
     });
     await facture.save();
-    console.log("✅ Facture créée :", facture.numero);
 
-    // 🔹 Créer un ordre de mission
+    // ✅ Création Ordre de Mission
     const ordre = new OrdreMission({
       devisId: devis._id,
       agenceId: devis.agenceId,
@@ -477,32 +510,66 @@ exports.accepterDevisViaLien = async (req, res) => {
       statut: "Commande"
     });
     await ordre.save();
-    console.log("✅ Ordre de mission créé :", ordre.numero);
 
-    // 🔹 Ajouter 3% du montant TTC à la cagnotte de l'agence
+    // ✅ Mise à jour cagnotte agence
     const agence = await Agence.findById(devis.agenceId);
     if (agence) {
-      const montantCagnotte = devis.montantTTC * 0.03; 
+      const montantCagnotte = devis.montantTTC * 0.03;
       agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
       await agence.save();
-      console.log(`🔹 ${montantCagnotte}€ ajoutés à la cagnotte de l'agence ${agence.nom_commercial}`);
-    } else {
-      console.log("❌ Agence non trouvée pour mettre à jour la cagnotte");
     }
 
-    console.log("✅ Tout s'est bien passé. Retour au frontend.");
-    return res.status(200).json({ 
-      message: "✅ Devis accepté, CGV/RGPD validés, facture et ordre de mission créés, cagnotte mise à jour", 
-      devis, 
-      facture, 
-      ordre, 
-      cagnotteAgence: agence?.cagnotte 
+    /// ✅ Email Agence
+const agenceEmail = agence.emails_contact?.[0]?.email || null;
+
+// ✅ Email fixe Dimotec
+const dimotecEmail = "dimotec34@gmail.com";
+
+// ✅ Variables email
+const variables = {
+  nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+  numero: ordre.numero,
+  devisNumero: devis.numero,
+  nomAgence: agence.nom_commercial,
+  dateCreation: new Date().toLocaleDateString("fr-FR"),
+  description: ordre.description,
+  statut: ordre.statut,
+  lienMission: `https://dimotec.datafuse.fr/mission/${ordre._id}`
+};
+
+// ✅ Envoi email → Agence
+if (agenceEmail) {
+  await sendEmail({
+    to: agenceEmail,
+    subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+    template: "OrdreMission.html",
+    variables
+  });
+}
+
+// ✅ Envoi email → Dimotec (toujours)
+await sendEmail({
+  to: dimotecEmail,
+  subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+  template: "OrdreMission.html",
+  variables
+});
+
+
+    return res.status(200).json({
+      message: "✅ Devis accepté, facture & ordre de mission créés, mails envoyés, cagnotte mise à jour.",
+      devis,
+      facture,
+      ordre,
+      cagnotteAgence: agence?.cagnotte
     });
+
   } catch (error) {
     console.error("❌ Erreur acceptation via lien :", error);
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 
@@ -576,8 +643,9 @@ exports.uploadSignature = async (req, res) => {
   }
 };
 
+ 
 
-
+// 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
@@ -638,7 +706,6 @@ exports.getDevisViaLien = async (req, res) => {
       });
 
     // -------- DIAGNOSTIC GAZ --------
-    let diagGazObj = null;
     if (devis.chauffageGaz) {
       const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
       if (diagGaz) {
@@ -658,9 +725,15 @@ exports.getDevisViaLien = async (req, res) => {
         }
 
         const prixHT = +(prixTTC / 1.2).toFixed(2);
-        diagGazObj = { nom: diagGaz.nom, prixHT, prixTTC };
-        diagnostics.push(diagGazObj);
+        diagnostics.push({ nom: diagGaz.nom, prixHT, prixTTC });
       }
+    }
+
+    // -------- COPROPRIÉTÉ --------
+    if (devis.copropriete) {
+      const prixTTC = Number(devis.tarifCopropriete || 0);
+      const prixHT = +(prixTTC / 1.2).toFixed(2);
+      diagnostics.push({ nom: "Supplément copropriété", prixHT, prixTTC });
     }
 
     // -------- SUPPLÉMENTS SELECTIONNÉS --------
@@ -685,7 +758,7 @@ exports.getDevisViaLien = async (req, res) => {
         prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
       }
 
-      // 🏢 APPARTEMENT (✅ la partie qui manquait)
+      // 🏢 APPARTEMENT
       if (devis.bien === "appartement" && devis.pack.tarifsParAppartement?.length) {
         const appart = devis.pack.tarifsParAppartement.find(
           t => t.typeAppartement === surfaceStr
@@ -733,6 +806,7 @@ exports.getDevisViaLien = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 

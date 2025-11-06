@@ -545,16 +545,18 @@ exports.deleteSupplement = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const supplement = await Supplement.findById(id);
-    if (!supplement) return res.status(404).json({ message: "Supplément non trouvé." });
+    const deleted = await Supplement.findByIdAndDelete(id);
+    if (!deleted) {
+      return res.status(404).json({ message: "Supplément non trouvé." });
+    }
 
-    await supplement.remove();
-    res.status(200).json({ message: "Supplément supprimé." });
+    res.status(200).json({ message: "Supplément supprimé ✅" });
   } catch (err) {
     console.error("❌ Erreur deleteSupplement:", err);
-    res.status(500).json({ message: "Erreur serveur lors de la suppression du supplément." });
+    res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 /**
  * 📦 Créer un pack avec diagnostics associés et tarifs

@@ -389,7 +389,7 @@ exports.getCagnotteEtReduction = async (req, res) => {
  */
 exports.filterPacks = async (req, res) => {
   try {
-    const { typeBien, typeOperation, annee, surface, installationGaz } = req.body;
+    const { typeBien, typeOperation, annee, surface, installationGaz, copropriete } = req.body;
     console.log("💡 Requête reçue :", req.body);
 
     if (!typeBien || !typeOperation || !annee || !surface) {
@@ -404,7 +404,6 @@ exports.filterPacks = async (req, res) => {
       .replace(/[\u0300-\u036f]/g, "");
     console.log("🔹 Secteur agence :", secteur);
 
-    // ✅ Le front envoie directement la bonne tranche
     const tranche = annee;
 
     // --- Surface ou type appartement ---
@@ -416,10 +415,8 @@ exports.filterPacks = async (req, res) => {
       const match = surface.match(/(\d+)-(\d+)/);
       surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
       surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
-      console.log(`🔹 Surface maison : ${surfaceMinDemande}-${surfaceMaxDemande}`);
     } else if (typeBien === "appartement") {
       typeAppartement = surface;
-      console.log(`🔹 Type appartement : ${typeAppartement}`);
     }
 
     // --- Récupération des packs ---
@@ -428,8 +425,6 @@ exports.filterPacks = async (req, res) => {
       typeOperation: typeOperation.toLowerCase(),
       trancheAnnee: { $in: [tranche, "toutes"] }
     }).populate("diagnostics");
-
-    console.log("📦 Packs récupérés :", packs.length);
 
     if (!packs.length) {
       return res.status(404).json({ message: "Aucun pack trouvé pour ces critères." });
@@ -443,7 +438,6 @@ exports.filterPacks = async (req, res) => {
         for (let tps of pack.tarifsParSurface) {
           if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
             tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
-            console.log(`💥 Tarif pack trouvé pour maison (${pack.nom}) :`, tarifTrouve);
             break;
           }
         }
@@ -451,7 +445,6 @@ exports.filterPacks = async (req, res) => {
         const tarifObj = pack.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
         if (tarifObj) {
           tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? null;
-          console.log(`💥 Tarif pack trouvé pour appartement (${pack.nom}) :`, tarifTrouve);
         }
       }
 
@@ -461,51 +454,48 @@ exports.filterPacks = async (req, res) => {
       };
     });
 
-    // --- Liste des diagnostics ---
+    // --- Diagnostics ---
     const allDiagnostics = await Diagnostic.find({}, { nom: 1 });
 
-    // --- Calcul tarif Diagnostic Gaz si applicable ---
+    // --- Diagnostic Gaz ---
     let diagnosticGazTarif = null;
-    console.log("💡 Chauffage Gaz reçu :", installationGaz);
-
     if (installationGaz === true) {
       const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
-      console.log("💡 Diagnostic Gaz trouvé :", diagGaz);
-
       if (diagGaz) {
         if (typeBien === "maison" && diagGaz.tarifsParSurface?.length) {
-          console.log("💡 Tarifs par surface Diagnostic Gaz :", diagGaz.tarifsParSurface);
           for (let tps of diagGaz.tarifsParSurface) {
-            console.log(`💡 Vérification tranche surface : ${tps.surfaceMin}-${tps.surfaceMax}`);
             if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
               diagnosticGazTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
-              console.log("💥 Tarif Diagnostic Gaz trouvé :", diagnosticGazTarif);
               break;
             }
           }
-        }
-
-        if (typeBien === "appartement" && diagGaz.tarifsParAppartement?.length) {
-          console.log("💡 Tarifs par appartement Diagnostic Gaz :", diagGaz.tarifsParAppartement);
+        } else if (typeBien === "appartement" && diagGaz.tarifsParAppartement?.length) {
           const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
-          if (tps) {
-            diagnosticGazTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
-            console.log("💥 Tarif Diagnostic Gaz appartement trouvé :", diagnosticGazTarif);
-          }
+          if (tps) diagnosticGazTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
         }
-      } else {
-        console.log("⚠️ Aucun diagnostic Gaz trouvé dans la base");
       }
-
-      console.log("🔥 Tarif Diagnostic Gaz final :", diagnosticGazTarif);
-    } else {
-      console.log("⚠️ Chauffage Gaz non actif, pas de tarif Gaz calculé");
     }
 
+    // --- Diagnostic Copropriété ---
+    let diagnosticCoproTarif = null;
+    if (typeBien === "maison" && copropriete === true) {
+      const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // surface ou surface (copropriété)
+      if (diagCopro && diagCopro.tarifsParSurface?.length) {
+        for (let tps of diagCopro.tarifsParSurface) {
+          if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
+            diagnosticCoproTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
+            break;
+          }
+        }
+      }
+    }
+
+    // --- Réponse ---
     res.json({
       packs: packsAvecTarif,
       diagnostics: allDiagnostics,
       diagnosticGazTarif,
+      diagnosticCoproTarif,
       tranche,
       surfaceMinDemande,
       surfaceMaxDemande,
@@ -517,6 +507,8 @@ exports.filterPacks = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors de la récupération des packs." });
   }
 };
+
+
 
 
 
@@ -560,7 +552,7 @@ exports.filterDiagnostics = async (req, res) => {
     const diagnostics = await Diagnostic.find({
       typeBien,
       typeOperation,
-      trancheAnnee: { $in: [annee, "toutes"] }
+      trancheAnnee: { $in: [annee] }
     });
 
     if (!diagnostics.length) {

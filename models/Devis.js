@@ -125,6 +125,15 @@ surfaceMaison: {
   default: false,
 },
 
+  copropriete: {          // ✅ Nouveau champ pour savoir si la copropriété est incluse
+    type: Boolean,
+    default: false,
+  },
+  tarifCopropriete: {     // ✅ Nouveau champ pour stocker le tarif copro
+    type: Number,
+    default: 0,
+  },
+
 
   /* 🔐 Consentements */
 cgvAccepted: {
