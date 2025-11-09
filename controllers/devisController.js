@@ -103,6 +103,51 @@ exports.envoyerRappelDevis = async (req, res) => {
 };
 
 
+/**
+ * 📦 Envoyer automatiquement les rappels pour tous les devis "Envoyé" depuis plus de 48h
+ */
+exports.envoyerRappelsAutomatiques = async () => {
+  try {
+    console.log("📥 Lancement du job d'envoi des rappels...");
+
+    const deuxJours = new Date(Date.now() - 48 * 60 * 60 * 1000);
+
+    const devisArelancer = await Devis.find({
+      statut: "Envoyé",
+      $or: [
+        { derniereRelance: { $lt: deuxJours } },
+        { derniereRelance: null }
+      ],
+      'client.email': { $exists: true, $ne: "" }
+    });
+
+    console.log(`🔍 ${devisArelancer.length} devis à relancer`);
+
+    for (const devis of devisArelancer) {
+      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+
+      await sendEmail({
+        to: devis.client.email,
+        subject: `Rappel concernant votre devis ${devis.numero}`,
+        template: "rappel.html",
+        variables: {
+          nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+          numeroDevis: devis.numero,
+          lienDevis
+        }
+      });
+
+      devis.derniereRelance = new Date();
+      await devis.save();
+      console.log(`✅ Rappel envoyé pour le devis ${devis.numero}`);
+    }
+
+    console.log("✅ Tous les rappels ont été envoyés avec succès");
+  } catch (error) {
+    console.error("❌ Erreur lors de l'envoi automatique des rappels :", error);
+  }
+};
+
 
 
 /**
@@ -397,7 +442,7 @@ if (data.payer === "agence") {
     dateCreation: new Date().toLocaleDateString("fr-FR"),
     description: ordre.description,
     statut: ordre.statut,
-    lienMission: `https://dimotec.datafuse.fr/mission/${ordre._id}`
+    lienMission: `https://dimotec.datafuse.fr/ordre-mission`
   };
 
   // ✅ Envoi mail à l’agence si disponible
@@ -534,7 +579,7 @@ const variables = {
   dateCreation: new Date().toLocaleDateString("fr-FR"),
   description: ordre.description,
   statut: ordre.statut,
-  lienMission: `https://dimotec.datafuse.fr/mission/${ordre._id}`
+  lienMission: `https://dimotec.datafuse.fr/ordre-mission`
 };
 
 // ✅ Envoi email → Agence
