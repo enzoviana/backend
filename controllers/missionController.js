@@ -26,25 +26,25 @@ exports.getOrdresMission = async (req, res) => {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
-    const ordres = await OrdreMission.find(query)
-      .populate({
-        path: "devisId",
+const ordres = await OrdreMission.find(query)
+  .populate({
+    path: "devisId",
+    populate: [
+      {
+        path: "pack",
         populate: [
-          {
-            path: "pack",
-            populate: {
-              path: "obligatoireDansPacks",
-              model: "Diagnostic",
-            },
-          },
-          { path: "diagnosticsSelectionnes", model: "Diagnostic" },
-          { path: "supplementsSelectionnes", model: "Supplement" },
-        ],
-      })
-      .populate("clientId")
-      .populate("agenceId")
-      .sort({ dateCreation: -1 })
-      .lean(); // ⚡ .lean() pour pouvoir modifier les objets avant de renvoyer
+          { path: "obligatoireDansPacks", model: "Diagnostic" },
+          { path: "diagnostics", model: "Diagnostic" } // ✅ AJOUT ICI
+        ]
+      },
+      { path: "diagnosticsSelectionnes", model: "Diagnostic" },
+      { path: "supplementsSelectionnes", model: "Supplement" },
+    ],
+  })
+  .populate("clientId")
+  .populate("agenceId")
+  .sort({ dateCreation: -1 })
+  .lean();
 
     // Ajoute le public_id à chaque fichier
     const ordresAvecPublicId = ordres.map(ordre => {
@@ -169,42 +169,45 @@ const uploadedFiles = req.files.map(file => ({
  */
 exports.updateStatutOrdreMission = async (req, res) => {
   try {
-    const { ordreId } = req.params; // ID de l'ordre à modifier
-    const { statut } = req.body;    // Nouveau statut
+    const { ordreId } = req.params;
+    const { statut, rdvDate } = req.body; // <--- récupère rdvDate
 
-    // Vérification de la présence du statut
     if (!statut) {
       return res.status(400).json({ message: "Le statut est requis." });
     }
 
-    // Récupération de l'ordre
     const ordre = await OrdreMission.findById(ordreId);
-    if (!ordre) {
-      return res.status(404).json({ message: "Ordre de mission non trouvé." });
+    if (!ordre) return res.status(404).json({ message: "Ordre de mission non trouvé." });
+
+    // Permissions ok
+    if (req.agence && ordre.agenceId.toString() !== req.agence._id.toString()) {
+      return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
     }
 
-    // Vérification des droits
-    if (req.admin) {
-      // Admin peut tout modifier
-    } else if (req.agence) {
-      // L'agence ne peut modifier que ses propres ordres
-      if (ordre.agenceId.toString() !== req.agence._id.toString()) {
-        return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
-      }
-    } else {
-      return res.status(401).json({ message: "Utilisateur non authentifié." });
+    // ✅ Si rdvDate vient du front → on la met à jour
+    if (rdvDate) {
+      ordre.rdvDate = new Date(rdvDate);
     }
 
-    // Mise à jour du statut
+    // ✅ Bloquer “En Cours” si pas de date
+    if (statut === "En Cours" && !ordre.rdvDate) {
+      return res.status(400).json({ 
+        message: "Impossible de passer l'ordre en 'En Cours' sans définir une date et heure de rendez-vous." 
+      });
+    }
+
     ordre.statut = statut;
     await ordre.save();
 
     res.json({ message: "Statut mis à jour avec succès.", ordre });
+
   } catch (error) {
     console.error("Erreur mise à jour statut ordre :", error);
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
+
 
 
 /**
