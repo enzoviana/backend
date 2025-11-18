@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenue sur Dimotec Diagnostics</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #28a745;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .button {
+            display: inline-block;
+            background-color: #28a745;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                Bienvenue dans votre espace Dimotec !
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour <strong>{{prenom}} {{nom}}</strong>,</p>
+
+                <p>Vous avez été ajouté à notre plateforme <strong>Dimotec Diagnostics</strong> en tant qu'employé.</p>
+
+                <p>Voici vos informations de connexion :</p>
+                <ul>
+                    <li><strong>Email :</strong> {{email}}</li>
+                    <li><strong>Mot de passe :</strong> {{motDePasse}}</li>
+                </ul>
+
+                <p>Pour accéder à votre espace professionnel :</p>
+                <p>
+                    <a href="{{loginUrl}}" class="button">Se connecter à mon compte</a>
+                </p>
+
+                <p>Nous vous recommandons de changer votre mot de passe après votre première connexion.</p>
+
+                <p>Si vous avez la moindre question, notre équipe reste à votre disposition.</p>
+
+                <p>Cordialement,<br>
+                L’équipe <strong>Dimotec Diagnostics</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Dimotec Diagnostics. Tous droits réservés.<br>
+                contact@dimotec.fr | 04 00 00 00 00
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

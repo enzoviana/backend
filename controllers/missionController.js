@@ -8,7 +8,8 @@ const cloudinary = require("../config/cloudinary"); // ton fichier cloudinary.js
 const Devis = require('../models/Devis')
 const axios = require('axios');
 const path = require('path');
-
+const Employe = require("../models/Employe");
+const Agence = require("../models/Agency");
 /**
  * 📋 Récupérer tous les ordres de mission selon l'utilisateur
  */
@@ -19,39 +20,50 @@ exports.getOrdresMission = async (req, res) => {
     if (req.admin) {
       // 🧑‍💼 Admin → tous les ordres de mission
       query = {};
-    } else if (req.agence) {
+    }
+
+    else if (req.role === "agence") {
       // 🏢 Agence → uniquement ses ordres de mission
       query = { agenceId: req.agence._id };
-    } else {
+    } else if (req.role === "employe") {
+      // 👨‍💻 Employé → uniquement les OM où il est creePar ou dans partageAvec
+      const empId = req.user._id.toString();
+
+      query = {
+        $or: [
+          { "creePar.type": "Employe", "creePar.id": empId },
+          { "partageAvec": empId }
+        ]
+      };
+    }  else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
-const ordres = await OrdreMission.find(query)
-  .populate({
-    path: "devisId",
-    populate: [
-      {
-        path: "pack",
+    const ordres = await OrdreMission.find(query)
+      .populate({
+        path: "devisId",
         populate: [
-          { path: "obligatoireDansPacks", model: "Diagnostic" },
-          { path: "diagnostics", model: "Diagnostic" } // ✅ AJOUT ICI
-        ]
-      },
-      { path: "diagnosticsSelectionnes", model: "Diagnostic" },
-      { path: "supplementsSelectionnes", model: "Supplement" },
-    ],
-  })
-  .populate("clientId")
-  .populate("agenceId")
-  .sort({ dateCreation: -1 })
-  .lean();
+          {
+            path: "pack",
+            populate: [
+              { path: "obligatoireDansPacks", model: "Diagnostic" },
+              { path: "diagnostics", model: "Diagnostic" }
+            ]
+          },
+          { path: "diagnosticsSelectionnes", model: "Diagnostic" },
+          { path: "supplementsSelectionnes", model: "Supplement" },
+        ],
+      })
+      .populate("clientId")
+      .populate("agenceId")
+      .sort({ dateCreation: -1 })
+      .lean();
 
     // Ajoute le public_id à chaque fichier
     const ordresAvecPublicId = ordres.map(ordre => {
       if (ordre.fichiersClient) {
         ordre.fichiersClient = ordre.fichiersClient.map(fichier => {
           if (!fichier.public_id && fichier.url) {
-            // Retire la partie avant 'upload/' et la version 'vXXXXX/'
             let publicId = fichier.url.split('/upload/')[1];
             publicId = publicId.replace(/^v\d+\//, '');
             return { ...fichier, public_id: publicId };
@@ -68,6 +80,52 @@ const ordres = await OrdreMission.find(query)
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
+/**
+ * Supprimer un Ordre de Mission
+ */
+exports.deleteOrdreMission = async (req, res) => {
+  try {
+    const ordreId = req.params.id;
+
+    // Vérifier que l'OM existe
+    const ordre = await OrdreMission.findById(ordreId);
+    if (!ordre) {
+      return res.status(404).json({ message: "Ordre de mission introuvable." });
+    }
+
+    // Vérifier l'autorisation
+    if (req.admin) {
+      // Admin peut tout supprimer
+    } else if (req.role === "agence" && ordre.agenceId.toString() !== req.agence._id.toString()) {
+      return res.status(403).json({ message: "Vous n'avez pas la permission de supprimer cet ordre de mission." });
+    } else {
+      return res.status(403).json({ message: "Vous n'avez pas la permission de supprimer cet ordre de mission." });
+    }
+
+    // Supprimer les fichiers liés sur Cloudinary si présents
+    if (ordre.fichiersClient && ordre.fichiersClient.length > 0) {
+      for (const fichier of ordre.fichiersClient) {
+        if (fichier.public_id) {
+          try {
+            await cloudinary.uploader.destroy(fichier.public_id);
+          } catch (err) {
+            console.warn(`Impossible de supprimer le fichier Cloudinary ${fichier.public_id}:`, err.message);
+          }
+        }
+      }
+    }
+
+    // Supprimer l'OM de la base
+    await OrdreMission.findByIdAndDelete(ordreId);
+
+    res.json({ message: "Ordre de mission supprimé avec succès." });
+  } catch (error) {
+    console.error("Erreur suppression ordre de mission :", error);
+    res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
 
 
 /**
@@ -170,7 +228,7 @@ const uploadedFiles = req.files.map(file => ({
 exports.updateStatutOrdreMission = async (req, res) => {
   try {
     const { ordreId } = req.params;
-    const { statut, rdvDate } = req.body; // <--- récupère rdvDate
+    const { statut, rdvDate } = req.body;
 
     if (!statut) {
       return res.status(400).json({ message: "Le statut est requis." });
@@ -179,17 +237,17 @@ exports.updateStatutOrdreMission = async (req, res) => {
     const ordre = await OrdreMission.findById(ordreId);
     if (!ordre) return res.status(404).json({ message: "Ordre de mission non trouvé." });
 
-    // Permissions ok
+    // Permissions agence
     if (req.agence && ordre.agenceId.toString() !== req.agence._id.toString()) {
       return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
     }
 
-    // ✅ Si rdvDate vient du front → on la met à jour
+    // Mise à jour date RDV
     if (rdvDate) {
       ordre.rdvDate = new Date(rdvDate);
     }
 
-    // ✅ Bloquer “En Cours” si pas de date
+    // Bloquer "En Cours" si pas de date
     if (statut === "En Cours" && !ordre.rdvDate) {
       return res.status(400).json({ 
         message: "Impossible de passer l'ordre en 'En Cours' sans définir une date et heure de rendez-vous." 
@@ -199,14 +257,54 @@ exports.updateStatutOrdreMission = async (req, res) => {
     ordre.statut = statut;
     await ordre.save();
 
-    res.json({ message: "Statut mis à jour avec succès.", ordre });
+    // 🔹 Si Payée → crédit 3% du devis dans la cagnotte
+    if (statut === "Payée") {
+      const devis = await Devis.findById(ordre.devisId);
+      if (!devis) return res.status(404).json({ message: "Devis lié introuvable." });
+
+      const agence = await Agence.findById(ordre.agenceId);
+      const montantCredit = +(devis.montantTTC * 0.03).toFixed(2); // 3%
+
+      if (!agence) return res.status(404).json({ message: "Agence introuvable." });
+
+      // Cible de la cagnotte selon type
+      if (agence.type_cagnotte === "individuelle" && ordre.creePar.type === "Employe") {
+        const employe = await Employe.findById(ordre.creePar.id);
+        if (employe) {
+          employe.cagnotte += montantCredit;
+          employe.transactions_cagnotte.push({
+            montant: montantCredit,
+            type: "gain",
+            description: `3% du devis ${devis.numero} (Ordre ${ordre.numero})`,
+            reference: ordre._id,
+            date: new Date()
+          });
+          await employe.save();
+          console.log(`✅ Cagnotte employé ${employe.email} créditée de ${montantCredit}`);
+        }
+      } else {
+        // Partagée → crédit à l'agence
+        if (!agence.historiqueCagnotte) agence.historiqueCagnotte = [];
+        agence.cagnotte = (agence.cagnotte || 0) + montantCredit;
+        agence.historiqueCagnotte.push({
+          montant: montantCredit,
+          type: "gain",
+          description: `3% du devis ${devis.numero} (Ordre ${ordre.numero})`,
+          par: agence.nom_commercial,
+          date: new Date()
+        });
+        await agence.save();
+        console.log(`✅ Cagnotte agence ${agence.nom_commercial} créditée de ${montantCredit}`);
+      }
+    }
+
+    res.json({ message: "Statut mis à jour avec succès et cagnotte éventuellement créditée.", ordre });
 
   } catch (error) {
     console.error("Erreur mise à jour statut ordre :", error);
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
-
 
 
 
@@ -236,5 +334,62 @@ exports.getFactures = async (req, res) => {
   } catch (error) {
     console.error("Erreur récupération factures :", error);
     res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+
+
+/**
+ * 📤 Partager un ordre de mission avec un ou plusieurs employés
+ * Requête POST /ordres/:ordreId/partager
+ * Body: { employeeId: [id1, id2, ...] }
+ */
+exports.partagerOrdreMission = async (req, res) => {
+  try {
+    const { missionId } = req.params;
+    const { employeeId } = req.body;
+
+    console.log("🔹 ordreId reçu :", missionId);
+    console.log("🔹 employeeId reçu :", employeeId);
+    console.log("🔹 req.admin :", req.admin);
+    console.log("🔹 req.agence :", req.agence ? req.agence._id : null);
+
+    if (!employeeId || !Array.isArray(employeeId) || !employeeId.length) {
+      console.log("⚠️ Aucun employé fourni !");
+      return res.status(400).json({ message: "Veuillez fournir au moins un employé." });
+    }
+
+    const ordre = await OrdreMission.findById(missionId);
+    console.log("🔹 Ordre récupéré :", ordre);
+
+    if (!ordre) {
+      console.log("⚠️ Ordre de mission introuvable !");
+      return res.status(404).json({ message: "Ordre de mission introuvable." });
+    }
+
+    // Vérifier que l'utilisateur peut partager (admin ou agence correspondante)
+    if (req.admin || (req.agence && ordre.agenceId.toString() === req.agence._id.toString())) {
+      console.log("✅ Permission OK pour partager l'ordre");
+
+      // Ajouter uniquement les employés qui ne sont pas déjà dans partageAvec
+      ordre.partageAvec = Array.from(
+        new Set([...ordre.partageAvec.map(id => id.toString()), ...employeeId])
+      );
+      console.log("🔹 Nouvel état de partageAvec :", ordre.partageAvec);
+
+      await ordre.save();
+      console.log("✅ Ordre sauvegardé avec succès");
+
+      return res.status(200).json({
+        message: "✅ Ordre de mission partagé avec succès.",
+        ordre
+      });
+    } else {
+      console.log("❌ Permission refusée pour partager l'ordre");
+      return res.status(403).json({ message: "Vous n'avez pas la permission de partager cet ordre." });
+    }
+  } catch (error) {
+    console.error("❌ Erreur partage ordre de mission :", error);
+    return res.status(500).json({ message: "Erreur serveur." });
   }
 };

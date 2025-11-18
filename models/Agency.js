@@ -2,6 +2,20 @@ const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { Schema } = mongoose;
 
+
+// 🔹 Sous-schema pour l’historique de la cagnotte
+const CagnotteHistoriqueSchema = new Schema({
+  type: {
+    type: String,
+    enum: ['ajout', 'retrait', 'en_attente', 'validation', 'transfert', 'autre', 'gain'],
+    required: true
+  },
+  montant: { type: Number, required: true },
+  description: { type: String, default: '' },
+  par: { type: String, default: 'système' }, // ex: 'admin', 'client', 'système'
+  date: { type: Date, default: Date.now }
+}, { _id: false });
+
 /**
  * Sous-schema Admin pour l'agence
  */
@@ -71,6 +85,16 @@ const AgenceSchema = new Schema({
 
   ca_estime: { type: Number, default: 0 },
   cagnotte: { type: Number, default: 0 },
+    cagnotteEnAttente: { type: Number, default: 0 },
+historiqueCagnotte: {
+  type: [CagnotteHistoriqueSchema],
+  default: []   // ✅ tableau vide par défaut
+},    type_cagnotte: {
+    type: String,
+    enum: ['partagee', 'individuelle'],
+    default: 'partagee',
+    required: true
+  },
   reduction: { type: Number, default: 0, min: 0, max: 100 }
 
 }, { timestamps: true });
@@ -91,5 +115,38 @@ AgenceSchema.virtual('tauxAcceptation').get(function () {
   const accepts = this.devis.filter(d => d.statut === 'accepte').length;
   return (accepts / this.devis.length) * 100;
 });
+
+
+// 🔹 Méthode d’ajout mouvement cagnotte
+AgenceSchema.methods.ajouterMouvementCagnotte = async function({ type, montant, description, par }) {
+  try {
+    if (!montant || isNaN(montant)) throw new Error("Montant invalide");
+
+    // 🔹 Arrondi à l'entier le plus proche
+    montant = Math.round(montant);
+    
+    this.historiqueCagnotte.push({
+      type,
+      montant,
+      description,
+      par,
+      date: new Date()
+    });
+
+    // 🔹 Mise à jour du solde
+    if (type === 'ajout' || type === 'validation') {
+      this.cagnotte += montant;
+    } else if (type === 'retrait' || type === 'en_attente') {
+      this.cagnotte -= montant;
+    }
+
+    await this.save();
+    return this;
+  } catch (error) {
+    console.error("Erreur ajouterMouvementCagnotte:", error);
+    throw error;
+  }
+};
+
 
 module.exports = mongoose.model('Agence', AgenceSchema);

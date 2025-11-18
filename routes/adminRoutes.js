@@ -31,6 +31,7 @@ router.post('/createAgence', authMiddleware, adminController.createAgence);
 
 // Récupérer toutes les agences (protégé)
 router.get('/agences', authMiddleware, adminController.getAllAgences);
+router.get('/classement-agences', authMiddleware, adminController.getClassementAgences);
 
 router.put("/agences/:id", authMiddleware, adminController.updateAgence);
 
@@ -67,11 +68,12 @@ router.get("/clients", authMiddleware, clientController.getClients);
 router.get("/mission", authMiddleware, missionController.getOrdresMission);
 router.put("/mission/:ordreId/statut", authMiddleware, missionController.updateStatutOrdreMission);
 router.get("/mission/download/:fileId", authMiddleware, missionController.downloadFile);
-
+router.delete("/mission/:id", authMiddleware, missionController.deleteOrdreMission);
 
 router.get('/cagnotte', authMiddleware, agencyController.getCagnotteEtReduction);
 
 
 router.get('/devis', authMiddleware, devisController.getDevis);
+router.delete("/devis/:id", authMiddleware, devisController.deleteDevis);
 
 module.exports = router;

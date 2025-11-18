@@ -13,6 +13,17 @@ const OrdreMissionSchema = new mongoose.Schema({
     default: 'Commande' 
   },
 
+ // ✅ Créateur : peut être un employé OU l’agence elle-même
+  creePar: {
+    id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    type: { type: String, enum: ['Employe', 'Agence'], required: true } // Discriminateur
+  },
+
+  // ✅ Employés collaborateurs (même agence)
+  partageAvec: [
+    { type: mongoose.Schema.Types.ObjectId, ref: 'Employe' }
+  ],
+
   // ✅ Date et heure du RDV
   rdvDate: { type: Date, default: null },
 

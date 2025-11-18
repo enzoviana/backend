@@ -10,15 +10,21 @@ const JWT_SECRET = process.env.JWT_SECRET || 'tonSecretIci';
 const JWT_EXPIRES_IN = '7d'; // durée du token
 const cloudinary = require('../config/cloudinary');
 const sendEmail = require('../utils/sendEmails');
+const Employe = require('../models/Employe');
 
 /**
- * LOGIN AGENCE
+ * LOGIN AGENCE OU EMPLOYÉ
  */
 exports.login = async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
 
-    // Cherche l'agence soit dans admin.email soit dans emails_contact
+    let user = null;
+    let type = null; // 'agence' ou 'employe'
+
+    /**
+     * 1️⃣ Vérification côté AGENCE
+     */
     const agence = await Agence.findOne({
       $or: [
         { 'admin.email': email },
@@ -26,103 +32,216 @@ exports.login = async (req, res) => {
       ]
     });
 
-    if (!agence) return res.status(400).json({ message: 'Email ou mot de passe incorrect.' });
-
-    // Vérifie le mot de passe uniquement sur admin
-    const isMatch = await bcrypt.compare(mot_de_passe, agence.admin.mot_de_passe);
-    if (!isMatch) return res.status(400).json({ message: 'Email ou mot de passe incorrect.' });
-
-    // Vérifie le statut
-    if (agence.statut === 'en_attente') {
-      return res.status(403).json({ message: 'Votre compte est toujours en attente d’approbation.' });
-    } else if (agence.statut === 'bloqué') {
-      return res.status(403).json({ message: 'Votre compte est bloqué. Contactez le support.' });
-    } else if (agence.statut === 'suspendu') {
-      return res.status(403).json({ message: 'Votre compte est suspendu.' });
+    if (agence) {
+      user = agence;
+      type = 'agence';
     }
 
-    // Génération du token JWT
+    /**
+     * 2️⃣ Vérification côté EMPLOYÉ si non trouvé dans Agence
+     */
+    let employe = null;
+    if (!user) {
+      employe = await Employe.findOne({ email });
+
+      if (employe) {
+        user = employe;
+        type = 'employe';
+      }
+    }
+
+    // Aucun compte trouvé
+    if (!user) {
+      return res.status(400).json({ message: "Email ou mot de passe incorrect." });
+    }
+
+    /**
+     * 3️⃣ Vérification du mot de passe
+     */
+    let hash = null;
+
+    if (type === "agence") hash = user.admin.mot_de_passe;
+    if (type === "employe") hash = user.mot_de_passe;
+
+    const isMatch = await bcrypt.compare(mot_de_passe, hash);
+    if (!isMatch) {
+      return res.status(400).json({ message: "Email ou mot de passe incorrect." });
+    }
+
+    /**
+     * 4️⃣ Vérification du statut (uniquement pour Agence)
+     */
+    if (type === "agence") {
+      if (user.statut === 'en_attente') {
+        return res.status(403).json({ message: "Votre compte est en attente d’approbation." });
+      }
+      if (user.statut === 'bloqué') {
+        return res.status(403).json({ message: "Votre compte est bloqué." });
+      }
+      if (user.statut === 'suspendu') {
+        return res.status(403).json({ message: "Votre compte est suspendu." });
+      }
+    }
+
+    /**
+     * 5️⃣ Génération du Token JWT
+     */
     const token = jwt.sign(
       {
-        agenceId: agence._id,
-        email: agence.admin.email,
-        role: agence.admin.role
+        id: user._id,
+        type,
+        role: type === "agence" ? user.admin.role : user.role,
+        agenceId: type === "agence" ? user._id : user.agenceId,
+employeId: type === "employe" ? user._id : null,
+        email
       },
       JWT_SECRET,
-      { expiresIn: JWT_EXPIRES_IN || '7d' }
+      { expiresIn: JWT_EXPIRES_IN || "7d" }
     );
 
-    res.json({
-      token,
-      agence: {
-        id: agence._id,
-        nom_commercial: agence.nom_commercial,
-        nom_responsable: agence.nom_responsable,
-        adresse: agence.adresse,
-        siret: agence.siret,
-        telephone_fixe: agence.telephone_fixe,
-        telephone_portable: agence.admin.telephone_portable,
-        activite: agence.activite,
-        domaine_intervention: agence.domaine_intervention,
-        emails_contact: agence.emails_contact,
-        alerte_secteur: agence.alerte_secteur,
-        statut: agence.statut,
-        photo: agence.logo,
-      }
-    });
+    /**
+     * 6️⃣ Réponse selon le type
+     */
+    if (type === "agence") {
+      return res.json({
+        token,
+        type,
+        agence: {
+          id: user._id,
+          nom_commercial: user.nom_commercial,
+          adresse: user.adresse,
+          email: user.admin.email,
+          telephone: user.admin.telephone_portable,
+          statut: user.statut,
+          activite: user.activite,
+          domaine_intervention: user.domaine_intervention,
+          logo: user.logo
+        }
+      });
+    } else {
+      return res.json({
+        token,
+        type,
+        employe: {
+          id: user._id,
+          nom: user.nom,
+          prenom: user.prenom,
+          email: user.email,
+          role: user.role,
+          agenceId: user.agenceId
+        }
+      });
+    }
+
   } catch (error) {
-    console.error('❌ Erreur lors de la connexion :', error);
-    res.status(500).json({ message: 'Erreur serveur lors de la connexion.' });
+    console.error("❌ Erreur lors de la connexion :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la connexion." });
   }
 };
 
 /**
- * VERIFY TOKEN AGENCE
+ * VERIFY TOKEN (AGENCE ou EMPLOYE)
  */
 exports.verifyToken = async (req, res) => {
   try {
-    const token = req.headers.authorization?.split(" ")[1]; // Récupère le token du header
+    const token = req.headers.authorization?.split(" ")[1];
 
     if (!token) {
       return res.status(401).json({ valid: false, message: "Token manquant" });
     }
 
-    // Vérifie et décode le token
+    // Décodage du token
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Recherche de l'agence correspondante
-    const agence = await Agence.findById(decoded.agenceId).select(
-      "nom_commercial admin.email statut logo"
-    );
-
-    if (!agence) {
-      return res.status(404).json({ valid: false, message: "Agence introuvable" });
-    }
-
-    // Si le statut est bloqué, suspendu ou en attente → refuser l'accès
-    if (["bloqué", "suspendu", "en_attente"].includes(agence.statut)) {
-      return res.status(403).json({
+    // Vérifie que le rôle existe
+    if (!decoded.type) {
+      return res.status(400).json({
         valid: false,
-        message: "Votre compte est inactif. Contactez le support.",
+        message: "Token invalide : rôle manquant",
       });
     }
 
-    // ✅ Token valide
-    res.json({
-      valid: true,
-      agence: {
-        id: agence._id,
-        nom_commercial: agence.nom_commercial,
-        email: agence.admin.email,
-        statut: agence.statut,
-        logo: agence.logo,
-      },
+    let result = null;
+
+    // ----------------------------------------------------------------------
+    // 🔎 CAS 1 : ROLE = AGENCE
+    // ----------------------------------------------------------------------
+    if (decoded.type === "agence") {
+      result = await Agence.findById(decoded.agenceId).select(
+        "nom_commercial admin.email statut logo"
+      );
+
+      if (!result) {
+        return res.status(404).json({ valid: false, message: "Agence introuvable" });
+      }
+
+      if (["bloqué", "suspendu", "en_attente"].includes(result.statut)) {
+        return res.status(403).json({
+          valid: false,
+          message: "Votre compte agence est inactif. Contactez le support.",
+        });
+      }
+
+      return res.json({
+        valid: true,
+        role: "agence",
+        agence: {
+          id: result._id,
+          nom_commercial: result.nom_commercial,
+          email: result.admin.email,
+          statut: result.statut,
+          logo: result.logo,
+        },
+      });
+    }
+
+    // ----------------------------------------------------------------------
+    // 🔎 CAS 2 : ROLE = EMPLOYE
+    // ----------------------------------------------------------------------
+    if (decoded.type === "employe") {
+      result = await Employe.findById(decoded.employeId)
+        .select("nom prenom email statut role agenceId");
+
+      if (!result) {
+        return res.status(404).json({ valid: false, message: "Employé introuvable" });
+      }
+
+      if (["bloqué", "suspendu"].includes(result.statut)) {
+        return res.status(403).json({
+          valid: false,
+          message: "Votre compte employé est inactif. Contactez l'administrateur.",
+        });
+      }
+
+      return res.json({
+        valid: true,
+        role: "employe",
+        employe: {
+          id: result._id,
+          nom: result.nom,
+          prenom: result.prenom,
+          email: result.email,
+          statut: result.statut,
+          role: result.role,
+          agenceId: result.agenceId,
+        },
+      });
+    }
+
+    // ----------------------------------------------------------------------
+    // RÔLE NON GÉRÉ
+    // ----------------------------------------------------------------------
+    return res.status(400).json({
+      valid: false,
+      message: "Rôle non reconnu dans le token",
     });
+
   } catch (error) {
     console.error("❌ Erreur lors de la vérification du token :", error);
-    res.status(401).json({ valid: false, message: "Token invalide ou expiré" });
+    return res.status(401).json({ valid: false, message: "Token invalide ou expiré" });
   }
 };
+
 
 
 
@@ -258,27 +377,54 @@ exports.register = async (req, res) => {
 };
 
 // ✅ Récupération complète des infos de l'agence connectée
+// ✅ Récupération complète des infos agence OU employé connecté
 exports.getInfosAgence = async (req, res) => {
   try {
-    const agenceId = req.agence?._id || req.user?.agenceId || req.params.id;
+    // --- 👤 SI EMPLOYÉ : renvoyer les données de l'employé ---
+    if (req.role === "employe") {
+      const employe = await Employe.findById(req.user._id)
+        .select("-mot_de_passe -__v");
+
+      if (!employe) {
+        return res.status(404).json({ message: "Employé introuvable." });
+      }
+
+      return res.status(200).json({
+        message: "✅ Informations de l'employé récupérées avec succès",
+        type: "employe",
+        employe
+      });
+    }
+
+    // --- 🏢 SI AGENCE (ou admin) ---
+    const agenceId =
+      req.agence?._id ||
+      req.user?.agenceId ||
+      req.params.id;
+
     if (!agenceId) {
       return res.status(400).json({ message: "Aucun identifiant d'agence fourni." });
     }
 
-    const agence = await Agence.findById(agenceId).select("-admin.mot_de_passe -__v");
+    const agence = await Agence.findById(agenceId)
+      .select("-admin.mot_de_passe -__v");
+
     if (!agence) {
       return res.status(404).json({ message: "Agence introuvable." });
     }
 
-    res.status(200).json({
+    return res.status(200).json({
       message: "✅ Informations de l'agence récupérées avec succès",
-      agence,
+      type: "agence",
+      agence
     });
+
   } catch (error) {
-    console.error("❌ Erreur lors de la récupération des infos agence :", error);
-    res.status(500).json({ message: "Erreur serveur lors de la récupération des informations." });
+    console.error("❌ Erreur lors de la récupération des infos agence/employé :", error);
+    return res.status(500).json({ message: "Erreur serveur lors de la récupération des informations." });
   }
 };
+
 
 
 // ✅ Mise à jour complète des infos de l'agence
@@ -300,7 +446,8 @@ exports.updateInfosAgence = async (req, res) => {
       "domaine_intervention",
       "emails_contact",
       "ca_estime",
-      "reduction"
+      "reduction",
+      "type_cagnotte" // ✅ Autorisé à la mise à jour
     ];
 
     const updates = {};
@@ -310,14 +457,69 @@ exports.updateInfosAgence = async (req, res) => {
       }
     }
 
+    // 🔎 Vérifie que le type de cagnotte est valide
+    if (updates.type_cagnotte && !["partagee", "individuelle"].includes(updates.type_cagnotte)) {
+      return res.status(400).json({
+        message: "Le type de cagnotte doit être soit 'partagee' soit 'individuelle'."
+      });
+    }
+
+
+    // 🔹 Récupère l’agence avant mise à jour pour comparer l’ancien type
+    const oldAgence = await Agence.findById(agenceId);
+    if (!oldAgence) {
+      return res.status(404).json({ message: "Agence introuvable." });
+    }
+
     const updatedAgence = await Agence.findByIdAndUpdate(
       agenceId,
       { $set: updates },
       { new: true, runValidators: true, select: "-admin.mot_de_passe -__v" }
     );
 
-    if (!updatedAgence) {
-      return res.status(404).json({ message: "Agence introuvable." });
+    // 🧩 Si le type de cagnotte a changé, adapter le système
+    if (updates.type_cagnotte && updates.type_cagnotte !== oldAgence.type_cagnotte) {
+      console.log(`⚙️ Changement du type de cagnotte : ${oldAgence.type_cagnotte} → ${updates.type_cagnotte}`);
+
+      const employes = await Employe.find({ agence: agenceId });
+
+      if (updates.type_cagnotte === "partagee") {
+        // 🏦 Fusion des cagnottes individuelles vers la cagnotte de l’agence
+        const total = employes.reduce((sum, e) => sum + (e.cagnotte || 0), 0);
+        updatedAgence.cagnotte += total;
+        await updatedAgence.save();
+
+        // Réinitialise les cagnottes des employés
+        for (const e of employes) {
+          e.cagnotte = 0;
+          e.transactions_cagnotte.push({
+            montant: -e.cagnotte,
+            type: "ajustement",
+            description: "Fusion vers la cagnotte partagée"
+          });
+          await e.save();
+        }
+
+      } else if (updates.type_cagnotte === "individuelle") {
+        // 💰 Répartir la cagnotte partagée équitablement
+        if (employes.length > 0 && oldAgence.cagnotte > 0) {
+          const montantParEmploye = oldAgence.cagnotte / employes.length;
+
+          for (const e of employes) {
+            e.cagnotte += montantParEmploye;
+            e.transactions_cagnotte.push({
+              montant: montantParEmploye,
+              type: "ajustement",
+              description: "Conversion en cagnottes individuelles"
+            });
+            await e.save();
+          }
+
+          // Vide la cagnotte de l’agence
+          updatedAgence.cagnotte = 0;
+          await updatedAgence.save();
+        }
+      }
     }
 
     res.status(200).json({
@@ -326,47 +528,163 @@ exports.updateInfosAgence = async (req, res) => {
     });
   } catch (error) {
     console.error("❌ Erreur lors de la mise à jour des infos agence :", error);
-    res.status(500).json({ message: "Erreur serveur lors de la mise à jour des informations." });
+    res.status(500).json({
+      message: "Erreur serveur lors de la mise à jour des informations.",
+      error: error.message,
+    });
   }
 };
+
+// ✅ Mise à jour des informations d'un employé connecté (photo URL ou fichier)
+exports.updateInfosEmploye = async (req, res) => {
+  try {
+    console.log("🟢 Début updateInfosEmploye");
+    console.log("Req.user :", req.user);
+    console.log("Req.body :", req.body);
+    console.log("Req.file :", req.file);
+
+    const employeId = req.user?._id;
+    if (!employeId) {
+      console.log("❌ Aucun identifiant d'employé fourni");
+      return res.status(400).json({ message: "Aucun identifiant d'employé fourni." });
+    }
+
+    const employe = await Employe.findById(employeId);
+    if (!employe) {
+      console.log("❌ Employé introuvable pour l'ID :", employeId);
+      return res.status(404).json({ message: "Employé introuvable." });
+    }
+
+    // 🔹 Champs autorisés
+    const allowedFields = ["nom", "prenom", "email", "telephone_portable", "statut"];
+    const updates = {};
+
+    for (const field of allowedFields) {
+      if (req.body[field] !== undefined) {
+        updates[field] = req.body[field];
+        console.log(`🔹 Mise à jour du champ ${field} :`, req.body[field]);
+      }
+    }
+
+    // 🔹 Photo de profil : fichier ou URL
+    if (req.file) {
+      updates.photo_profil = `/uploads/${req.file.filename}`; 
+      console.log("📸 Photo envoyée en fichier :", updates.photo_profil);
+    } else if (req.body.photo_profil !== undefined) {
+      updates.photo_profil = req.body.photo_profil; // lien direct
+      console.log("📸 Photo via URL :", updates.photo_profil);
+    }
+
+    // 🔹 Mot de passe (optionnel)
+    if (req.body.mot_de_passe) {
+      employe.mot_de_passe = req.body.mot_de_passe;
+      console.log("🔑 Mot de passe mis à jour");
+    }
+
+    console.log("🛠 Application des mises à jour :", updates);
+    Object.assign(employe, updates);
+    await employe.save();
+    console.log("✅ Employé mis à jour :", employe);
+
+    const result = employe.toObject();
+    delete result.mot_de_passe;
+    delete result.__v;
+
+    res.status(200).json({
+      message: "✅ Informations de l'employé mises à jour avec succès",
+      employe: result
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur lors de la mise à jour des infos employé :", error);
+    res.status(500).json({
+      message: "Erreur serveur lors de la mise à jour des informations.",
+      error: error.message
+    });
+  }
+};
+
+
 
 
 
 // ✅ Récupération de la cagnotte, réduction, email, téléphone et CA estimé
 exports.getCagnotteEtReduction = async (req, res) => {
   try {
-    let agence;
+    let role;
+    let agence = null;
+    let user = null;
 
+    // Identification du rôle
     if (req.admin) {
-      console.log("Admin connecté, récupération globale possible");
-      agence = await Agence.findOne().select("nom_commercial cagnotte reduction telephone_fixe emails_contact ca_estime alerte_secteur");
+      role = "admin";
+      agence = await Agence.findOne().select(
+        "nom_commercial cagnotte cagnotteEnAttente reduction telephone_fixe emails_contact ca_estime alerte_secteur type_cagnotte historiqueCagnotte"
+      );
       if (!agence) return res.status(404).json({ message: "Aucune agence trouvée." });
 
-    } else if (req.agence) {
-      const agenceId = req.agence._id;
-      console.log("Agence connectée, récupération de ses données :", agenceId);
-      agence = await Agence.findById(agenceId).select("nom_commercial cagnotte reduction telephone_fixe emails_contact ca_estime alerte_secteur");
-      if (!agence) return res.status(404).json({ message: "Agence introuvable." });
+    } else if (req.role === "agence") {
+      role = "agence";
+      agence = req.agence;
+
+    } else if (req.role === "employe") {
+      role = "employe";
+      user = req.user;
+      agence = req.agence;
+      if (!agence)
+        return res.status(404).json({ message: "Agence liée à l'employé introuvable." });
 
     } else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
-    const emails = agence.emails_contact?.map(e => ({ type: e.type, email: e.email })) || [];
-    
-    // ✅ Ajouter le secteur
-    const secteur = (agence.alerte_secteur || 'autre').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+    // Emails normalisés
+    const emails = agence?.emails_contact?.map(e => ({
+      type: e.type,
+      email: e.email
+    })) || [];
 
+    // Secteur
+    const secteur = (agence?.alerte_secteur || "autre")
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase();
+
+    // --- 🏦 Cagnotte Entreprise ---
+    const cagnotteEntreprise = agence?.cagnotte || 0;
+    const cagnotteEntrepriseEnAttente = agence?.cagnotteEnAttente || 0;
+
+    // --- 👤 Cagnotte Employé (toujours renvoyée) ---
+    const cagnotteEmploye = user?.cagnotte || 0;
+    const cagnotteEmployeEnAttente = user?.cagnotteEnAttente || 0;
+
+    // --- 📜 Historique unifié selon le rôle ---
+    const historique =
+      role === "employe"
+        ? user?.transactions_cagnotte || []
+        : agence?.historiqueCagnotte || [];
 
     return res.status(200).json({
-      message: "✅ Informations récupérées avec succès",
-      agence: agence.nom_commercial,
-      telephone: agence.telephone_fixe,
-      emails: emails,
-      ca_estime: agence.ca_estime || 0,
-      cagnotte: agence.cagnotte || 0,
-      reduction: agence.reduction || 0,
-      secteur
+      message: "Informations récupérées avec succès",
+      role,
+      agence: agence?.nom_commercial || null,
+      telephone: agence?.telephone_fixe || null,
+      emails,
+      ca_estime: agence?.ca_estime || 0,
+      secteur,
+      reduction: agence?.reduction || 0,
+      type_cagnotte: agence?.type_cagnotte || null,
+
+      // 🏦 Cagnotte entreprise
+      cagnotteEntreprise,
+      cagnotteEntrepriseEnAttente,
+
+      // 👤 Cagnotte employé
+      cagnotteEmploye,
+      cagnotteEmployeEnAttente,
+
+      // 📜 Historique unifié
+      historique
     });
 
   } catch (error) {
@@ -376,6 +694,10 @@ exports.getCagnotteEtReduction = async (req, res) => {
     });
   }
 };
+
+
+
+
 
 
 
@@ -674,42 +996,62 @@ exports.forgotPassword = async (req, res) => {
   try {
     const { email } = req.body;
 
-    // Recherche de l'agence par email (admin ou contact)
-    const agence = await Agence.findOne({
-      $or: [
-        { 'admin.email': email },
-        { 'emails_contact.email': email }
-      ]
-    });
+    let user = null;
+    let type = null;
 
-    if (!agence) {
+    // 🔹 Cherche dans Agence
+    const agence = await Agence.findOne({
+      $or: [{ 'admin.email': email }, { 'emails_contact.email': email }]
+    });
+    if (agence) {
+      user = agence;
+      type = 'agence';
+    }
+
+    // 🔹 Cherche dans Employe si non trouvé
+    if (!user) {
+      const employe = await Employe.findOne({ email });
+      if (employe) {
+        user = employe;
+        type = 'employe';
+      }
+    }
+
+    if (!user) {
       return res.status(404).json({ message: "Aucun compte trouvé avec cet email." });
     }
 
-    // Génération d’un token aléatoire
+    // 🔹 Génération du token
     const resetToken = crypto.randomBytes(32).toString('hex');
     const resetTokenHash = crypto.createHash('sha256').update(resetToken).digest('hex');
+    const expires = Date.now() + 60 * 60 * 1000; // 1h
 
-    // Stockage temporaire du token dans la BDD (valide 1h)
-    agence.admin.resetPasswordToken = resetTokenHash;
-    agence.admin.resetPasswordExpires = Date.now() + 60 * 60 * 1000; // 1h
-    await agence.save();
+    // 🔹 Stockage temporaire selon type
+    if (type === 'agence') {
+      user.admin.resetPasswordToken = resetTokenHash;
+      user.admin.resetPasswordExpires = expires;
+    } else {
+      user.resetPasswordToken = resetTokenHash;
+      user.resetPasswordExpires = expires;
+    }
 
-    // Lien de réinitialisation (frontend)
+    await user.save();
+
+    // 🔹 Lien de réinitialisation
     const resetUrl = `https://client-dimotec.datafuse.fr/reset-password/${resetToken}`;
 
-    // Envoi de l’e-mail
+    // 🔹 Envoi de l'email
     await sendEmail({
-      to: agence.admin.email,
-      subject: "Réinitialisation de votre mot de passe - Dimotec Diagnostics",
-      template: "ResetPassword.html", // ton template HTML dans /templates/ResetPassword.html
+      to: email,
+      subject: "Réinitialisation de votre mot de passe",
+      template: "ResetPassword.html",
       variables: {
-        nomClient: agence.admin.nom || agence.nom_responsable,
+        nomClient: type === 'agence' ? user.admin.nom : user.nom,
         lienReinitialisation: resetUrl
       }
     });
 
-    res.json({ message: "Un e-mail de réinitialisation a été envoyé à votre adresse." });
+    res.json({ message: "Un e-mail de réinitialisation a été envoyé." });
   } catch (error) {
     console.error("❌ Erreur forgotPassword :", error);
     res.status(500).json({ message: "Erreur serveur lors de la demande de réinitialisation." });
@@ -722,32 +1064,36 @@ exports.forgotPassword = async (req, res) => {
 exports.verifyResetToken = async (req, res) => {
   try {
     const { token } = req.params;
-    console.log("🔹 Token reçu du frontend :", token);
-
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    console.log("🔹 Token hashé :", tokenHash);
 
-    const agence = await Agence.findOne({
+    // 🔹 Cherche dans Agence
+    let user = await Agence.findOne({
       'admin.resetPasswordToken': tokenHash,
       'admin.resetPasswordExpires': { $gt: Date.now() }
     });
 
-    console.log("🔹 Agence trouvée :", agence ? agence._id : "Aucune agence trouvée");
-    console.log("🔹 Date actuelle :", new Date());
-    if (agence) {
-      console.log("🔹 Date d'expiration du token :", new Date(agence.admin.resetPasswordExpires));
+    let type = 'agence';
+
+    // 🔹 Sinon cherche dans Employe
+    if (!user) {
+      user = await Employe.findOne({
+        resetPasswordToken: tokenHash,
+        resetPasswordExpires: { $gt: Date.now() }
+      });
+      type = 'employe';
     }
 
-    if (!agence) {
+    if (!user) {
       return res.status(400).json({ message: "Token invalide ou expiré." });
     }
 
-    res.json({ message: "Token valide.", email: agence.admin.email });
+    res.json({ message: "Token valide.", email: type === 'agence' ? user.admin.email : user.email });
   } catch (error) {
     console.error("❌ Erreur verifyResetToken :", error);
     res.status(500).json({ message: "Erreur serveur lors de la vérification du token." });
   }
 };
+
 
 
 /**
@@ -757,44 +1103,48 @@ exports.resetPassword = async (req, res) => {
   try {
     const { token } = req.params;
     const { mot_de_passe } = req.body;
-
-    console.log("🔹 Token reçu pour reset :", token);
-    console.log("🔹 Mot de passe reçu :", mot_de_passe);
-
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    console.log("🔹 Token hashé :", tokenHash);
 
-    const agence = await Agence.findOne({
+    // 🔹 Cherche dans Agence
+    let user = await Agence.findOne({
       'admin.resetPasswordToken': tokenHash,
       'admin.resetPasswordExpires': { $gt: Date.now() }
     });
+    let type = 'agence';
 
-    console.log("🔹 Agence trouvée :", agence ? agence._id : "Aucune agence trouvée");
-    if (agence) {
-      console.log("🔹 Date actuelle :", new Date());
-      console.log("🔹 Date d'expiration du token :", new Date(agence.admin.resetPasswordExpires));
+    // 🔹 Sinon cherche dans Employe
+    if (!user) {
+      user = await Employe.findOne({
+        resetPasswordToken: tokenHash,
+        resetPasswordExpires: { $gt: Date.now() }
+      });
+      type = 'employe';
     }
 
-    if (!agence) {
+    if (!user) {
       return res.status(400).json({ message: "Token invalide ou expiré." });
     }
 
-    // ✅ Mise à jour du mot de passe directement
-    // Le pre('save') dans AdminSchema va hash automatiquement
-    agence.admin.mot_de_passe = mot_de_passe;
-    agence.admin.resetPasswordToken = undefined;
-    agence.admin.resetPasswordExpires = undefined;
-    await agence.save();
+    // 🔹 Mise à jour du mot de passe
+    if (type === 'agence') {
+      user.admin.mot_de_passe = mot_de_passe;
+      user.admin.resetPasswordToken = undefined;
+      user.admin.resetPasswordExpires = undefined;
+    } else {
+      user.mot_de_passe = mot_de_passe;
+      user.resetPasswordToken = undefined;
+      user.resetPasswordExpires = undefined;
+    }
 
-    console.log("✅ Mot de passe réinitialisé pour l'agence :", agence._id);
+    await user.save();
 
-    // Envoi d’un email de confirmation
+    // Envoi email de confirmation
     await sendEmail({
-      to: agence.admin.email,
-      subject: "Votre mot de passe a été modifié - Dimotec Diagnostics",
+      to: type === 'agence' ? user.admin.email : user.email,
+      subject: "Votre mot de passe a été modifié",
       template: "PasswordChanged.html",
       variables: {
-        nomClient: agence.admin.nom || agence.nom_responsable
+        nomClient: type === 'agence' ? user.admin.nom : user.nom
       }
     });
 
@@ -807,3 +1157,129 @@ exports.resetPassword = async (req, res) => {
 
 
 
+
+// ------------------------ EMPLOYE ------------------------------- //
+
+exports.addEmploye = async (req, res) => {
+  try {
+    const agenceId = req.agence._id; // agence connectée
+    const { nom, prenom, email, mot_de_passe, telephone_portable } = req.body;
+
+    if (!nom || !prenom || !email) {
+      return res.status(400).json({ message: "Nom, prénom et email sont obligatoires." });
+    }
+
+    // Vérifie si email déjà utilisé
+    const existing = await Employe.findOne({ email });
+    if (existing) return res.status(400).json({ message: "Un employé avec cet email existe déjà." });
+
+    // Génération automatique du mot de passe si non fourni
+    const password = mot_de_passe || Math.random().toString(36).slice(-8); // ex: '4f7a9c2b'
+
+    const employe = new Employe({
+      agence: agenceId,
+      nom,
+      prenom,
+      email,
+      mot_de_passe: password,
+      telephone_portable
+    });
+
+    await employe.save();
+
+    // ✅ Envoi de l'e-mail avec les identifiants
+    const loginUrl = `https://client-dimotec.datafuse.fr/login`; // lien vers la page de connexion
+
+    await sendEmail({
+      to: email,
+      subject: "Bienvenue dans votre espace Dimotec 👋",
+      template: "WelcomeEmploye.html", // ton template HTML pour l'employé
+      variables: {
+        nom,
+        prenom,
+        email,
+        motDePasse: password,
+        loginUrl
+      }
+    });
+
+    res.status(201).json({
+      message: "✅ Employé ajouté avec succès et e-mail envoyé",
+      employe
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur addEmploye :", error);
+    res.status(500).json({ message: "Erreur serveur lors de l'ajout de l'employé." });
+  }
+};
+
+
+
+
+exports.updateEmploye = async (req, res) => {
+  try {
+    const agenceId = req.agence._id;
+    const { employeId } = req.params;
+
+    const fieldsAllowed = ["nom", "prenom", "email", "telephone_portable", "statut", "photo_profil"];
+    const updates = {};
+
+    fieldsAllowed.forEach(field => {
+      if (req.body[field] !== undefined) updates[field] = req.body[field];
+    });
+
+    const employe = await Employe.findOneAndUpdate(
+      { _id: employeId, agence: agenceId },
+      { $set: updates },
+      { new: true }
+    ).select("-mot_de_passe");
+
+    if (!employe) return res.status(404).json({ message: "Employé introuvable." });
+
+    res.json({
+      message: "✅ Employé modifié avec succès",
+      employe
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur updateEmploye :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la modification de l'employé." });
+  }
+};
+
+
+exports.deleteEmploye = async (req, res) => {
+  try {
+    const agenceId = req.agence._id;
+    const { employeId } = req.params;
+
+    const employe = await Employe.findOneAndDelete({ _id: employeId, agence: agenceId });
+
+    if (!employe) return res.status(404).json({ message: "Employé introuvable ou ne vous appartient pas." });
+
+    res.json({ message: "🗑 Employé supprimé avec succès" });
+
+  } catch (error) {
+    console.error("❌ Erreur deleteEmploye :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la suppression de l'employé." });
+  }
+};
+
+
+// Récupérer tous les employés d'une agence
+exports.getEmployes = async (req, res) => {
+  try {
+    const agenceId = req.agence._id;
+
+    const employes = await Employe.find({ agence: agenceId }).select('-mot_de_passe');
+
+    res.status(200).json({
+      message: "✅ Employés récupérés avec succès",
+      employes
+    });
+  } catch (error) {
+    console.error("❌ Erreur getEmployes :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la récupération des employés." });
+  }
+};

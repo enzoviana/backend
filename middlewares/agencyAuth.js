@@ -1,9 +1,10 @@
 const jwt = require('jsonwebtoken');
 const Agence = require('../models/Agency');
+const Employe = require('../models/Employe');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tonSecretIci';
 
-const agencyAuth = async (req, res, next) => {
+const auth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer '))
@@ -12,17 +13,49 @@ const agencyAuth = async (req, res, next) => {
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
 
-    // Vérifier que l'agence existe
-    const agence = await Agence.findById(decoded.agenceId);
-    if (!agence) return res.status(401).json({ message: 'Token invalide' });
+    /**
+     * decoded = {
+     *   id: xx,
+     *   type: 'agence' | 'employe',
+     *   role: ...
+     *   agenceId: ...
+     *   email: ...
+     * }
+     */
 
-    // Ajouter l'agence à la requête pour y accéder facilement dans les routes
-    req.agence = agence;
+    let user = null;
+
+    // ⬅️ 1️⃣ Si c’est une agence
+    if (decoded.type === "agence") {
+      user = await Agence.findById(decoded.id);
+      if (!user) return res.status(401).json({ message: "Agence introuvable" });
+
+      req.role = "agence";
+      req.user = user;
+      req.agence = user; // cohérence
+    }
+
+    // ⬅️ 2️⃣ Si c’est un employé
+    else if (decoded.type === "employe") {
+      user = await Employe.findById(decoded.id);
+      if (!user) return res.status(401).json({ message: "Employé introuvable" });
+
+      const agence = await Agence.findById(user.agence);
+
+      req.role = "employe";
+      req.user = user;
+      req.agence = agence; // pratique pour tout le reste
+    }
+
+    else {
+      return res.status(401).json({ message: "Type de compte invalide" });
+    }
+
     next();
   } catch (err) {
-    console.error(err);
-    res.status(401).json({ message: 'Authentification échouée' });
+    console.error("Erreur auth :", err);
+    return res.status(401).json({ message: "Authentification échouée" });
   }
 };
 
-module.exports = agencyAuth;
+module.exports = auth;

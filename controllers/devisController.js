@@ -10,7 +10,7 @@ const sendEmail = require("../utils/sendEmails"); // <-- Vérifie le bon chemin 
 const path = require("path");
 const Supplement = require("../models/Supplement")
 const Admin = require("../models/Admin");
-
+const Employe = require("../models/Employe")
 /**
  * Récupérer tous les devis de l'utilisateur connecté
  * req.admin ou req.agence doit être défini par le middleware
@@ -22,10 +22,19 @@ exports.getDevis = async (req, res) => {
     if (req.admin) {
       // 🧑‍💼 Admin → tous les devis
       query = {};
-    } else if (req.agence) {
-      // 🏢 Agence → uniquement ses devis
+    }  else if (req.role === "agence") {
+      // 🏢 Agence → uniquement ses ordres de mission
       query = { agenceId: req.agence._id };
-    } else {
+    } else if (req.role === "employe") {
+      // 👨‍💻 Employé → uniquement les OM où il est creePar ou dans partageAvec
+      const empId = req.user._id.toString();
+
+      query = {
+        $or: [
+          { "creePar.type": "Employe", "creePar.id": empId },
+        ]
+      };
+    }  else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
@@ -162,8 +171,19 @@ exports.createDevis = async (req, res) => {
       return res.status(400).json({ message: "Client, type de devis et type de bien requis." });
     }
 
+
     const agenceId = req.agence?._id;
     if (!agenceId) return res.status(401).json({ message: "Agence non authentifiée." });
+
+
+                // 🔐 Déterminer qui crée le devis
+    let creePar;
+    if (req.user && req.user.role === "employe") {
+      creePar = { id: req.user._id, type: "Employe" };
+    } else {
+      creePar = { id: agenceId, type: "Agence" };
+    }
+
 
     // 🔎 Préparer les données client
     const clientPayload = {
@@ -171,7 +191,19 @@ exports.createDevis = async (req, res) => {
       telephone: data.client.tel || data.client.telephone || "",
       agences: [agenceId],
     };
+
     delete clientPayload.tel;
+
+    // 🏠 Si aucune adresse client fournie → utiliser l'adresse du bien
+if (!clientPayload.adresse && data.adresseBien?.adresse) {
+  clientPayload.adresse = data.adresseBien.adresse;
+}
+if (!clientPayload.ville && data.adresseBien?.ville) {
+  clientPayload.ville = data.adresseBien.ville;
+}
+if (!clientPayload.codePostal && data.adresseBien?.codePostal) {
+  clientPayload.codePostal = data.adresseBien.codePostal;
+}
 
     // 🔎 Recherche ou création du client
     let client = await Client.findOne({ email: data.client.email });
@@ -226,38 +258,42 @@ if (data.type === "pack_complet" && data.pack) {
   totalAvantRemise = Number(tarifTrouve) || 0;
 }
 
-    // --- Diagnostics ---
-    else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
-      const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
-      totalAvantRemise = diagnostics.reduce((sum, d) => {
-        let tarifTrouve = 0;
+// --- Diagnostics ---
+else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
+  const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
+  totalAvantRemise = diagnostics.reduce((sum, d) => {
+    let tarifTrouve = 0;
 
-        if (data.bien === "maison" && d.tarifsParSurface?.length) {
-          let surfaceMin = 0, surfaceMax = 0;
-          if (data.surfaceMaison) {
-            const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-            surfaceMin = match ? parseInt(match[1], 10) : 0;
-            surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-          }
+    if (data.bien === "maison" && d.tarifsParSurface?.length) {
+      let surfaceMin = 0, surfaceMax = 0;
+      if (data.surfaceMaison) {
+        const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+        surfaceMin = match ? parseInt(match[1], 10) : 0;
+        surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+      }
 
-          for (let tps of d.tarifsParSurface) {
-            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-              tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
-              break;
-            }
-          }
-        } else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
-          const typeAppart = data.surfaceAppartement;
-          const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
-          if (tarifAppart) tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
+      for (let tps of d.tarifsParSurface) {
+        if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+          tarifTrouve = tps.tarifs[secteur] ?? tps.tarifs.autre ?? 0;
+          break;
         }
+      }
+    } else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
+      const typeAppart = data.surfaceAppartement;
+      const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+      if (tarifAppart) tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
+    }
 
-        return sum + (Number(tarifTrouve) || 0);
-      }, 0);
+    return sum + (Number(tarifTrouve) || 0);
+  }, 0);
 
-      // 🔹 Ajouter les frais de déplacement
-      totalAvantRemise += 55;
-    } 
+  // 🔹 Ajouter les frais de déplacement sauf si ERP seul
+  const isERPSeul = diagnostics.length === 1 && diagnostics[0].nom.toLowerCase().includes("erp");
+  if (!isERPSeul) {
+    totalAvantRemise += 55;
+  }
+}
+
     // --- Audit ---
     else if (data.type === "audit") {
       const tarifsAudit = {
@@ -286,29 +322,38 @@ if (data.type === "pack_complet" && data.pack) {
       totalAvantRemise += totalSupplements;
     }
 
-    // --- Diagnostic Gaz si applicable ---
-    let tarifGaz = 0;
-    if (data.installationGaz === true) {
-      const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
-      if (diagGaz) {
-        if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-          const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-          const surfaceMin = match ? parseInt(match[1], 10) : 0;
-          const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-          for (let tps of diagGaz.tarifsParSurface) {
-            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-              tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-              break;
-            }
+// --- Diagnostic Gaz si applicable ---
+let tarifGaz = 0;
+if (data.installationGaz === true) {
+  const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
+  if (diagGaz) {
+    // ✅ Vérifier qu'il n'est pas déjà sélectionné
+    const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
+    if (!dejaSelectionne) {
+      if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
+        const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+        const surfaceMin = match ? parseInt(match[1], 10) : 0;
+        const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+        for (let tps of diagGaz.tarifsParSurface) {
+          if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+            tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+            break;
           }
-        } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
-          const typeAppart = data.surfaceAppartement;
-          const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
-          if (tps) tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
         }
+      } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
+        const typeAppart = data.surfaceAppartement;
+        const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+        if (tps) tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
       }
+
+      // Ajouter au total
       totalAvantRemise += tarifGaz;
+
+      // Ajouter au tableau diagnosticsSelectionnes si nécessaire
+      data.diagnosticsSelectionnes.push(diagGaz._id.toString());
     }
+  }
+}
 
     // --- Diagnostic Copropriété si applicable ---
 let tarifCopro = 0;
@@ -335,18 +380,110 @@ if (data.copropriete === true) {
 }
 
 
-    // 💸 Calculs financiers
-    const reductionPourcent = Number(data.reductionPourcent) || 0;
-    const montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
+// 💸 Calculs financiers
+const reductionPourcent = Number(data.reductionPourcent) || 0;
+const montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
+
+if (montantCagnotteUtilisee > 0) {
+  let cibleCagnotte = null; // peut être agence ou employé
+  let auteur = 'Système';
+
+  console.log('🔹 Début traitement cagnotte', { creePar, agenceId });
+
+  if (creePar.type === "Agence") {
+    cibleCagnotte = await Agence.findById(creePar.id);
+    auteur = cibleCagnotte?.nom_commercial || 'Agence';
+    console.log('🟢 Manipulation par l’Agence');
+  } else if (creePar.type === "Employe") {
+    const employe = await Employe.findById(creePar.id);
+    auteur = req.user?.email || 'Employé';
+    console.log('🟢 Manipulation par l’Employé', { employe });
+
+    if (employe.cagnotte !== undefined) {
+      cibleCagnotte = employe; // on manipule la cagnotte de l'employé
+    } else {
+      // fallback si pas de cagnotte individuelle
+      cibleCagnotte = await Agence.findById(agenceId);
+      console.log('⚠️ Pas de cagnotte individuelle, fallback sur l’agence');
+    }
+  }
+
+  if (!cibleCagnotte) {
+    return res.status(404).json({ message: "Cagnotte introuvable." });
+  }
+
+  console.log('🔹 Avant utilisation de la cagnotte :', {
+    cagnotte: cibleCagnotte.cagnotte,
+    cagnotteEnAttente: cibleCagnotte.cagnotteEnAttente,
+    historique: cibleCagnotte.historiqueCagnotte || cibleCagnotte.transactions_cagnotte
+  });
+
+  const dejaEnAttente = (cibleCagnotte.historiqueCagnotte || cibleCagnotte.transactions_cagnotte)
+    .filter(m => m.type === 'en_attente' && m.description.includes(`devis (${data.type || 'non spécifié'})`))
+    .reduce((sum, m) => sum + m.montant, 0);
+
+  const montantRestant = montantCagnotteUtilisee - dejaEnAttente;
+  console.log('💰 Montant restant à déplacer vers en_attente:', montantRestant);
+
+  if (montantRestant <= 0) {
+    console.log('⚠️ Montant déjà en attente pour ce devis, pas de duplication');
+  } else {
+    if ((cibleCagnotte.cagnotte || 0) < montantRestant) {
+      return res.status(400).json({ message: "Cagnotte insuffisante." });
+    }
+
+    cibleCagnotte.cagnotte -= montantRestant;
+    cibleCagnotte.cagnotteEnAttente = (cibleCagnotte.cagnotteEnAttente || 0) + montantRestant;
+
+    console.log('💸 Montant déplacé vers cagnotte en attente', {
+      montantRestant,
+      cagnotte: cibleCagnotte.cagnotte,
+      cagnotteEnAttente: cibleCagnotte.cagnotteEnAttente
+    });
+
+    // Ajouter dans l'historique
+    const mouvement = {
+      type: 'en_attente',
+      montant: montantRestant,
+      description: `Montant mis en attente pour le devis (${data.type || 'non spécifié'})`,
+      par: auteur,
+      date: new Date()
+    };
+
+    if (creePar.type === "Agence") {
+      cibleCagnotte.historiqueCagnotte.push(mouvement);
+    } else {
+      cibleCagnotte.transactions_cagnotte.push(mouvement);
+    }
+
+    console.log('📝 Historique mis à jour', mouvement);
+
+    await cibleCagnotte.save();
+    console.log('✅ Sauvegarde terminée');
+  }
+
+  console.log('🔹 Fin traitement cagnotte');
+}
+
+
+
+
+
+
+
+
     const totalApresReduction = totalAvantRemise * (1 - reductionPourcent / 100);
     const totalFinal = Math.max(totalApresReduction - montantCagnotteUtilisee, 0);
     const montantTTC = totalFinal;
 
     console.log("===== Totaux calculés =====", { totalAvantRemise, totalApresReduction, totalFinal, montantTTC });
 
+
+
     // 🧾 Création du devis
     const devis = new Devis({
       agenceId,
+      creePar,
       client: {
         nom: client.nom,
         prenom: client.prenom,
@@ -463,12 +600,7 @@ if (data.payer === "agence") {
     variables
   });
 
-  // ✅ Ajouter cagnotte
-  if (agence) {
-    const montantCagnotte = devis.totalFinal * 0.03;
-    agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
-    await agence.save();
-  }
+
 
   return res.status(201).json({
     message: "✅ Devis créé, accepté automatiquement et ordre envoyé (payeur agence).",
@@ -533,17 +665,6 @@ exports.accepterDevisViaLien = async (req, res) => {
       clientId = client._id;
     }
 
-    // ✅ Création Facture
-    const facture = new Facture({
-      devisId: devis._id,
-      agenceId: devis.agenceId,
-      numero: `F-${Date.now()}`,
-      clientId,
-      montantHT: devis.montantTTC / 1.2,
-      montantTTC: devis.montantTTC,
-      statut: "Envoyée"
-    });
-    await facture.save();
 
     // ✅ Création Ordre de Mission
     const ordre = new OrdreMission({
@@ -552,61 +673,117 @@ exports.accepterDevisViaLien = async (req, res) => {
       numero: `OM-${Date.now()}`,
       clientId,
       description: `Ordre de mission pour le devis ${devis.numero}`,
-      statut: "Commande"
+      statut: "Commande",
+      creePar: devis.creePar,
     });
     await ordre.save();
 
-    // ✅ Mise à jour cagnotte agence
     const agence = await Agence.findById(devis.agenceId);
-    if (agence) {
-      const montantCagnotte = devis.montantTTC * 0.03;
-      agence.cagnotte = (agence.cagnotte || 0) + montantCagnotte;
-      await agence.save();
+
+    // 🔹 Gestion de la cagnotte après acceptation
+    if (devis.montantCagnotteUtilisee > 0) {
+      console.log('💰 Début traitement retrait cagnotte pour devis accepté');
+
+      let cible = null;
+      let auteur = 'Système';
+
+      if (agence.type_cagnotte === 'individuelle' && devis.creePar.type === 'Employe') {
+        // 🔹 Cagnotte individuelle : retirer à l'employé
+        cible = await Employe.findById(devis.creePar.id);
+        auteur = cible?.email || 'Employé';
+        if (!cible) return res.status(404).json({ message: "Employé introuvable pour retrait cagnotte." });
+
+        console.log('🟢 Retrait cagnotte individuelle de l’employé :', auteur);
+
+        const montantEnAttente = cible.cagnotteEnAttente || 0;
+        const montantARetirer = Math.min(montantEnAttente, devis.montantCagnotteUtilisee);
+
+        if (montantARetirer > 0) {
+          cible.cagnotteEnAttente -= montantARetirer;
+
+
+          cible.transactions_cagnotte.push({
+            montant: montantARetirer,
+            type: 'retrait',
+            description: `Montant utilisé pour le devis accepté (${devis.type})`,
+            reference: devis._id,
+            date: new Date()
+          });
+
+          await cible.save();
+          console.log('✅ Cagnotte employé mise à jour', {
+            cagnotte: cible.cagnotte,
+            cagnotteEnAttente: cible.cagnotteEnAttente
+          });
+        }
+
+      } else {
+        // 🔹 Cagnotte partagée ou agence créatrice
+        cible = agence;
+        auteur = agence.nom_commercial;
+
+        console.log('🟢 Retrait cagnotte partagée de l’agence');
+
+        const montantEnAttente = agence.cagnotteEnAttente || 0;
+        const montantARetirer = Math.min(montantEnAttente, devis.montantCagnotteUtilisee);
+
+        if (montantARetirer > 0) {
+          agence.cagnotteEnAttente -= montantARetirer;
+
+
+          agence.historiqueCagnotte.push({
+            montant: montantARetirer,
+            type: 'retrait',
+            description: `Montant utilisé pour le devis accepté (${devis.type})`,
+            par: auteur,
+            date: new Date()
+          });
+
+          await agence.save();
+          console.log('✅ Cagnotte agence mise à jour', {
+            cagnotte: agence.cagnotte,
+            cagnotteEnAttente: agence.cagnotteEnAttente
+          });
+        }
+      }
+      console.log('🔹 Fin traitement cagnotte pour devis accepté');
     }
 
-    /// ✅ Email Agence
-const agenceEmail = agence.emails_contact?.[0]?.email || null;
+    // ✅ Email Agence
+    const agenceEmail = agence.emails_contact?.[0]?.email || null;
+    const variables = {
+      nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+      numero: ordre.numero,
+      devisNumero: devis.numero,
+      nomAgence: agence.nom_commercial,
+      dateCreation: new Date().toLocaleDateString("fr-FR"),
+      description: ordre.description,
+      statut: ordre.statut,
+      lienMission: `https://dimotec.datafuse.fr/ordre-mission`
+    };
 
-// ✅ Email fixe Dimotec
-const dimotecEmail = "dimotec34@gmail.com";
+    if (agenceEmail) {
+      await sendEmail({
+        to: agenceEmail,
+        subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+        template: "OrdreMission.html",
+        variables
+      });
+    }
 
-// ✅ Variables email
-const variables = {
-  nomClient: `${devis.client.prenom} ${devis.client.nom}`,
-  numero: ordre.numero,
-  devisNumero: devis.numero,
-  nomAgence: agence.nom_commercial,
-  dateCreation: new Date().toLocaleDateString("fr-FR"),
-  description: ordre.description,
-  statut: ordre.statut,
-  lienMission: `https://dimotec.datafuse.fr/ordre-mission`
-};
-
-// ✅ Envoi email → Agence
-if (agenceEmail) {
-  await sendEmail({
-    to: agenceEmail,
-    subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
-    template: "OrdreMission.html",
-    variables
-  });
-}
-
-// ✅ Envoi email → Dimotec (toujours)
-await sendEmail({
-  to: dimotecEmail,
-  subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
-  template: "OrdreMission.html",
-  variables
-});
-
+    // ✅ Envoi email → Dimotec
+    const dimotec = "dimotec34@gmail.com"
+    await sendEmail({
+      to: dimotec,
+      subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+      template: "OrdreMission.html",
+      variables
+    });
 
     return res.status(200).json({
       message: "✅ Devis accepté, facture & ordre de mission créés, mails envoyés, cagnotte mise à jour.",
       devis,
-      facture,
       ordre,
-      cagnotteAgence: agence?.cagnotte
     });
 
   } catch (error) {
@@ -614,6 +791,7 @@ await sendEmail({
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 
@@ -853,7 +1031,37 @@ exports.getDevisViaLien = async (req, res) => {
 };
 
 
+/**
+ * Supprimer un devis
+ */
+exports.deleteDevis = async (req, res) => {
+  try {
+    const devisId = req.params.id;
 
+    // Vérifier que le devis existe
+    const devis = await Devis.findById(devisId);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    // Vérifier l'autorisation
+    if (req.admin) {
+      // Admin peut tout supprimer
+    } else if (req.role === "agence" && devis.agenceId.toString() !== req.agence._id.toString()) {
+      return res.status(403).json({ message: "Vous n'avez pas la permission de supprimer ce devis." });
+    } else {
+      return res.status(403).json({ message: "Vous n'avez pas la permission de supprimer ce devis." });
+    }
+
+    // Supprimer le devis
+    await Devis.findByIdAndDelete(devisId);
+
+    res.json({ message: "Devis supprimé avec succès." });
+  } catch (error) {
+    console.error("Erreur suppression devis :", error);
+    res.status(500).json({ message: "Erreur serveur." });
+  }
+};
 
 
 

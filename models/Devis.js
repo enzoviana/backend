@@ -40,6 +40,8 @@ const devisSchema = new mongoose.Schema({
     ville: { type: String },
     etage: { type: String },
     complement: { type: String },
+    parcelle: { type: String, default: null } // <-- Nouveau champ pour maisons
+
   },
 
   /* 🏘️ Surface selon le type de bien */
@@ -133,6 +135,13 @@ surfaceMaison: {
     type: Number,
     default: 0,
   },
+
+    // ✅ Créateur du devis : soit employé, soit agence
+  creePar: {
+    id: { type: mongoose.Schema.Types.ObjectId, required: true },
+    type: { type: String, enum: ["Employe", "Agence"], required: true }
+  },
+
 
 
   /* 🔐 Consentements */

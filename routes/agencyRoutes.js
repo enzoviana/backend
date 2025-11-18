@@ -62,6 +62,13 @@ router.get("/clients", agencyAuth, clientController.getClients);
 
 // ---------------------- Mission ----------------------
 router.get("/mission", agencyAuth, missionController.getOrdresMission);
+// ---------------------- Mission ----------------------
+// Partager un ordre de mission avec un employé ou client
+router.post(
+  '/mission/:missionId/assign-employee',
+  agencyAuth,
+  missionController.partagerOrdreMission
+);
 router.get("/facture", agencyAuth, missionController.getFactures);
 
 
@@ -78,5 +85,20 @@ router.put('/me', agencyAuth, agencyController.updateInfosAgence);
 
 // ---------------------- Dashboard ----------------------
 router.get("/dashboard", agencyAuth, dashboardController.getDashboardAgence);
+
+
+// ---------------------- Employés ----------------------
+router.post('/employes', agencyAuth, agencyController.addEmploye);              // Ajouter un employé
+router.put('/employes/:employeId', agencyAuth, agencyController.updateEmploye); // Modifier un employé
+router.delete('/employes/:employeId', agencyAuth, agencyController.deleteEmploye); // Supprimer un employé
+router.get('/employes', agencyAuth, agencyController.getEmployes);           // Récupérer tous les employés
+
+// Mettre à jour ses infos (photo URL ou fichier)
+router.put(
+  '/employe/me',
+  agencyAuth,
+  upload.single('photo_profil'), // Multer gère le fichier optionnel
+  agencyController.updateInfosEmploye
+);
 
 module.exports = router;
