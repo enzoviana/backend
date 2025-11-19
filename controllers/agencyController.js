@@ -941,28 +941,40 @@ exports.filterSupplementsByTypeBien = async (req, res) => {
       return res.status(400).json({ message: "Le type de bien est requis." });
     }
 
-    // Récupération de l'agence depuis le middleware
     const agence = req.agence;
-   const secteur = (agence?.alerte_secteur || 'autre')
-  .toLowerCase()
-  .normalize('NFD')           // Décompose les caractères accentués
-  .replace(/[\u0300-\u036f]/g, ''); // Supprime les accents
-
+    const secteur = (agence?.alerte_secteur || 'autre')
+      .toLowerCase()
+      .normalize('NFD')           
+      .replace(/[\u0300-\u036f]/g, '');
 
     console.log("🔹 Type de bien demandé :", typeBien);
     console.log("🔹 Secteur de l'agence :", secteur);
 
-    // Recherche des suppléments qui incluent ce type de bien
+    // Recherche : typeBienApplicable ou typeBien
     const supplements = await Supplement.find({
-  typeBienApplicable: { $in: [typeBien?.toLowerCase()] } // sécurité si typeBien undefined
-});
+      $or: [
+        { typeBienApplicable: { $in: [typeBien.toLowerCase()] } },
+        { typeBien: typeBien.toLowerCase() }
+      ]
+    });
+
     if (!supplements.length) {
       return res.status(404).json({ message: "Aucun supplément trouvé pour ce type de bien." });
     }
 
+    // Supprimer les doublons si un même supplément est trouvé deux fois
+    const supplementsUnik = [];
+    const idsVus = new Set();
+
+    supplements.forEach(s => {
+      if (!idsVus.has(s._id.toString())) {
+        idsVus.add(s._id.toString());
+        supplementsUnik.push(s);
+      }
+    });
+
     // Ajout du tarif selon le secteur de l'agence
-    const supplementsAvecTarif = supplements.map(s => {
-      // Prendre le tarif correspondant au secteur ou fallback sur "autre"
+    const supplementsAvecTarif = supplementsUnik.map(s => {
       const tarifTrouve = s.tarifs?.[secteur] ?? s.tarifs?.autre ?? 0;
       return {
         ...s.toObject(),
@@ -971,16 +983,14 @@ exports.filterSupplementsByTypeBien = async (req, res) => {
     });
 
     console.log(`✅ ${supplementsAvecTarif.length} supplément(s) trouvé(s) pour ${typeBien}`);
-
-    res.json({
-      supplements: supplementsAvecTarif
-    });
+    res.json({ supplements: supplementsAvecTarif });
 
   } catch (error) {
     console.error("❌ Erreur filterSupplementsByTypeBien :", error);
     res.status(500).json({ message: "Erreur serveur lors du filtrage des suppléments." });
   }
 };
+
 
 
 // ------------------------ MDP REINITAILISATION ------------------------------- //

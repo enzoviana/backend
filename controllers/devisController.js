@@ -553,6 +553,7 @@ if (data.payer === "agence") {
     clientId: client._id,
     description: `Ordre de mission pour le devis ${devis.numero}`,
     statut: "Commande",
+     creePar
   });
 
   if (req.file) {
