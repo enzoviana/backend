@@ -7,11 +7,11 @@ const OrdreMissionSchema = new mongoose.Schema({
   description: { type: String },
   dateCreation: { type: Date, default: Date.now },
 
-  statut: { 
-    type: String, 
-    enum: ['Commande', 'En Cours', 'Traité', 'Payée'], 
-    default: 'Commande' 
-  },
+statut: { 
+  type: String, 
+  enum: ['Commande', 'En Attente', 'En Cours', 'Traité', 'Payée', 'Annulé'], 
+  default: 'Commande' 
+},
 
  // ✅ Créateur : peut être un employé OU l’agence elle-même
   creePar: {

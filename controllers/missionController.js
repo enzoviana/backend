@@ -242,23 +242,32 @@ exports.updateStatutOrdreMission = async (req, res) => {
       return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
     }
 
-    // Mise à jour date RDV
+    // Gestion des RDV
     if (rdvDate) {
       ordre.rdvDate = new Date(rdvDate);
+      // Si statut était "Annulé" mais une nouvelle date est définie → repasser à "En Attente"
+      if (ordre.statut === "Annulé") {
+        ordre.statut = "En Attente";
+      }
+    } else if (statut === "Annulé") {
+      // Pas de nouvelle date → reste "Annulé"
+      ordre.statut = "Annulé";
+    } else {
+      // Pour tous les autres statuts
+      ordre.statut = statut;
     }
 
     // Bloquer "En Cours" si pas de date
-    if (statut === "En Cours" && !ordre.rdvDate) {
+    if (ordre.statut === "En Cours" && !ordre.rdvDate) {
       return res.status(400).json({ 
         message: "Impossible de passer l'ordre en 'En Cours' sans définir une date et heure de rendez-vous." 
       });
     }
 
-    ordre.statut = statut;
     await ordre.save();
 
     // 🔹 Si Payée → crédit 3% du devis dans la cagnotte
-    if (statut === "Payée") {
+    if (ordre.statut === "Payée") {
       const devis = await Devis.findById(ordre.devisId);
       if (!devis) return res.status(404).json({ message: "Devis lié introuvable." });
 
