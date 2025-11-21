@@ -237,7 +237,7 @@ exports.updateStatutOrdreMission = async (req, res) => {
     const ordre = await OrdreMission.findById(ordreId);
     if (!ordre) return res.status(404).json({ message: "Ordre de mission non trouvé." });
 
-    // ⭐ PATCH : auto-correction des anciens OM sans 'creePar'
+    // ⭐ PATCH automatique des anciens OM sans 'creePar'
     if (!ordre.creePar || !ordre.creePar.id || !ordre.creePar.type) {
       const devis = await Devis.findById(ordre.devisId);
 
@@ -254,27 +254,39 @@ exports.updateStatutOrdreMission = async (req, res) => {
       return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
     }
 
-    // Gestion des RDV
+    /*
+    ────────────────────────────────
+       🚀 GESTION STATUT + RDV FIX
+    ────────────────────────────────
+    */
+
+    // Si une date de rendez-vous est envoyée → on la met à jour
     if (rdvDate) {
       ordre.rdvDate = new Date(rdvDate);
-      if (ordre.statut === "Annulé") {
-        ordre.statut = "En Attente";
-      }
-    } else if (statut === "Annulé") {
-      ordre.statut = "Annulé";
-    } else {
-      ordre.statut = statut;
     }
 
-    if (ordre.statut === "En Cours" && !ordre.rdvDate) {
+    // Impossible de passer En Cours sans RDV
+    if (statut === "En Cours" && !ordre.rdvDate) {
       return res.status(400).json({
         message: "Impossible de passer l'ordre en 'En Cours' sans définir une date et heure de rendez-vous."
       });
     }
 
+    // Mise à jour du statut
+    ordre.statut = statut;
+
+    // Si l'OM était annulé et qu'on lui donne une nouvelle date → retour En Attente
+    if (rdvDate && ordre.statut === "Annulé") {
+      ordre.statut = "En Attente";
+    }
+
     await ordre.save();
 
-    // Crédit cagnotte si Payée...
+    /*
+    ────────────────────────────────
+       💰 Crédit cagnotte si Payée
+    ────────────────────────────────
+    */
     if (ordre.statut === "Payée") {
       const devis = await Devis.findById(ordre.devisId);
       if (!devis) return res.status(404).json({ message: "Devis lié introuvable." });
@@ -311,7 +323,10 @@ exports.updateStatutOrdreMission = async (req, res) => {
       }
     }
 
-    res.json({ message: "Statut mis à jour avec succès et champ 'creePar' réparé si nécessaire.", ordre });
+    res.json({
+      message: "Statut mis à jour avec succès.",
+      ordre
+    });
 
   } catch (error) {
     console.error("Erreur mise à jour statut ordre :", error);
