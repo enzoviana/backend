@@ -237,6 +237,18 @@ exports.updateStatutOrdreMission = async (req, res) => {
     const ordre = await OrdreMission.findById(ordreId);
     if (!ordre) return res.status(404).json({ message: "Ordre de mission non trouvé." });
 
+    // ⭐ PATCH : auto-correction des anciens OM sans 'creePar'
+    if (!ordre.creePar || !ordre.creePar.id || !ordre.creePar.type) {
+      const devis = await Devis.findById(ordre.devisId);
+
+      ordre.creePar = {
+        id: devis ? devis.agenceId : ordre.agenceId,
+        type: "Agence"
+      };
+
+      console.log(`🛠️ Champ 'creePar' ajouté automatiquement pour l'ordre ${ordre._id}`);
+    }
+
     // Permissions agence
     if (req.agence && ordre.agenceId.toString() !== req.agence._id.toString()) {
       return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
@@ -245,38 +257,33 @@ exports.updateStatutOrdreMission = async (req, res) => {
     // Gestion des RDV
     if (rdvDate) {
       ordre.rdvDate = new Date(rdvDate);
-      // Si statut était "Annulé" mais une nouvelle date est définie → repasser à "En Attente"
       if (ordre.statut === "Annulé") {
         ordre.statut = "En Attente";
       }
     } else if (statut === "Annulé") {
-      // Pas de nouvelle date → reste "Annulé"
       ordre.statut = "Annulé";
     } else {
-      // Pour tous les autres statuts
       ordre.statut = statut;
     }
 
-    // Bloquer "En Cours" si pas de date
     if (ordre.statut === "En Cours" && !ordre.rdvDate) {
-      return res.status(400).json({ 
-        message: "Impossible de passer l'ordre en 'En Cours' sans définir une date et heure de rendez-vous." 
+      return res.status(400).json({
+        message: "Impossible de passer l'ordre en 'En Cours' sans définir une date et heure de rendez-vous."
       });
     }
 
     await ordre.save();
 
-    // 🔹 Si Payée → crédit 3% du devis dans la cagnotte
+    // Crédit cagnotte si Payée...
     if (ordre.statut === "Payée") {
       const devis = await Devis.findById(ordre.devisId);
       if (!devis) return res.status(404).json({ message: "Devis lié introuvable." });
 
       const agence = await Agence.findById(ordre.agenceId);
-      const montantCredit = +(devis.montantTTC * 0.03).toFixed(2); // 3%
+      const montantCredit = +(devis.montantTTC * 0.03).toFixed(2);
 
       if (!agence) return res.status(404).json({ message: "Agence introuvable." });
 
-      // Cible de la cagnotte selon type
       if (agence.type_cagnotte === "individuelle" && ordre.creePar.type === "Employe") {
         const employe = await Employe.findById(ordre.creePar.id);
         if (employe) {
@@ -289,10 +296,8 @@ exports.updateStatutOrdreMission = async (req, res) => {
             date: new Date()
           });
           await employe.save();
-          console.log(`✅ Cagnotte employé ${employe.email} créditée de ${montantCredit}`);
         }
       } else {
-        // Partagée → crédit à l'agence
         if (!agence.historiqueCagnotte) agence.historiqueCagnotte = [];
         agence.cagnotte = (agence.cagnotte || 0) + montantCredit;
         agence.historiqueCagnotte.push({
@@ -303,17 +308,17 @@ exports.updateStatutOrdreMission = async (req, res) => {
           date: new Date()
         });
         await agence.save();
-        console.log(`✅ Cagnotte agence ${agence.nom_commercial} créditée de ${montantCredit}`);
       }
     }
 
-    res.json({ message: "Statut mis à jour avec succès et cagnotte éventuellement créditée.", ordre });
+    res.json({ message: "Statut mis à jour avec succès et champ 'creePar' réparé si nécessaire.", ordre });
 
   } catch (error) {
     console.error("Erreur mise à jour statut ordre :", error);
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 
