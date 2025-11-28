@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmation de votre rendez-vous</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #ed891a;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .button {
+            display: inline-block;
+            background-color: #ed891a;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+
+<table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+
+    <tr>
+        <td class="header">
+            Confirmation de rendez-vous
+        </td>
+    </tr>
+
+    <tr>
+        <td class="content">
+
+            <p>Bonjour <strong>{{nomClient}}</strong>,</p>
+
+            <p>Votre rendez-vous a bien été enregistré.</p>
+
+            <p>Voici les détails de votre rendez-vous :</p>
+
+            <ul>
+                <li><strong>Date :</strong> {{dateRdv}}</li>
+                <li><strong>Heure :</strong> {{heureRdv}}</li>
+                <li><strong>Adresse de l’intervention :</strong> {{adresseIntervention}}</li>
+            </ul>
+
+            <p>Un rappel vous sera envoyé 24h avant votre rendez-vous.</p>
+
+            <p>
+                Si vous souhaitez modifier ou annuler votre rendez-vous,  
+                veuillez nous contacter par téléphone au <strong>{{telephoneAgence}}</strong>.
+            </p>
+
+            <p>Cordialement,<br>
+                <strong>L’équipe Dimotec Diagnostics</strong>
+            </p>
+
+        </td>
+    </tr>
+
+    <tr>
+        <td class="footer">
+            © 2025 Dimotec Diagnostics. Tous droits réservés.<br>
+            contact@dimotec.fr
+        </td>
+    </tr>
+
+</table>
+
+
+</body>
+</html>

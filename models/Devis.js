@@ -23,6 +23,21 @@ const devisSchema = new mongoose.Schema({
     remarques: { type: String },
   },
 
+  lignes: [
+  {
+    description: { type: String, required: true },
+    quantite: { type: Number, required: true, default: 1 },
+    tarifUnitaire: { type: Number, required: true },
+    totalLigne: {
+      type: Number,
+      default: function () {
+        return this.quantite * this.tarifUnitaire;
+      }
+    }
+  }
+],
+
+
   /* 🏠 Informations sur le bien concerné */
   bien: {
     type: String,
@@ -54,7 +69,7 @@ surfaceMaison: {
 },
   surfaceAppartement: {
     type: String,
-    enum: ["T1", "T2", "T3", "T4", "T5", "T6 et +"],
+    enum: ["T1", "T2", "T3", "T4", "T5", "T6 et +", "moins 20m²", "<20m2"],
   },
 
   anneeConstruction: {
@@ -94,8 +109,9 @@ surfaceMaison: {
   agenceId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Agence",
-    required: true,
+    required: false,
   },
+  secteur: { type: String },
 
   /* 💰 Financier : totaux et réduction */
   totalAvantRemise: { type: Number },
@@ -113,7 +129,7 @@ surfaceMaison: {
   numeroAdeme: { type: String },
   statut: {
     type: String,
-    enum: ["Brouillon", "Envoyé", "Accepté", "Refusé"],
+    enum: ["Brouillon", "Envoyé", "Accepté", "Refusé", "Email_Errone"],
     default: "Envoyé",
   },
   derniereRelance: { type: Date },
@@ -137,10 +153,11 @@ surfaceMaison: {
   },
 
     // ✅ Créateur du devis : soit employé, soit agence
-  creePar: {
+creePar: {
     id: { type: mongoose.Schema.Types.ObjectId, required: true },
-    type: { type: String, enum: ["Employe", "Agence"], required: true }
-  },
+    type: { type: String, enum: ["Employe", "Agence", "Admin"], required: true }
+},
+
 
 
 
@@ -170,10 +187,11 @@ faitA: {
     unique: true,
     default: () => crypto.randomBytes(16).toString("hex"),
   },
-  accesClientExpire: {
-    type: Date,
-    default: () => new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 jours
-  },
+accesClientExpire: {
+  type: Date,
+  default: () => new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 jours
+},
+
 
   /* 📄 PDF généré et stocké sur Cloudinary */
   pdfUrl: {

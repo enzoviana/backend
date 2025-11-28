@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const OrdreMissionSchema = new mongoose.Schema({
   devisId: { type: mongoose.Schema.Types.ObjectId, ref: 'Devis', required: true },
-  agenceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agence', required: true },
+  agenceId: { type: mongoose.Schema.Types.ObjectId, ref: 'Agence', required: false },
   numero: { type: String, required: true, unique: true },
   clientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
   description: { type: String },
@@ -14,10 +14,10 @@ statut: {
 },
 
  // ✅ Créateur : peut être un employé OU l’agence elle-même
-  creePar: {
+creePar: {
     id: { type: mongoose.Schema.Types.ObjectId, required: true },
-    type: { type: String, enum: ['Employe', 'Agence'], required: true } // Discriminateur
-  },
+    type: { type: String, enum: ["Employe", "Agence", "Admin"], required: true }
+},
 
   // ✅ Employés collaborateurs (même agence)
   partageAvec: [

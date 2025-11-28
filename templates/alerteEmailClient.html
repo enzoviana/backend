@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Alerte Email Client</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f9f9f9;
+      color: #333;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 20px auto;
+      background-color: #fff;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 0 10px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #d9534f;
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    p {
+      font-size: 14px;
+      line-height: 1.5;
+    }
+    .info {
+      background-color: #f1f1f1;
+      padding: 10px;
+      border-radius: 4px;
+      margin: 15px 0;
+    }
+    .footer {
+      font-size: 12px;
+      color: #777;
+      margin-top: 20px;
+      text-align: center;
+    }
+    .highlight {
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>⚠️ Problème d'envoi du devis</h1>
+    <p>Bonjour,</p>
+    <p>Le système a rencontré un problème lors de l'envoi du devis <span class="highlight">#{{devisNumero}}</span> au client <span class="highlight">{{clientNom}}</span>.</p>
+
+    <div class="info">
+      <p><strong>Email du client :</strong> {{emailClient}}</p>
+      <p><strong>Agence concernée :</strong> {{agenceNom}}</p>
+      <p>Merci de vérifier l'adresse email du client et de relancer l'envoi si nécessaire.</p>
+    </div>
+
+    <p>Ce message a été généré automatiquement par le système.</p>
+
+    <div class="footer">
+      Dimotec - Gestion des devis
+    </div>
+  </div>
+</body>
+</html>

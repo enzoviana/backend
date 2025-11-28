@@ -10,6 +10,9 @@ const axios = require('axios');
 const path = require('path');
 const Employe = require("../models/Employe");
 const Agence = require("../models/Agency");
+const Client = require('../models/Client');
+const sendEmail = require('../utils/sendEmails');
+
 /**
  * 📋 Récupérer tous les ordres de mission selon l'utilisateur
  */
@@ -17,7 +20,7 @@ exports.getOrdresMission = async (req, res) => {
   try {
     let query = {};
 
-    if (req.admin) {
+    if (req.user.role === "admin" ) {
       // 🧑‍💼 Admin → tous les ordres de mission
       query = {};
     }
@@ -95,7 +98,7 @@ exports.deleteOrdreMission = async (req, res) => {
     }
 
     // Vérifier l'autorisation
-    if (req.admin) {
+    if (req.user.role === "admin") {
       // Admin peut tout supprimer
     } else if (req.role === "agence" && ordre.agenceId.toString() !== req.agence._id.toString()) {
       return res.status(403).json({ message: "Vous n'avez pas la permission de supprimer cet ordre de mission." });
@@ -234,35 +237,31 @@ exports.updateStatutOrdreMission = async (req, res) => {
       return res.status(400).json({ message: "Le statut est requis." });
     }
 
-    const ordre = await OrdreMission.findById(ordreId);
+    const ordre = await OrdreMission.findById(ordreId)
+      .populate('clientId')
+      .populate('agenceId');
+
     if (!ordre) return res.status(404).json({ message: "Ordre de mission non trouvé." });
 
-    // ⭐ PATCH automatique des anciens OM sans 'creePar'
+    // PATCH automatique des anciens OM sans 'creePar'
     if (!ordre.creePar || !ordre.creePar.id || !ordre.creePar.type) {
       const devis = await Devis.findById(ordre.devisId);
-
       ordre.creePar = {
         id: devis ? devis.agenceId : ordre.agenceId,
         type: "Agence"
       };
-
-      console.log(`🛠️ Champ 'creePar' ajouté automatiquement pour l'ordre ${ordre._id}`);
     }
 
     // Permissions agence
-    if (req.agence && ordre.agenceId.toString() !== req.agence._id.toString()) {
+    if (req.agence && ordre.agenceId._id.toString() !== req.agence._id.toString()) {
       return res.status(403).json({ message: "Accès refusé à cet ordre de mission." });
     }
 
-    /*
-    ────────────────────────────────
-       🚀 GESTION STATUT + RDV FIX
-    ────────────────────────────────
-    */
-
-    // Si une date de rendez-vous est envoyée → on la met à jour
+    // Mise à jour de la date de rendez-vous si fournie
+    let envoyerMail = false;
     if (rdvDate) {
       ordre.rdvDate = new Date(rdvDate);
+      envoyerMail = true;
     }
 
     // Impossible de passer En Cours sans RDV
@@ -281,6 +280,22 @@ exports.updateStatutOrdreMission = async (req, res) => {
     }
 
     await ordre.save();
+
+    // ✅ Envoi email au client si rdvDate défini
+    if (envoyerMail && ordre.clientId?.email) {
+      await sendEmail({
+        to: ordre.clientId.email,
+        subject: "Confirmation de votre rendez-vous ✅",
+        template: "ConfirmationRdvClient.html",
+        variables: {
+          nomClient: ordre.clientId.nom,
+          dateRdv: ordre.rdvDate.toLocaleDateString("fr-FR"),
+          heureRdv: ordre.rdvDate.toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit' }),
+          adresseIntervention: ordre.agenceId?.adresse || "Adresse non précisée",
+          telephoneAgence: ordre.agenceId?.telephone_portable || "Non renseigné"
+        }
+      });
+    }
 
     /*
     ────────────────────────────────
@@ -336,7 +351,6 @@ exports.updateStatutOrdreMission = async (req, res) => {
 
 
 
-
 /**
  * Récupérer toutes les factures selon l'utilisateur
  */
@@ -344,7 +358,7 @@ exports.getFactures = async (req, res) => {
   try {
     let query = {};
 
-    if (req.admin) {
+    if (req.user.role === "admin") {
       // 🧑‍💼 Admin → toutes les factures
       query = {};
     } else if (req.agence) {
@@ -397,7 +411,7 @@ exports.partagerOrdreMission = async (req, res) => {
     }
 
     // Vérifier que l'utilisateur peut partager (admin ou agence correspondante)
-    if (req.admin || (req.agence && ordre.agenceId.toString() === req.agence._id.toString())) {
+    if (req.user.role === "admin" || (req.agence && ordre.agenceId.toString() === req.agence._id.toString())) {
       console.log("✅ Permission OK pour partager l'ordre");
 
       // Ajouter uniquement les employés qui ne sont pas déjà dans partageAvec

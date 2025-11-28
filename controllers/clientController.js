@@ -10,7 +10,7 @@ exports.getClients = async (req, res) => {
     let query = {};
 
     // 🔑 Définir la query selon le rôle
-    if (req.admin) {
+    if (req.user.role === "admin") {
       console.log("Rôle: Admin → récupération de tous les clients");
       query = {};
     } else if (req.agence) {

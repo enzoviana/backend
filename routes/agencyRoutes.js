@@ -32,6 +32,8 @@ router.post('/reset-password/:token', agencyController.resetPassword);
 
 
 router.get('/devis', agencyAuth, devisController.getDevis);
+router.post('/devis/corriger-email', agencyAuth, devisController.corrigerEmailDevis);
+
 router.post(
   '/devis',
   agencyAuth,

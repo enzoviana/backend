@@ -6,6 +6,19 @@ const clientController = require("../controllers/clientController");
 const missionController = require("../controllers/missionController");
 const agencyController = require('../controllers/agencyController');
 const devisController = require('../controllers/devisController')
+const upload = require('../middlewares/upload');
+
+// Diagnostics
+router.post('/diagnostic/filter', authMiddleware, agencyController.filterDiagnostics);
+
+
+// Packs
+router.post('/packs/filter', authMiddleware , agencyController.filterPacks);
+
+
+// Supplement 
+router.post('/supplement/filter', authMiddleware , agencyController.filterSupplementsByTypeBien);
+
 
 // ---------------------- ADMIN ----------------------
 // Créer un admin
@@ -58,6 +71,8 @@ router.delete('/supplement/:id', authMiddleware, adminController.deleteSupplemen
 
 
 
+
+
 // ---------------------- Client ----------------------
 
 router.get("/clients", authMiddleware, clientController.getClients);
@@ -74,6 +89,13 @@ router.get('/cagnotte', authMiddleware, agencyController.getCagnotteEtReduction)
 
 
 router.get('/devis', authMiddleware, devisController.getDevis);
+router.post('/devis/corriger-email', authMiddleware, devisController.corrigerEmailDevis);
 router.delete("/devis/:id", authMiddleware, devisController.deleteDevis);
+router.post(
+  '/devis',
+  authMiddleware,
+  upload.single('consentement'), // Multer va parser le fichier
+  devisController.createDevis
+);
 
 module.exports = router;

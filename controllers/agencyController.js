@@ -350,6 +350,22 @@ exports.register = async (req, res) => {
       }
     });
 
+    // ✅ Envoi d'un e-mail interne pour prévenir Dimotec
+await sendEmail({
+  to: "dimotec34@gmail.com",
+  subject: "🆕 Une nouvelle agence souhaite rejoindre le réseau Dimotec",
+  template: "NouvelleAgenceAdmin.html", // à créer (ou remplacer par texte brut si tu veux)
+  variables: {
+    nomResponsable: nom_responsable,
+    nomCommercial: nom_commercial,
+    emailConnexion: email_connexion,
+    telephone: telephone_portable,
+    adresse,
+    siret: siret,
+    caEstime: ca_estime,
+  }
+});
+
     res.status(201).json({
       message: 'Agence créée avec succès ✅',
       token,
@@ -616,7 +632,7 @@ exports.getCagnotteEtReduction = async (req, res) => {
     let user = null;
 
     // Identification du rôle
-    if (req.admin) {
+    if (req.user.role === "admin") {
       role = "admin";
       agence = await Agence.findOne().select(
         "nom_commercial cagnotte cagnotteEnAttente reduction telephone_fixe emails_contact ca_estime alerte_secteur type_cagnotte historiqueCagnotte"
@@ -718,13 +734,14 @@ exports.filterPacks = async (req, res) => {
       return res.status(400).json({ message: "Type de bien, type d'opération, année et surface sont requis." });
     }
 
-    // Agence (secteur prix)
-    const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || "autre")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
-    console.log("🔹 Secteur agence :", secteur);
+    // Secteur
+    let secteur = req.body.secteur;
+    if (!secteur || secteur.trim() === "") {
+      const agence = req.agence;
+      secteur = agence?.alerte_secteur || "autre";
+    }
+    secteur = secteur.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    console.log("🔹 Secteur final utilisé :", secteur);
 
     const tranche = annee;
 
@@ -734,11 +751,29 @@ exports.filterPacks = async (req, res) => {
     let typeAppartement = null;
 
     if (typeBien === "maison") {
-      const match = surface.match(/(\d+)-(\d+)/);
-      surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
-      surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+      if (surface.includes("-")) {
+        const match = surface.match(/(\d+)-(\d+)/);
+        surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
+        surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+      } else {
+        const valeur = parseInt(surface, 10);
+        surfaceMinDemande = valeur;
+        surfaceMaxDemande = valeur;
+      }
+      console.log(`🏠 Maison : surfaceMin=${surfaceMinDemande}, surfaceMax=${surfaceMaxDemande}`);
     } else if (typeBien === "appartement") {
-      typeAppartement = surface;
+      // --- Mapping pour correspondre à la BDD ---
+      const mappingAppartement = {
+        "moins 20m²": "<20m2",
+        "20-40m²": "20-40m2",
+        "T1": "T1",
+        "T2": "T2",
+        "T3": "T3",
+        "T4": "T4",
+        "T5": "T5"
+      };
+      typeAppartement = mappingAppartement[surface] || surface;
+      console.log(`🏢 Appartement : typeAppartement=${typeAppartement}`);
     }
 
     // --- Récupération des packs ---
@@ -747,6 +782,8 @@ exports.filterPacks = async (req, res) => {
       typeOperation: typeOperation.toLowerCase(),
       trancheAnnee: { $in: [tranche, "toutes"] }
     }).populate("diagnostics");
+
+    console.log("📦 Packs trouvés :", packs.length);
 
     if (!packs.length) {
       return res.status(404).json({ message: "Aucun pack trouvé pour ces critères." });
@@ -763,11 +800,13 @@ exports.filterPacks = async (req, res) => {
             break;
           }
         }
+        console.log(`Pack ${pack._id} - tarif maison :`, tarifTrouve);
       } else if (typeBien === "appartement" && pack.tarifsParAppartement?.length) {
         const tarifObj = pack.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
         if (tarifObj) {
           tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? null;
         }
+        console.log(`Pack ${pack._id} - tarif appartement :`, tarifTrouve);
       }
 
       return {
@@ -778,6 +817,7 @@ exports.filterPacks = async (req, res) => {
 
     // --- Diagnostics ---
     const allDiagnostics = await Diagnostic.find({}, { nom: 1 });
+    console.log("🔧 Diagnostics récupérés :", allDiagnostics.length);
 
     // --- Diagnostic Gaz ---
     let diagnosticGazTarif = null;
@@ -796,12 +836,13 @@ exports.filterPacks = async (req, res) => {
           if (tps) diagnosticGazTarif = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
         }
       }
+      console.log("🔥 Tarif diagnostic gaz :", diagnosticGazTarif);
     }
 
     // --- Diagnostic Copropriété ---
     let diagnosticCoproTarif = null;
     if (typeBien === "maison" && copropriete === true) {
-      const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // surface ou surface (copropriété)
+      const diagCopro = await Diagnostic.findOne({ nom: /surface/i });
       if (diagCopro && diagCopro.tarifsParSurface?.length) {
         for (let tps of diagCopro.tarifsParSurface) {
           if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
@@ -810,6 +851,7 @@ exports.filterPacks = async (req, res) => {
           }
         }
       }
+      console.log("🏢 Tarif diagnostic copropriété :", diagnosticCoproTarif);
     }
 
     // --- Réponse ---
@@ -835,6 +877,8 @@ exports.filterPacks = async (req, res) => {
 
 
 
+
+
 /**
  * Récupère les diagnostics à la carte correspondant aux infos envoyées
  * POST /api/agency/diagnostics/filter
@@ -843,7 +887,7 @@ exports.filterPacks = async (req, res) => {
 exports.filterDiagnostics = async (req, res) => {
   try {
     const { typeBien, typeOperation, annee, surface } = req.body;
-    console.log(req.body);
+    console.log("💡 Requête reçue :", req.body);
 
     if (!typeBien || !typeOperation || !annee || !surface) {
       return res.status(400).json({
@@ -851,26 +895,41 @@ exports.filterDiagnostics = async (req, res) => {
       });
     }
 
-    const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || "autre")
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[\u0300-\u036f]/g, "");
+    // --- Secteur ---
+    let secteur = req.body.secteur || req.agence?.alerte_secteur || "autre";
+    secteur = secteur.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
 
-    // Surface
+    // --- Surface ou type appartement ---
     let surfaceMinDemande = 0;
     let surfaceMaxDemande = 0;
     let typeAppartement = null;
 
     if (typeBien === "maison") {
-      const match = surface.match(/(\d+)-(\d+)/);
-      surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
-      surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+      if (surface.includes("-")) {
+        const match = surface.match(/(\d+)-(\d+)/);
+        surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
+        surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+      } else {
+        const valeur = parseInt(surface, 10);
+        surfaceMinDemande = valeur;
+        surfaceMaxDemande = valeur;
+      }
+      console.log(`🏠 Maison : ${surfaceMinDemande}-${surfaceMaxDemande} m²`);
     } else if (typeBien === "appartement") {
-      typeAppartement = surface; // ex: T2, T3, <20m2
+      const mappingAppartement = {
+        "moins 20m²": "<20m2",
+        "20-40m²": "20-40m2",
+        "T1": "T1",
+        "T2": "T2",
+        "T3": "T3",
+        "T4": "T4",
+        "T5": "T5"
+      };
+      typeAppartement = mappingAppartement[surface] || surface;
+      console.log(`🏢 Appartement type : ${typeAppartement}`);
     }
 
-    // ✅ Maintenant on récupère uniquement par tranche envoyée
+    // --- Recherche diagnostics ---
     const diagnostics = await Diagnostic.find({
       typeBien,
       typeOperation,
@@ -880,26 +939,28 @@ exports.filterDiagnostics = async (req, res) => {
     if (!diagnostics.length) {
       return res.status(404).json({ message: "Aucun diagnostic trouvé pour ces critères." });
     }
+    console.log(`🔎 Diagnostics trouvés : ${diagnostics.length}`);
 
-    // Ajout des tarifs correspondant
+    // --- Ajout des tarifs ---
     const diagnosticsAvecTarif = diagnostics.map(diag => {
       let tarifTrouve = null;
 
-      // Maison => tarif par surface
       if (typeBien === "maison" && diag.tarifsParSurface?.length) {
-        for (let tps of diag.tarifsParSurface) {
+        // Cherche la tranche correspondante
+        for (const tps of diag.tarifsParSurface) {
           if (!(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax)) {
-            tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? null;
+            tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
             break;
           }
         }
       }
 
-      // Appartement => tarif par type T1, T2...
-      if (typeBien === "appartement" && diag.tarifsParAppartement?.length) {
-        const tarifObj = diag.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+      if (typeBien === "appartement" && diag.tarifsParAppartement?.length && typeAppartement) {
+        const tarifObj = diag.tarifsParAppartement.find(
+          t => t.typeAppartement.toLowerCase() === typeAppartement.toLowerCase()
+        );
         if (tarifObj) {
-          tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? null;
+          tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? 0;
         }
       }
 
@@ -908,6 +969,8 @@ exports.filterDiagnostics = async (req, res) => {
         tarifPourSurface: tarifTrouve
       };
     });
+
+    console.log("💰 Diagnostics avec tarif :", diagnosticsAvecTarif.map(d => ({ nom: d.nom, tarifPourSurface: d.tarifPourSurface })));
 
     res.json({
       diagnostics: diagnosticsAvecTarif,
@@ -928,6 +991,7 @@ exports.filterDiagnostics = async (req, res) => {
 
 
 
+
 /**
  * Récupère les suppléments filtrés par type de bien
  * POST /api/agency/supplements/filter
@@ -941,11 +1005,20 @@ exports.filterSupplementsByTypeBien = async (req, res) => {
       return res.status(400).json({ message: "Le type de bien est requis." });
     }
 
-    const agence = req.agence;
-    const secteur = (agence?.alerte_secteur || 'autre')
-      .toLowerCase()
-      .normalize('NFD')           
-      .replace(/[\u0300-\u036f]/g, '');
+// Utilise d'abord le secteur envoyé dans req.body
+let secteur = req.body.secteur;
+
+if (!secteur || secteur.trim() === "") {
+  const agence = req.agence;
+  secteur = agence?.alerte_secteur || "autre";
+}
+
+// ⚡ Normalisation : minuscules + suppression des accents + trim
+secteur = secteur
+  .normalize("NFD")            // décompose les caractères accentués
+  .replace(/[\u0300-\u036f]/g, "") // supprime les accents
+  .toLowerCase()               // convertit en minuscules
+  .trim();                     // supprime espaces début/fin
 
     console.log("🔹 Type de bien demandé :", typeBien);
     console.log("🔹 Secteur de l'agence :", secteur);
@@ -974,13 +1047,28 @@ exports.filterSupplementsByTypeBien = async (req, res) => {
     });
 
     // Ajout du tarif selon le secteur de l'agence
-    const supplementsAvecTarif = supplementsUnik.map(s => {
-      const tarifTrouve = s.tarifs?.[secteur] ?? s.tarifs?.autre ?? 0;
-      return {
-        ...s.toObject(),
-        tarifPourSecteur: tarifTrouve
-      };
-    });
+const supplementsAvecTarif = supplementsUnik.map(s => {
+  let tarifTrouve = 0;
+
+  if (s.tarifsParAppartement && s.tarifsParAppartement.length > 0 && req.body.typeAppartement) {
+    // Cherche le type d'appartement correspondant
+    const typeApp = s.tarifsParAppartement.find(
+      t => t.typeAppartement.toLowerCase() === req.body.typeAppartement.toLowerCase()
+    );
+    if (typeApp) {
+      tarifTrouve = typeApp.tarifs?.[secteur] ?? typeApp.tarifs?.autre ?? 0;
+    }
+  } else if (s.tarifs) {
+    // fallback pour les autres types de bien
+    tarifTrouve = s.tarifs?.[secteur] ?? s.tarifs?.autre ?? 0;
+  }
+
+  return {
+    ...s.toObject(),
+    tarifPourSecteur: tarifTrouve
+  };
+});
+
 
     console.log(`✅ ${supplementsAvecTarif.length} supplément(s) trouvé(s) pour ${typeBien}`);
     res.json({ supplements: supplementsAvecTarif });
