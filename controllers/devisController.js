@@ -182,7 +182,7 @@ if (req.user?.role === "admin") {
   agenceId = null; // ou undefined
 } else if (req.user?.role === "employe") {
   agenceId = req.user.agence; // ID de l'agence de l'employé
-} else if (req.user?.role === "agence") {
+} else if (req.role === "agence") {
   agenceId = req.user._id; // l'agence elle-même
 }
 

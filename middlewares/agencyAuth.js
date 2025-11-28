@@ -12,7 +12,7 @@ const auth = async (req, res, next) => {
 
     const token = authHeader.split(' ')[1];
     const decoded = jwt.verify(token, JWT_SECRET);
-
+ 
     /**
      * decoded = {
      *   id: xx,
