@@ -15,12 +15,15 @@ const Employe = require('../models/Employe');
 /**
  * LOGIN AGENCE OU EMPLOYÉ
  */
+/**
+ * LOGIN AGENCE OU EMPLOYÉ
+ */
 exports.login = async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
 
     let user = null;
-    let type = null; // 'agence' ou 'employe'
+    let type = null;
 
     /**
      * 1️⃣ Vérification côté AGENCE
@@ -38,19 +41,20 @@ exports.login = async (req, res) => {
     }
 
     /**
-     * 2️⃣ Vérification côté EMPLOYÉ si non trouvé dans Agence
+     * 2️⃣ Vérification côté EMPLOYÉ si non agence
      */
     let employe = null;
     if (!user) {
       employe = await Employe.findOne({ email });
-
       if (employe) {
         user = employe;
         type = 'employe';
       }
     }
 
-    // Aucun compte trouvé
+    /**
+     * Aucun utilisateur trouvé
+     */
     if (!user) {
       return res.status(400).json({ message: "Email ou mot de passe incorrect." });
     }
@@ -58,10 +62,9 @@ exports.login = async (req, res) => {
     /**
      * 3️⃣ Vérification du mot de passe
      */
-    let hash = null;
-
-    if (type === "agence") hash = user.admin.mot_de_passe;
-    if (type === "employe") hash = user.mot_de_passe;
+    const hash = type === "agence"
+      ? user.admin.mot_de_passe
+      : user.mot_de_passe;
 
     const isMatch = await bcrypt.compare(mot_de_passe, hash);
     if (!isMatch) {
@@ -69,22 +72,40 @@ exports.login = async (req, res) => {
     }
 
     /**
-     * 4️⃣ Vérification du statut (uniquement pour Agence)
+     * 4️⃣ Vérification des statuts
      */
+    const statut = user.statut?.toLowerCase() || "actif";
+
+    // Statuts agence
     if (type === "agence") {
-      if (user.statut === 'en_attente') {
+      if (statut === 'en_attente') {
         return res.status(403).json({ message: "Votre compte est en attente d’approbation." });
       }
-      if (user.statut === 'bloqué') {
+      if (statut === 'bloqué') {
         return res.status(403).json({ message: "Votre compte est bloqué." });
       }
-      if (user.statut === 'suspendu') {
+      if (statut === 'suspendu') {
         return res.status(403).json({ message: "Votre compte est suspendu." });
       }
     }
 
+    // Statuts employé
+    if (type === "employe") {
+      if (['en_attente', 'bloque', 'suspendu'].includes(statut)) {
+        const messages = {
+          en_attente: "Votre compte employé est en attente de validation.",
+          bloque: "Votre compte employé est bloqué.",
+          suspendu: "Votre compte employé est suspendu."
+        };
+        return res.status(403).json({ message: messages[statut] });
+      }
+
+      // en_conge = autorisé
+      // actif = autorisé
+    }
+
     /**
-     * 5️⃣ Génération du Token JWT
+     * 5️⃣ JWT
      */
     const token = jwt.sign(
       {
@@ -92,7 +113,7 @@ exports.login = async (req, res) => {
         type,
         role: type === "agence" ? user.admin.role : user.role,
         agenceId: type === "agence" ? user._id : user.agenceId,
-employeId: type === "employe" ? user._id : null,
+        employeId: type === "employe" ? user._id : null,
         email
       },
       JWT_SECRET,
@@ -100,7 +121,7 @@ employeId: type === "employe" ? user._id : null,
     );
 
     /**
-     * 6️⃣ Réponse selon le type
+     * 6️⃣ Réponse
      */
     if (type === "agence") {
       return res.json({
@@ -118,26 +139,28 @@ employeId: type === "employe" ? user._id : null,
           logo: user.logo
         }
       });
-    } else {
-      return res.json({
-        token,
-        type,
-        employe: {
-          id: user._id,
-          nom: user.nom,
-          prenom: user.prenom,
-          email: user.email,
-          role: user.role,
-          agenceId: user.agenceId
-        }
-      });
     }
+
+    return res.json({
+      token,
+      type,
+      employe: {
+        id: user._id,
+        nom: user.nom,
+        prenom: user.prenom,
+        email: user.email,
+        role: user.role,
+        statut: user.statut,
+        agenceId: user.agenceId
+      }
+    });
 
   } catch (error) {
     console.error("❌ Erreur lors de la connexion :", error);
     res.status(500).json({ message: "Erreur serveur lors de la connexion." });
   }
 };
+
 
 /**
  * VERIFY TOKEN (AGENCE ou EMPLOYE)

@@ -97,5 +97,6 @@ router.post(
   upload.single('consentement'), // Multer va parser le fichier
   devisController.createDevis
 );
+router.get("/devis/download/:devisId", authMiddleware, devisController.downloadDevis);
 
 module.exports = router;

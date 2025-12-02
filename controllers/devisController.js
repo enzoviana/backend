@@ -11,6 +11,8 @@ const path = require("path");
 const Supplement = require("../models/Supplement")
 const Admin = require("../models/Admin");
 const Employe = require("../models/Employe")
+const cloudinary = require("../config/cloudinary"); // ton fichier cloudinary.js 
+
 /**
  * Récupérer tous les devis de l'utilisateur connecté
  * req.admin ou req.agence doit être défini par le middleware
@@ -47,6 +49,40 @@ exports.getDevis = async (req, res) => {
   } catch (error) {
     console.error("Erreur récupération devis :", error);
     res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+exports.downloadDevis = async (req, res) => {
+  try {
+    const { devisId } = req.params;
+
+    // Cherche le devis dans la BDD
+    const devis = await Devis.findById(devisId);
+    if (!devis || !devis.pdfUrl) {
+      return res.status(404).json({ message: "Devis introuvable ou PDF manquant." });
+    }
+
+    console.log("📂 Devis trouvé :", devis.pdfUrl);
+
+    // Récupère le public_id depuis l'URL Cloudinary
+    const parts = devis.pdfUrl.split('/upload/')[1]; // ex: v1761131512/monfolder/mondevis.pdf
+    const publicId = parts.replace(/^v\d+\//, '');     // ex: monfolder/mondevis.pdf
+
+    // Génère le lien signé Cloudinary pour téléchargement
+    const downloadUrl = cloudinary.url(publicId, {
+      resource_type: 'raw', // PDF = raw
+      sign_url: true,
+      expires_at: Math.floor(Date.now() / 1000) + 60 * 10 // lien valable 10 min
+    });
+
+    console.log("➡️ Lien signé Cloudinary :", downloadUrl);
+
+    // Redirection vers le lien signé
+    res.redirect(downloadUrl);
+
+  } catch (error) {
+    console.error("❌ Erreur téléchargement devis :", error);
+    res.status(500).json({ message: "Erreur serveur lors du téléchargement." });
   }
 };
 
