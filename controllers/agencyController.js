@@ -993,7 +993,7 @@ exports.filterDiagnostics = async (req, res) => {
       };
     });
 
-    console.log("💰 Diagnostics avec tarif :", diagnosticsAvecTarif.map(d => ({ nom: d.nom, tarifPourSurface: d.tarifPourSurface })));
+    console.log("💰 Diagnostics avec tarif :", diagnosticsAvecTarif.map(d => ({ nom: d.nom, tarifPourSurface: d.tarifPourSurface , id : d._id })));
 
     res.json({
       diagnostics: diagnosticsAvecTarif,

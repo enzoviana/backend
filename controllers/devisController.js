@@ -1,4 +1,5 @@
 // controllers/devisController.js
+require('dotenv').config();
 const Devis = require("../models/Devis");
 const Pack = require("../models/Pack");
 const Diagnostic = require("../models/Diagnostic");
@@ -12,6 +13,7 @@ const Supplement = require("../models/Supplement")
 const Admin = require("../models/Admin");
 const Employe = require("../models/Employe")
 const cloudinary = require("../config/cloudinary"); // ton fichier cloudinary.js 
+const OpenAI = require("openai");
 
 /**
  * Récupérer tous les devis de l'utilisateur connecté
@@ -146,6 +148,172 @@ exports.envoyerRappelDevis = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur lors de l'envoi du rappel." });
   }
 };
+
+/**
+ * 🧾 Générer un devis recommandé via OpenAI en extrayant les infos depuis le prompt
+ */
+exports.generateDevisAI = async (req, res) => {
+  try {
+    console.log("📌 Requête reçue pour génération de devis AI");
+
+    const data = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body.data || req.body;
+    console.log("📄 Données reçues :", data);
+
+    let bien = data.bien || {};
+    let productMode = data.productMode || ""; // pack / diagnostic / manuel
+    let trancheAnnee;
+
+    // Extraction depuis le prompt si nécessaire
+    if (data.prompt) {
+      console.log("📝 Prompt détecté :", data.prompt);
+
+      // Type de bien
+      if (!bien.bien) {
+        const bienMatch = data.prompt.match(/Le bien est un[e]? (\w+)/i);
+        bien.bien = bienMatch ? bienMatch[1].trim().toLowerCase() : "";
+      }
+
+      // Année de construction → convertir directement en tranche
+      const anneeMatch = data.prompt.match(/construit[e]? en (\d{4})/i);
+      if (anneeMatch) {
+        const annee = parseInt(anneeMatch[1], 10);
+        if (annee < 1949) trancheAnnee = "avant_1949";
+        else if (annee <= 1997) trancheAnnee = "1949_1997";
+        else if (annee <= 2012) trancheAnnee = "1juillet1997_plus15";
+        else trancheAnnee = "moins_15";
+      }
+
+      // Transaction
+      const transactionMatch = data.prompt.match(/op[eé]ration\s*[: ]\s*(vente|location)/i);
+      bien.transaction = transactionMatch ? transactionMatch[1].toLowerCase() : "vente";
+
+      // Adresse
+      const adresseMatch = data.prompt.match(/situé[e]? au (.+?), (\d{5}) (.+)\./i);
+      bien.adresseBien = {
+        adresse: adresseMatch ? adresseMatch[1] : "",
+        codePostal: adresseMatch ? adresseMatch[2] : "",
+        ville: adresseMatch ? adresseMatch[3] : "",
+      };
+
+      // Surface
+      const surfaceMatch = data.prompt.match(/Surface\s*:\s*(T\d+)/i);
+      bien.surfaceAppartement = surfaceMatch ? surfaceMatch[1] : "";
+
+      console.log("🏠 Type de bien :", bien.bien);
+      console.log("📆 Tranche année :", trancheAnnee);
+      console.log("💰 Transaction :", bien.transaction);
+    }
+
+    if (!bien.bien || !trancheAnnee) {
+      console.warn("⚠️ Type de bien ou tranche d'année manquante");
+      return res.status(400).json({ message: "Type de bien et tranche d'année requis." });
+    }
+
+    // Récupérer packs et diagnostics
+    let packs = await Pack.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction }).populate("diagnostics");
+    let diagnostics = await Diagnostic.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction });
+    const supplements = await Supplement.find({ typeBien: bien.bien });
+
+    // Fallback si aucun pack/diagnostic trouvé
+    if (packs.length === 0) packs = [{ nom: "Pack standard", _id: "fallback-pack", tarifs: { var: 0, herault: 0, autre: 0 } }];
+    if (diagnostics.length === 0) diagnostics = [];
+
+    // Filtrer diagnostics selon gaz/copropriété
+    let diagnosticsFiltres = [...diagnostics];
+    if (data.installationGaz) {
+      const diagGaz = diagnostics.find(d => /gaz/i.test(d.nom));
+      if (diagGaz && !diagnosticsFiltres.includes(diagGaz)) diagnosticsFiltres.push(diagGaz);
+    }
+    if (data.copropriete) {
+      const diagCopro = diagnostics.find(d => /copropriété|surface/i.test(d.nom));
+      if (diagCopro && !diagnosticsFiltres.includes(diagCopro)) diagnosticsFiltres.push(diagCopro);
+    }
+
+    // Si l'utilisateur n'a pas précisé productMode et prompt ne mentionne rien => pack par défaut
+    if (!productMode) productMode = "pack";
+
+    // Préparer prompt OpenAI
+    const promptOpenAI = `
+Tu es un assistant expert en devis immobiliers.
+Le bien est un(e) ${bien.bien}, tranche d'année ${trancheAnnee}.
+L'installation gaz est ${data.installationGaz ? "présente" : "absente"}.
+La copropriété est ${data.copropriete ? "présente" : "absente"}.
+Les packs disponibles sont : ${packs.map(p => p.nom).join(", ")}.
+Les diagnostics possibles sont : ${diagnosticsFiltres.map(d => d.nom).join(", ")}.
+Les suppléments possibles sont : ${supplements.map(s => s.nom).join(", ")}.
+
+Propose un devis recommandé en listant : 
+- Pack suggéré
+- Diagnostics nécessaires
+- Suppléments utiles
+- Justification du choix
+`;
+
+    console.log("🤖 Prompt envoyé à OpenAI :", promptOpenAI);
+
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4",
+      messages: [{ role: "user", content: promptOpenAI }],
+      temperature: 0.7,
+    });
+
+    const aiResponse = completion.choices[0].message.content;
+    console.log("✅ Réponse OpenAI reçue :", aiResponse);
+
+    // Préparer JSON front
+    const responseJSON = {
+      message: "✅ Devis recommandé généré via AI",
+      suggestion: aiResponse,
+      productMode,
+      client: {
+        nom: data.client?.nom || "Jean",
+        prenom: data.client?.prenom || "Dupont",
+        email: data.client?.email || "jean.dupont@email.com",
+        tel: data.client?.tel || "0601020304",
+        adresse: data.client?.adresse || bien.adresseBien?.adresse || "",
+        ville: data.client?.ville || bien.adresseBien?.ville || "",
+        codePostal: data.client?.codePostal || bien.adresseBien?.codePostal || "",
+      },
+      bien: {
+        bien: bien.bien,
+        type: bien.type || "",
+        adresseBien: bien.adresseBien,
+        surfaceAppartement: bien.surfaceAppartement || "",
+        surfaceMaison: bien.surfaceMaison || "",
+        trancheAnnee, // Remplacé anneeConstruction
+        anneeConstruction: trancheAnnee,
+        transaction: bien.transaction,
+        numeroFiscalBien: bien.numeroFiscalBien || "",
+        note: ""
+      },
+      packs: productMode === "pack" ? packs.map(p => ({
+        id: p._id,
+        nom: p.nom,
+        tarif: bien.bien === "appartement" && p.tarifsParAppartement
+          ? p.tarifsParAppartement.find(t => t.typeAppartement === bien.surfaceAppartement)?.tarifs || p.tarifs
+          : p.tarifs,
+        selected: true
+      })) : [],
+      diagnostics: productMode === "diagnostic" ? diagnosticsFiltres.map(d => ({
+        id: d._id,
+        nom: d.nom,
+        selected: true
+      })) : [],
+      supplements: [] // on envoie vide si pas précisé
+    };
+
+    return res.status(200).json(responseJSON);
+
+  } catch (error) {
+    console.error("Erreur génération devis AI :", error);
+    return res.status(500).json({ message: "Erreur serveur lors de la génération du devis AI." });
+  }
+};
+
+
+
+
 
 
 /**
@@ -349,43 +517,63 @@ if (data.type === "pack_complet" && data.pack) {
 // --- Diagnostics ---
 // --- Diagnostics ---
 else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
+
+  console.log("=== 🧪 MODE : DIAGNOSTICS À LA CARTE ===");
+  console.log("Diagnostics sélectionnés :", data.diagnosticsSelectionnes);
+
   const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
   
-  // 🔹 Mapping pour type appartement
-// 🔹 Normalisation type appartement
-let typeAppartement = null;
-if (data.bien === "appartement" && data.surfaceAppartement) {
-  const mappingAppartement = {
-    "moins 20m²": "<20m2",
-    "20-40m²": "20-40m2",
-    "T1": "T1",
-    "T2": "T2",
-    "T3": "T3",
-    "T4": "T4",
-    "T5": "T5"
-  };
-  typeAppartement = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
-}
+  console.log("Diagnostics chargés depuis MongoDB :", diagnostics);
 
-// 🔹 Normalisation secteur
-secteur = (secteur || "autre")
-  .normalize("NFD")
-  .replace(/[\u0300-\u036f]/g, "")
-  .toLowerCase()
-  .trim();
+  // 🔹 Normalisation type appartement
+  let typeAppartement = null;
+  if (data.bien === "appartement" && data.surfaceAppartement) {
+    const mappingAppartement = {
+      "moins 20m²": "<20m2",
+      "20-40m²": "20-40m2",
+      "T1": "T1",
+      "T2": "T2",
+      "T3": "T3",
+      "T4": "T4",
+      "T5": "T5"
+    };
+    typeAppartement = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
+    console.log("Type appartement normalisé :", typeAppartement);
+  }
 
+  // 🔹 Normalisation secteur
+  console.log("Secteur brut :", secteur);
+
+  secteur = (secteur || "autre")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+
+  console.log("Secteur normalisé :", secteur);
 
   totalAvantRemise = diagnostics.reduce((sum, d) => {
+    console.log("\n--- Diagnostic analysé :", d.nom, " ---");
+
     let tarifTrouve = 0;
 
-    // 🏠 Maison
+    // 🏠 MAISON
     if (data.bien === "maison" && d.tarifsParSurface?.length) {
+
+      console.log("Mode maison - tarifsParSurface :", d.tarifsParSurface);
+
       let surfaceMin = 0, surfaceMax = 0;
-      const surface = data.surfaceMaison;
+      let surface = data.surfaceMaison;
+
+      console.log("Surface maison envoyée (brut) :", surface);
+
+      // 🔧 Fix : enlever “m²”, espaces, caractères spéciaux
+      surface = surface.replace(/[^\d-]/g, "");
+      console.log("Surface maison nettoyée :", surface);
 
       if (surface) {
         if (surface.includes("-")) {
-          const match = surface.match(/(\d+)\s*-\s*(\d+)/);
+          const match = surface.match(/(\d+)-(\d+)/);
           surfaceMin = match ? parseInt(match[1], 10) : 0;
           surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
         } else {
@@ -395,37 +583,73 @@ secteur = (secteur || "autre")
         }
       }
 
-      const intervalleTrouve = d.tarifsParSurface.find(tps => {
-        const min = Number(tps.surfaceMin);
-        const max = Number(tps.surfaceMax);
-        return surfaceMin >= min && surfaceMax <= max;
-      });
+      console.log(`Surface min=${surfaceMin}, max=${surfaceMax}`);
+
+const intervalleTrouve = d.tarifsParSurface.find(tps => {
+  const min = Number(tps.surfaceMin);
+  const max = Number(tps.surfaceMax);
+  // 🔹 ajustement : accepter si overlap partiel
+  return surfaceMax >= min && surfaceMin <= max;
+});
+
+
+      console.log("Intervalle trouvé :", intervalleTrouve);
 
       if (intervalleTrouve) {
         tarifTrouve = intervalleTrouve.tarifs[secteur] ?? intervalleTrouve.tarifs.autre ?? 0;
+        console.log("Tarif trouvé pour maison =", tarifTrouve);
+      } else {
+        console.log("⚠️ Aucun intervalle trouvé → tarif=0");
       }
     }
 
-    // 🏢 Appartement
+    // 🏢 APPARTEMENT
     else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
+
+      console.log("Mode appartement - tarifsParAppartement :", d.tarifsParAppartement);
+
       const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+
       if (tarifAppart) {
+        console.log("Tarif appartement trouvé :", tarifAppart);
         tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
-        console.log(`Appartement : type=${typeAppartement}, secteur='${secteur}', tarifTrouve=${tarifTrouve}`);
+        console.log(`Tarif trouvé = ${tarifTrouve} (secteur=${secteur})`);
       } else {
-        console.log(`⚠️ Appartement : aucun tarif trouvé pour type=${typeAppartement}, secteur='${secteur}'`);
+        console.log(`⚠️ Aucun tarif trouvé pour type=${typeAppartement}`);
       }
     }
+
+    // ❗ CAS : pas de tarifs (ERP, Termites, etc)
+    else {
+      console.log("⚠️ Aucun tableau de tarifs — on vérifie prixTTC/prixHT");
+
+      console.log("prixTTC :", d.prixTTC, "prixHT :", d.prixHT);
+
+      tarifTrouve = Number(d.prixTTC || d.prixHT || 0);
+
+      console.log("Tarif simple appliqué (prixTTC/prixHT) :", tarifTrouve);
+    }
+
+    console.log("Tarif retenu pour", d.nom, ":", tarifTrouve);
 
     return sum + (Number(tarifTrouve) || 0);
   }, 0);
 
-  // 🔹 Ajouter les frais de déplacement sauf si ERP seul
+  console.log("\nTotal avant ajout frais déplacement =", totalAvantRemise);
+
+  // 🔹 Ajouter frais déplacement sauf ERP seul
   const isERPSeul = diagnostics.length === 1 && diagnostics[0].nom.toLowerCase().includes("erp");
+  console.log("ERP seul ?", isERPSeul);
+
   if (!isERPSeul) {
     totalAvantRemise += 55;
+    console.log("Ajout frais déplacement : +55");
   }
+
+  console.log("Total avant remise final =", totalAvantRemise);
 }
+
+
 
 
 
