@@ -59,6 +59,11 @@ const devisSchema = new mongoose.Schema({
 
   },
 
+  typeSurfaceMaison: {
+    type: String,
+    required: false,
+  },
+
   /* 🏘️ Surface selon le type de bien */
 surfaceMaison: {
   type: String,

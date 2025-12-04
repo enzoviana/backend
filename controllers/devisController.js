@@ -160,20 +160,31 @@ exports.generateDevisAI = async (req, res) => {
     console.log("📄 Données reçues :", data);
 
     let bien = data.bien || {};
-    let productMode = data.productMode || ""; // pack / diagnostic / manuel
+    let productMode = data.productMode || ""; // pack / diagnostic / supplement / manuel
     let trancheAnnee;
 
     // Extraction depuis le prompt si nécessaire
     if (data.prompt) {
       console.log("📝 Prompt détecté :", data.prompt);
+      const promptLower = data.prompt.toLowerCase();
 
-      // Type de bien
+      /**
+       * 📌 DÉTECTION DU MODE DE PRODUIT DEMANDÉ
+       */
+      if (!productMode) {
+        if (/pack|formule|tout compris|complet/i.test(promptLower)) productMode = "pack";
+        else if (/diagnostic|dpe|amiante|plomb|termites|gaz|électricité|electricite|erp|ernmt/i.test(promptLower)) productMode = "diagnostic";
+        else if (/supplément|option|express|plan|photo|drone|relevé/i.test(promptLower)) productMode = "supplement";
+        else productMode = "manuel";
+      }
+
+      // Détection du type de bien
       if (!bien.bien) {
         const bienMatch = data.prompt.match(/Le bien est un[e]? (\w+)/i);
         bien.bien = bienMatch ? bienMatch[1].trim().toLowerCase() : "";
       }
 
-      // Année de construction → convertir directement en tranche
+      // Année → Tranche
       const anneeMatch = data.prompt.match(/construit[e]? en (\d{4})/i);
       if (anneeMatch) {
         const annee = parseInt(anneeMatch[1], 10);
@@ -195,13 +206,14 @@ exports.generateDevisAI = async (req, res) => {
         ville: adresseMatch ? adresseMatch[3] : "",
       };
 
-      // Surface
+      // Surface (ex: T2, T3…)
       const surfaceMatch = data.prompt.match(/Surface\s*:\s*(T\d+)/i);
       bien.surfaceAppartement = surfaceMatch ? surfaceMatch[1] : "";
 
       console.log("🏠 Type de bien :", bien.bien);
       console.log("📆 Tranche année :", trancheAnnee);
       console.log("💰 Transaction :", bien.transaction);
+      console.log("🎯 ProductMode détecté :", productMode);
     }
 
     if (!bien.bien || !trancheAnnee) {
@@ -209,16 +221,14 @@ exports.generateDevisAI = async (req, res) => {
       return res.status(400).json({ message: "Type de bien et tranche d'année requis." });
     }
 
-    // Récupérer packs et diagnostics
+    // Récupérer packs, diagnostics, suppléments
     let packs = await Pack.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction }).populate("diagnostics");
     let diagnostics = await Diagnostic.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction });
     const supplements = await Supplement.find({ typeBien: bien.bien });
 
-    // Fallback si aucun pack/diagnostic trouvé
     if (packs.length === 0) packs = [{ nom: "Pack standard", _id: "fallback-pack", tarifs: { var: 0, herault: 0, autre: 0 } }];
-    if (diagnostics.length === 0) diagnostics = [];
 
-    // Filtrer diagnostics selon gaz/copropriété
+    // Compléter diagnostics selon gaz et copro
     let diagnosticsFiltres = [...diagnostics];
     if (data.installationGaz) {
       const diagGaz = diagnostics.find(d => /gaz/i.test(d.nom));
@@ -229,10 +239,35 @@ exports.generateDevisAI = async (req, res) => {
       if (diagCopro && !diagnosticsFiltres.includes(diagCopro)) diagnosticsFiltres.push(diagCopro);
     }
 
-    // Si l'utilisateur n'a pas précisé productMode et prompt ne mentionne rien => pack par défaut
+    // Détection des diagnostics précis dans le prompt
+    if (data.prompt) {
+      const promptLower = data.prompt.toLowerCase();
+
+      const demandeDiagnostics = diagnostics
+        .filter(d => d.typeBien === bien.bien && d.typeOperation === bien.transaction)
+        .filter(d => {
+          const nameLower = d.nom.toLowerCase();
+          return promptLower.includes(nameLower) ||
+                 (/dpe/.test(promptLower) && /dpe/.test(nameLower)) ||
+                 (/amiante/.test(promptLower) && /amiante/.test(nameLower)) ||
+                 (/plomb/.test(promptLower) && /plomb/.test(nameLower)) ||
+                 (/termites/.test(promptLower) && /termites/.test(nameLower)) ||
+                 (/gaz/.test(promptLower) && /gaz/.test(nameLower)) ||
+                 (/élec|elect/.test(promptLower) && /élec|elect/.test(nameLower)) ||
+                 (/erp|ernmt/.test(promptLower) && /erp|ernmt/.test(nameLower));
+        });
+
+      // Supprimer doublons
+      if (demandeDiagnostics.length > 0) {
+        diagnosticsFiltres = [...new Map(demandeDiagnostics.map(d => [d._id, d])).values()];
+        productMode = "diagnostic"; // seulement si diagnostics détectés
+      }
+    }
+
+    // Par défaut → PACK si rien détecté
     if (!productMode) productMode = "pack";
 
-    // Préparer prompt OpenAI
+    // Prompt OpenAI
     const promptOpenAI = `
 Tu es un assistant expert en devis immobiliers.
 Le bien est un(e) ${bien.bien}, tranche d'année ${trancheAnnee}.
@@ -261,7 +296,7 @@ Propose un devis recommandé en listant :
     const aiResponse = completion.choices[0].message.content;
     console.log("✅ Réponse OpenAI reçue :", aiResponse);
 
-    // Préparer JSON front
+    // Réponse front
     const responseJSON = {
       message: "✅ Devis recommandé généré via AI",
       suggestion: aiResponse,
@@ -281,7 +316,7 @@ Propose un devis recommandé en listant :
         adresseBien: bien.adresseBien,
         surfaceAppartement: bien.surfaceAppartement || "",
         surfaceMaison: bien.surfaceMaison || "",
-        trancheAnnee, // Remplacé anneeConstruction
+        trancheAnnee,
         anneeConstruction: trancheAnnee,
         transaction: bien.transaction,
         numeroFiscalBien: bien.numeroFiscalBien || "",
@@ -300,7 +335,7 @@ Propose un devis recommandé en listant :
         nom: d.nom,
         selected: true
       })) : [],
-      supplements: [] // on envoie vide si pas précisé
+      supplements: [] 
     };
 
     return res.status(200).json(responseJSON);
@@ -877,7 +912,8 @@ const montantTTC = totalFinal;
       transaction: data.transaction,
       adresseBien: data.adresseBien,
       surfaceMaison: data.surfaceMaison,
-      surfaceAppartement: data.surfaceAppartement,
+      typeSurfaceMaison : data.typeSurfaceMaison,
+  ...(data.bien === "appartement" ? { surfaceAppartement: data.surfaceAppartement } : {}),
       anneeConstruction: data.anneeConstruction,
       numeroFiscalBien: data.numeroFiscalBien || null,
       pack: data.pack || null,
