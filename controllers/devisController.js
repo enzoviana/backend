@@ -216,10 +216,6 @@ exports.generateDevisAI = async (req, res) => {
       console.log("🎯 ProductMode détecté :", productMode);
     }
 
-    if (!bien.bien || !trancheAnnee) {
-      console.warn("⚠️ Type de bien ou tranche d'année manquante");
-      return res.status(400).json({ message: "Type de bien et tranche d'année requis." });
-    }
 
     // Récupérer packs, diagnostics, suppléments
     let packs = await Pack.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction }).populate("diagnostics");
