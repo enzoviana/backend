@@ -3,7 +3,7 @@ const mongoose = require('mongoose');
 const { envoyerRappelsAutomatiques } = require('../controllers/devisController');
 
 // ⚡ Connexion à MongoDB
-mongoose.connect(process.env.MONGO_URI, {
+mongoose.connect(process.env.MONGO_LIVE, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 }).then(() => {
