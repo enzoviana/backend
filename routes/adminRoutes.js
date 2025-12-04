@@ -76,6 +76,8 @@ router.delete('/supplement/:id', authMiddleware, adminController.deleteSupplemen
 // ---------------------- Client ----------------------
 
 router.get("/clients", authMiddleware, clientController.getClients);
+router.delete("/clients/:id", authMiddleware, clientController.deleteClient);
+router.put("/clients/:id/email", authMiddleware, clientController.updateClientEmail);
 
 
 // ---------------------- Ordre Mission ----------------------

@@ -72,6 +72,7 @@ surfaceMaison: {
     return val.replace(/\s*-\s*/, " - ").replace(/m²$/, " m²");
   },
 },
+
   surfaceAppartement: {
     type: String,
     enum: ["T1", "T2", "T3", "T4", "T5", "T6 et +", "moins 20m²", "<20m2"],
@@ -116,6 +117,13 @@ surfaceMaison: {
     ref: "Agence",
     required: false,
   },
+
+  shareAgency : {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Agence",
+    required: false,
+  },
+
   secteur: { type: String },
 
   /* 💰 Financier : totaux et réduction */

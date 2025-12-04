@@ -888,11 +888,13 @@ const montantTTC = totalFinal;
 
     console.log("===== Totaux calculés =====", { totalAvantRemise, totalApresReduction, totalFinal, montantTTC });
 
+const shareAgencyId = data.shareAgency && data.shareAgency !== "" ? data.shareAgency : null;
 
 
     // 🧾 Création du devis
     const devis = new Devis({
       agenceId,
+      shareAgency : shareAgencyId,
       creePar,
       client: {
         nom: client.nom,

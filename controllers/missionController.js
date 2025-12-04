@@ -291,7 +291,7 @@ exports.updateStatutOrdreMission = async (req, res) => {
           nomClient: ordre.clientId.nom,
           dateRdv: ordre.rdvDate.toLocaleDateString("fr-FR"),
           heureRdv: ordre.rdvDate.toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit' }),
-          adresseIntervention: ordre.agenceId?.adresse || "Adresse non précisée",
+          adresseIntervention: ordre.clientId?.adresse + ' ' + ordre.clientId?.ville + ' ' + ordre.clientId?.codePostal || "Adresse non précisée",
           telephoneAgence: ordre.agenceId?.telephone_portable || "Non renseigné"
         }
       });

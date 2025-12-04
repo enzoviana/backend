@@ -14,7 +14,7 @@ const Pack = require("../models/Pack");
 const Supplement = require("../models/Supplement");
 const sendEmail = require('../utils/sendEmails');
 const Employe = require('../models/Employe');
-
+const Devis = require('../models/Devis')
 /**
  * REGISTER ADMIN
  */
@@ -325,61 +325,98 @@ exports.createAgence = async (req, res) => {
  */
 exports.getAllAgences = async (req, res) => {
   try {
-    // On récupère toutes les agences
     const agences = await Agence.find();
 
-    // Pour chaque agence, on récupère ses employés
-    const result = await Promise.all(agences.map(async (agence) => {
-      const employes = await Employe.find({ agence: agence._id });
+    const result = await Promise.all(
+      agences.map(async (agence) => {
 
-      return {
-        id: agence._id,
-        nom_commercial: agence.nom_commercial,
-        nom_responsable: agence.nom_responsable,
-        adresse: agence.adresse,
-        siret: agence.siret,
-        telephone_fixe: agence.telephone_fixe || '',
-        telephone_portable: agence.admin?.telephone_portable || '',
-        emails_contact: agence.emails_contact || [],
-        activite: agence.activite || '',
-        domaine_intervention: agence.domaine_intervention || [],
-        alerte_secteur: agence.alerte_secteur || '',
-        statut: agence.statut || 'en_attente',
-        admin: {
-          nom: agence.admin?.nom || '',
-          prenom: agence.admin?.prenom || '',
-          email: agence.admin?.email || '',
-          role: agence.admin?.role || ''
-        },
-        nombreDevis: agence.nombreDevis || 0,
-        tauxAcceptation: agence.tauxAcceptation || 0,
-        CA: agence.CA || 0,
-        clients: agence.clients || [],
-        devis: agence.devis || [],
-        ca_estime: agence.ca_estime || 0,
-        cagnotte: agence.cagnotte || 0,
-        reduction: agence.reduction || 0,
-        createdAt: agence.createdAt,
-        updatedAt: agence.updatedAt,
-        // 🔹 Ajout des employés liés
-        employes: employes.map(e => ({
-          id: e._id,
-          nom: e.nom,
-          prenom: e.prenom,
-          email: e.email,
-          telephone_portable: e.telephone_portable,
-          statut: e.statut
-        })),
-        nombreEmployes: employes.length
-      };
-    }));
+        const employes = await Employe.find({ agence: agence._id });
+
+        // 🔹 Récupération des devis
+        const devis = await Devis.find({ agenceId: agence._id })
+          .sort({ dateCreation: -1 })
+          .select("numero statut client.nom client.prenom client.email client.tel dateCreation totalFinal");
+
+        const devisFormatted = devis.map((d) => ({
+          id: d._id,
+          numero: d.numero,
+          statut: d.statut,
+          client: `${d.client.nom} ${d.client.prenom}`,
+          email: d.client.email,
+          telephone: d.client.tel,
+          date: formatDateFR(d.dateCreation),   // 🟦 formatage appliqué ici
+          total: d.totalFinal,
+        }));
+
+        return {
+          id: agence._id,
+          nom_commercial: agence.nom_commercial,
+          nom_responsable: agence.nom_responsable,
+          adresse: agence.adresse,
+          siret: agence.siret,
+          telephone_fixe: agence.telephone_fixe || '',
+          telephone_portable: agence.admin?.telephone_portable || '',
+          emails_contact: agence.emails_contact || [],
+          activite: agence.activite || '',
+          domaine_intervention: agence.domaine_intervention || [],
+          alerte_secteur: agence.alerte_secteur || '',
+          statut: agence.statut || 'en_attente',
+          admin: {
+            nom: agence.admin?.nom || '',
+            prenom: agence.admin?.prenom || '',
+            email: agence.admin?.email || '',
+            role: agence.admin?.role || ''
+          },
+
+          nombreDevis: devis.length,
+          devis: devisFormatted, // 🔥 Liste des devis formatés
+
+          tauxAcceptation: agence.tauxAcceptation || 0,
+          CA: agence.CA || 0,
+          clients: agence.clients || [],
+          ca_estime: agence.ca_estime || 0,
+          cagnotte: agence.cagnotte || 0,
+          reduction: agence.reduction || 0,
+          createdAt: agence.createdAt,
+          updatedAt: agence.updatedAt,
+
+          employes: employes.map(e => ({
+            id: e._id,
+            nom: e.nom,
+            prenom: e.prenom,
+            email: e.email,
+            telephone_portable: e.telephone_portable,
+            statut: e.statut
+          })),
+
+          nombreEmployes: employes.length
+        };
+      })
+    );
 
     res.json(result);
+
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: "Erreur serveur lors de la récupération des agences." });
   }
 };
+
+
+// 🔧 Fonction de formatage
+function formatDateFR(date) {
+  if (!date) return "";
+  const d = new Date(date);
+
+  const jour = String(d.getDate()).padStart(2, "0");
+  const mois = String(d.getMonth() + 1).padStart(2, "0");
+  const annee = d.getFullYear();
+
+  const heures = String(d.getHours()).padStart(2, "0");
+  const minutes = String(d.getMinutes()).padStart(2, "0");
+
+  return `${jour}/${mois}/${annee} - ${heures}:${minutes}`;
+}
 
 
 /**
