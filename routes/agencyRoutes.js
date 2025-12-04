@@ -60,6 +60,8 @@ router.post('/supplement/filter', agencyAuth , agencyController.filterSupplement
 // ---------------------- Client ----------------------
 
 router.get("/clients", agencyAuth, clientController.getClients);
+router.delete("/clients/:id", agencyAuth, clientController.deleteClient);
+router.put("/clients/:id/email", agencyAuth, clientController.updateClientEmail);
 
 
 // ---------------------- Mission ----------------------
