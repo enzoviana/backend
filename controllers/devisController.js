@@ -456,14 +456,10 @@ if (!clientPayload.codePostal && data.adresseBien?.codePostal) {
 }
 
     // 🔎 Recherche ou création du client
-    let client = await Client.findOne({ email: data.client.email });
-    if (!client) {
-      client = new Client(clientPayload);
-      await client.save();
-    } else if (!client.agences.includes(agenceId)) {
-      client.agences.push(agenceId);
-      await client.save();
-    }
+// 🔎 Création systématique du client
+const client = new Client(clientPayload);
+await client.save();
+
 
 let secteur;
 
@@ -894,19 +890,19 @@ console.log("==== Client avant création devis ====", client);
       agenceId,
       shareAgency : shareAgencyId,
       creePar,
-      client: {
-        nom: client.nom,
-        prenom: client.prenom,
-        email: client.email,
-        tel: client.telephone,
-        adresse: client.adresse,
-        ville: client.ville,
-        codePostal: client.codePostal,
-        pays: client.pays,
-        societe: client.societe,
-        siret: client.siret,
-        remarques: client.remarques,
-      },
+ client: {
+    nom: data.client.nom,
+    prenom: data.client.prenom,
+    email: client.email,
+    tel: client.telephone,
+    adresse: client.adresse,
+    ville: client.ville,
+    codePostal: client.codePostal,
+    pays: client.pays,
+    societe: client.societe,
+    siret: client.siret,
+    remarques: client.remarques,
+  },
       type: data.type,
       bien: data.bien,
       transaction: data.transaction,
