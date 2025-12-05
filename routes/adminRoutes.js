@@ -70,6 +70,7 @@ router.put('/supplement/:id', authMiddleware, adminController.updateSupplement);
 router.delete('/supplement/:id', authMiddleware, adminController.deleteSupplement);
 
 
+router.get('/typeBiens', authMiddleware, agencyController.getAllTypeBiens);
 
 
 

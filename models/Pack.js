@@ -30,8 +30,12 @@ const packSchema = new mongoose.Schema({
   nom: { type: String, required: true, trim: true },
 
   // Type de bien et type d'opération
-  typeBien: { type: String, enum: ["maison", "appartement", "audit"], required: true },
-  typeOperation: { type: String, enum: ["vente", "location"], required: true },
+typeBien: {
+  type: String,
+  required: true,
+  default: "autre", // optionnel
+}, 
+ typeOperation: { type: String, enum: ["vente", "location"], required: true },
 
   // Tranche d'année
   trancheAnnee: [{

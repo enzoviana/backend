@@ -47,6 +47,7 @@ router.post(
 // Diagnostics
 router.get('/diagnostics', agencyAuth, adminController.getAllDiagnostics);
 router.post('/diagnostic/filter', agencyAuth, agencyController.filterDiagnostics);
+router.get('/typeBiens', agencyAuth, agencyController.getAllTypeBiens);
 
 
 // Packs

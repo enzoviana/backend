@@ -517,6 +517,7 @@ exports.createDiagnostic = async (req, res) => {
     const { 
       nom, 
       typeBien, 
+      typeBienLibre,   // <-- récupéré si l'utilisateur a saisi "Autre"
       typeOperation, 
       trancheAnnee, 
       tarifsParSurface, 
@@ -526,22 +527,29 @@ exports.createDiagnostic = async (req, res) => {
       supplementsDisponibles 
     } = req.body;
 
+    // --- Déterminer le type de bien final ---
+    const typeBienFinal = typeBienLibre?.trim() || typeBien;
+
+    const trancheAnneeArray = Array.isArray(trancheAnnee)
+  ? trancheAnnee
+  : trancheAnnee ? [trancheAnnee] : [];
+
     // --- Validation ---
-    if (!nom || !typeBien || !typeOperation || !Array.isArray(trancheAnnee)) {
-      console.warn("⚠️ Champs obligatoires manquants :", { nom, typeBien, typeOperation, trancheAnnee });
+    if (!nom || !typeBienFinal || !typeOperation || !Array.isArray(trancheAnnee)) {
+      console.warn("⚠️ Champs obligatoires manquants :", { nom, typeBienFinal, typeOperation, trancheAnnee });
       return res.status(400).json({ message: "Champs obligatoires manquants." });
     }
 
     // Validation spécifique selon typeBien
-    if (typeBien === "maison" && (!Array.isArray(tarifsParSurface) || !tarifsParSurface.length)) {
+    if (typeBienFinal === "maison" && (!Array.isArray(tarifsParSurface) || !tarifsParSurface.length)) {
       console.warn("⚠️ Champs manquants pour maison :", { tarifsParSurface });
       return res.status(400).json({ message: "Tarifs par surface obligatoires pour une maison." });
     }
-    if (typeBien === "appartement" && (!Array.isArray(tarifsParAppartement) || !tarifsParAppartement.length)) {
+    if (typeBienFinal === "appartement" && (!Array.isArray(tarifsParAppartement) || !tarifsParAppartement.length)) {
       console.warn("⚠️ Champs manquants pour appartement :", { tarifsParAppartement });
       return res.status(400).json({ message: "Tarifs par appartement obligatoires pour un appartement." });
     }
-    if (typeBien === "audit" && (tarifAudit === undefined || tarifAudit === null)) {
+    if (typeBienFinal === "audit" && (tarifAudit === undefined || tarifAudit === null)) {
       console.warn("⚠️ Champ tarifAudit manquant pour audit :", { tarifAudit });
       return res.status(400).json({ message: "Tarif audit obligatoire pour un audit." });
     }
@@ -549,7 +557,7 @@ exports.createDiagnostic = async (req, res) => {
     console.log("✅ Données validées !");
     console.log("🧾 Détails du diagnostic à créer :", {
       nom,
-      typeBien,
+      typeBienFinal,
       typeOperation,
       trancheAnnee,
       tarifsParSurface,
@@ -561,7 +569,7 @@ exports.createDiagnostic = async (req, res) => {
 
     const diagnostic = new Diagnostic({
       nom,
-      typeBien,
+      typeBien: typeBienFinal,   // <-- on enregistre le type libre si fourni
       typeOperation,
       trancheAnnee,
       tarifsParSurface: tarifsParSurface || [],
@@ -582,6 +590,7 @@ exports.createDiagnostic = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors de la création du diagnostic." });
   }
 };
+
 
 
 
@@ -719,19 +728,24 @@ exports.createPack = async (req, res) => {
     }
 
     // Construction du pack
-    const pack = new Pack({
-      nom,
-      typeBien,
-      typeOperation,
-      trancheAnnee: Array.isArray(trancheAnnee) ? trancheAnnee : [],
-      diagnostics: validDiagnostics.map(d => d._id),
-      tarifs: {
-        var: Number(tarifs?.var ?? 0),
-        herault: Number(tarifs?.herault ?? 0),
-        autre: Number(tarifs?.autre ?? 0)
-      },
-      // Tarifs selon la surface (maisons)
-      tarifsParSurface: Array.isArray(tarifsParSurface)
+// Construction du pack
+const pack = new Pack({
+  nom,
+  typeBien,
+  typeOperation,
+  trancheAnnee: Array.isArray(trancheAnnee) ? trancheAnnee : [],
+  diagnostics: validDiagnostics.map(d => d._id),
+
+  // Tarifs globaux
+  tarifs: {
+    var: Number(tarifs?.var ?? 0),
+    herault: Number(tarifs?.herault ?? 0),
+    autre: Number(tarifs?.autre ?? 0)
+  },
+
+  // Tarifs selon la surface (pour tous les types sauf appartement)
+  tarifsParSurface: typeBien !== "appartement"
+    ? (Array.isArray(tarifsParSurface)
         ? tarifsParSurface.map(t => ({
             surfaceMin: Number(t.surfaceMin ?? 0),
             surfaceMax: Number(t.surfaceMax ?? 0),
@@ -741,9 +755,12 @@ exports.createPack = async (req, res) => {
               autre: Number(t.tarifs?.autre ?? 0)
             }
           }))
-        : [],
-      // Tarifs selon type d'appartement
-      tarifsParAppartement: Array.isArray(tarifsParAppartement)
+        : [])
+    : [],
+
+  // Tarifs selon type d'appartement
+  tarifsParAppartement: typeBien === "appartement"
+    ? (Array.isArray(tarifsParAppartement)
         ? tarifsParAppartement.map(t => ({
             typeAppartement: t.typeAppartement ?? "<20m2",
             tarifs: {
@@ -752,11 +769,15 @@ exports.createPack = async (req, res) => {
               autre: Number(t.tarifs?.autre ?? 0)
             }
           }))
-        : [],
-      obligatoireDansPacks: Array.isArray(obligatoireDansPacks) ? obligatoireDansPacks : [],
-      erpOffert: Boolean(erpOffert),
-      supplementsDisponibles: Array.isArray(supplementsDisponibles) ? supplementsDisponibles : []
-    });
+        : [])
+    : [],
+
+  obligatoireDansPacks: Array.isArray(obligatoireDansPacks) ? obligatoireDansPacks : [],
+  erpOffert: Boolean(erpOffert),
+  supplementsDisponibles: Array.isArray(supplementsDisponibles) ? supplementsDisponibles : []
+});
+
+
 
     await pack.save();
     res.status(201).json({ message: "Pack créé avec succès.", pack });
@@ -872,7 +893,7 @@ exports.updatePack = async (req, res) => {
     }
 
     // Tarifs détaillés
-    if (typeBien === "maison" && Array.isArray(tarifsParSurface)) {
+    if (typeBien !== "appartement" && Array.isArray(tarifsParSurface)) {
       pack.tarifsParSurface = tarifsParSurface.map(t => ({
         _id: t._id || undefined,
         surfaceMin: Number(t.surfaceMin ?? 0),

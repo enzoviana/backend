@@ -537,6 +537,17 @@ if (data.type === "pack_complet" && data.pack) {
     }
   }
 
+  // 🚧 AUTRES BIENS → tarifsParSurface (valeur unique)
+  else if (data.bien !== "maison" && data.bien !== "appartement" && pack.tarifsParSurface?.length) {
+    let valeur = parseInt(data.surfaceMaison || data.surfaceAppartement || data.surface || 0, 10); // la valeur que l'utilisateur a envoyée
+    if (!isNaN(valeur)) {
+      const tpsTrouve = pack.tarifsParSurface.find(tps => valeur >= tps.surfaceMin && valeur <= tps.surfaceMax);
+      if (tpsTrouve) {
+        tarifTrouve = tpsTrouve.tarifs?.[secteur] ?? tpsTrouve.tarifs?.autre ?? 0;
+      }
+    }
+  }
+
   totalAvantRemise = Number(tarifTrouve) || 0;
 }
 
@@ -646,6 +657,14 @@ const intervalleTrouve = d.tarifsParSurface.find(tps => {
       }
     }
 
+     else if (data.bien !== "maison" && data.bien !== "appartement" && d.tarifsParSurface?.length) {
+      const valeur = parseInt(data.surfaceMaison || data.surfaceAppartement || data.surface || 0, 10);
+      if (!isNaN(valeur)) {
+        const tpsTrouve = d.tarifsParSurface.find(tps => valeur >= tps.surfaceMin && valeur <= tps.surfaceMax);
+        if (tpsTrouve) tarifTrouve = tpsTrouve.tarifs?.[secteur] ?? tpsTrouve.tarifs?.autre ?? 0;
+      }
+    }
+
     // ❗ CAS : pas de tarifs (ERP, Termites, etc)
     else {
       console.log("⚠️ Aucun tableau de tarifs — on vérifie prixTTC/prixHT");
@@ -703,7 +722,7 @@ let totalLignes = 0;
 if (Array.isArray(data.lignes) && data.lignes.length) {
   lignes = data.lignes.map(l => {
     const quantite = Number(l.quantite) || 1;
-    const tarifUnitaire = Number(l.prixHT) || 0; // ou prixTTC si tu veux
+    const tarifUnitaire = Number(l.prixHT * 1.2) || 0; // ou prixTTC si tu veux
     const totalLigne = quantite * tarifUnitaire;
     totalLignes += totalLigne;
 
@@ -1354,6 +1373,7 @@ exports.uploadSignature = async (req, res) => {
 // 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
+// 🔹 Accéder aux devis via clé
 exports.getDevisViaLien = async (req, res) => {
   try {
     const { key } = req.params;
@@ -1384,7 +1404,7 @@ exports.getDevisViaLien = async (req, res) => {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-    const surfaceStr = devis.surfaceMaison || devis.surfaceAppartement || "0";
+    const surfaceStr = devis.surfaceMaison || devis.surfaceAppartement || devis.surface || "0";
     const surface = parseInt(surfaceStr.split(" ")[0], 10) || 0;
 
     // Helper pour normaliser le type appartement
@@ -1403,26 +1423,36 @@ exports.getDevisViaLien = async (req, res) => {
 
     const typeAppart = devis.bien === "appartement" ? getTypeAppartement(devis.surfaceAppartement) : null;
 
+    // Helper pour calculer le tarif TTC selon type de bien
+    const calculerTarif = (item) => {
+      let tarifTTC = 0;
+
+      if (devis.bien === "maison" && item.tarifsParSurface?.length) {
+        const tranche = item.tarifsParSurface.find(t => surface >= t.surfaceMin && surface <= t.surfaceMax);
+        tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+
+      } else if (devis.bien === "appartement" && item.tarifsParAppartement?.length) {
+        const tranche = item.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+        tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+
+      } else if (item.tarifsParSurface?.length) {
+        // ✅ Autres types (terrain, local…) : rechercher dans tarifsParSurface
+        const tranche = item.tarifsParSurface.find(t => surface >= t.surfaceMin && surface <= t.surfaceMax);
+        tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+      } else {
+        // Cas fallback : utiliser prixTTC ou prixHT
+        tarifTTC = Number(item.prixTTC || item.prixHT || 0);
+      }
+
+      return +(tarifTTC / 1.2).toFixed(2); // Retour HT
+    };
+
     // -------- DIAGNOSTICS SELECTIONNÉS --------
     const diagnostics = (devis.diagnosticsSelectionnes || [])
       .filter(Boolean)
       .map(diag => {
-        let prixTTC = 0;
-
-        if (devis.bien === "maison" && diag.tarifsParSurface?.length) {
-          const tranche = diag.tarifsParSurface.find(
-            t => surface >= t.surfaceMin && surface <= t.surfaceMax
-          );
-          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
-
-        } else if (devis.bien === "appartement" && diag.tarifsParAppartement?.length) {
-          const tranche = diag.tarifsParAppartement.find(
-            t => t.typeAppartement === typeAppart
-          );
-          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
-        }
-
-        const prixHT = +(prixTTC / 1.2).toFixed(2);
+        const prixHT = calculerTarif(diag);
+        const prixTTC = +(prixHT * 1.2).toFixed(2);
         return { nom: diag.nom, prixHT, prixTTC };
       });
 
@@ -1430,22 +1460,8 @@ exports.getDevisViaLien = async (req, res) => {
     if (devis.chauffageGaz) {
       const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
       if (diagGaz) {
-        let prixTTC = 0;
-
-        if (devis.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-          const tranche = diagGaz.tarifsParSurface.find(
-            t => surface >= t.surfaceMin && surface <= t.surfaceMax
-          );
-          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
-
-        } else if (devis.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
-          const tranche = diagGaz.tarifsParAppartement.find(
-            t => t.typeAppartement === typeAppart
-          );
-          prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
-        }
-
-        const prixHT = +(prixTTC / 1.2).toFixed(2);
+        const prixHT = calculerTarif(diagGaz);
+        const prixTTC = +(prixHT * 1.2).toFixed(2);
         diagnostics.push({ nom: diagGaz.nom, prixHT, prixTTC });
       }
     }
@@ -1469,42 +1485,13 @@ exports.getDevisViaLien = async (req, res) => {
     // -------- PACK --------
     let pack = null;
     if (devis.pack) {
-      let prixTTC = 0;
-
-      if (devis.bien === "maison" && devis.pack.tarifsParSurface?.length) {
-        const tranche = devis.pack.tarifsParSurface.find(
-          t => surface >= t.surfaceMin && surface <= t.surfaceMax
-        );
-        prixTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
-      }
-
-      if (devis.bien === "appartement" && devis.pack.tarifsParAppartement?.length) {
-        const appart = devis.pack.tarifsParAppartement.find(
-          t => t.typeAppartement === typeAppart
-        );
-        prixTTC = appart?.tarifs?.[secteur] ?? appart?.tarifs?.autre ?? 0;
-      }
-
-      const prixHT = +(prixTTC / 1.2).toFixed(2);
+      let prixHT = calculerTarif(devis.pack);
+      const prixTTC = +(prixHT * 1.2).toFixed(2);
 
       const diagnosticsPack = (devis.pack.diagnostics || []).map(diag => {
-        let diagPrixTTC = 0;
-
-        if (devis.bien === "maison" && diag.tarifsParSurface?.length) {
-          const t = diag.tarifsParSurface.find(
-            tr => surface >= tr.surfaceMin && surface <= tr.surfaceMax
-          );
-          diagPrixTTC = t?.tarifs?.[secteur] ?? t?.tarifs?.autre ?? 0;
-
-        } else if (devis.bien === "appartement" && diag.tarifsParAppartement?.length) {
-          const t = diag.tarifsParAppartement.find(
-            ta => ta.typeAppartement === typeAppart
-          );
-          diagPrixTTC = t?.tarifs?.[secteur] ?? t?.tarifs?.autre ?? 0;
-        }
-
-        const diagPrixHT = +(diagPrixTTC / 1.2).toFixed(2);
-        return { nom: diag.nom, prixHT: diagPrixHT, prixTTC: diagPrixTTC };
+        const diagHT = calculerTarif(diag);
+        const diagTTC = +(diagHT * 1.2).toFixed(2);
+        return { nom: diag.nom, prixHT: diagHT, prixTTC: diagTTC };
       });
 
       pack = { nom: devis.pack.nom, prixHT, prixTTC, diagnosticsPack };
@@ -1525,6 +1512,7 @@ exports.getDevisViaLien = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 
 
