@@ -61,11 +61,12 @@ router.post('/supplement/filter', agencyAuth , agencyController.filterSupplement
 
 router.get("/clients", agencyAuth, clientController.getClients);
 router.delete("/clients/:id", agencyAuth, clientController.deleteClient);
-router.put("/clients/:id/email", agencyAuth, clientController.updateClientEmail);
+router.put("/clients/:id", agencyAuth, clientController.updateClient);
 
 
 // ---------------------- Mission ----------------------
 router.get("/mission", agencyAuth, missionController.getOrdresMission);
+router.put("/mission/:id/modifier-infos", agencyAuth, missionController.updateMissionInfos);
 // ---------------------- Mission ----------------------
 // Partager un ordre de mission avec un employé ou client
 router.post(

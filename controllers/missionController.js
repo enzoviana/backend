@@ -84,6 +84,94 @@ exports.getOrdresMission = async (req, res) => {
   }
 };
 
+exports.updateMissionInfos = async (req, res) => {
+  try {
+    const missionId = req.params.id;
+    const { client, bien } = req.body;
+
+    console.log("🔧 Update mission infos :", { missionId, client, bien });
+
+    // --- Vérifier l'ordre de mission ---
+    const mission = await OrdreMission.findById(missionId);
+    if (!mission) {
+      return res.status(404).json({ message: "Ordre de mission introuvable." });
+    }
+
+    // --- Charger le devis associé ---
+    const devis = await Devis.findById(mission.devisId);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    // --- 1) Mise à jour du VRAI CLIENT dans la collection Client ---
+    if (mission.clientId && client) {
+      await Client.findByIdAndUpdate(
+        mission.clientId,
+        {
+          $set: {
+            nom: client.nom,
+            prenom: client.prenom,
+            email: client.email,
+            telephone: client.tel,
+            adresse: client.adresse,
+            ville: client.ville,
+            codePostal: client.codePostal
+          }
+        },
+        { new: true }
+      );
+    }
+
+    // --- 2) Mise à jour du CLIENT dans le devis ---
+    if (client) {
+      devis.client.nom = client.nom || devis.client.nom;
+      devis.client.prenom = client.prenom || devis.client.prenom;
+      devis.client.email = client.email || devis.client.email;
+      devis.client.tel = client.tel || devis.client.tel;
+      devis.client.adresse = client.adresse || devis.client.adresse;
+      devis.client.ville = client.ville || devis.client.ville;
+      devis.client.codePostal = client.codePostal || devis.client.codePostal;
+    }
+
+    // --- 3) Mise à jour des infos du BIEN ---
+    if (bien) {
+      if (bien.bien) devis.bien = bien.bien;
+      if (bien.anneeConstruction) devis.anneeConstruction = bien.anneeConstruction;
+
+      // Surface selon type
+      if (devis.bien === "maison") {
+        devis.surfaceMaison = bien.surface || devis.surfaceMaison;
+      } else {
+        devis.surfaceAppartement = bien.surface || devis.surfaceAppartement;
+      }
+
+      // Adresse du bien
+      devis.adresseBien.adresse = bien.adresse || devis.adresseBien.adresse;
+      devis.adresseBien.ville = bien.ville || devis.adresseBien.ville;
+      devis.adresseBien.codePostal = bien.codePostal || devis.adresseBien.codePostal;
+      devis.adresseBien.etage = bien.etage || devis.adresseBien.etage;
+      devis.adresseBien.complement = bien.complement || devis.adresseBien.complement;
+      devis.adresseBien.parcelle = bien.parcelle || devis.adresseBien.parcelle;
+
+       if (bien.note !== undefined) {
+    devis.note = bien.note;
+  }
+    }
+
+    await devis.save();
+
+    return res.status(200).json({
+      message: "✔️ Client + Bien mis à jour avec succès.",
+      devis
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur updateMissionInfos :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la mise à jour." });
+  }
+};
+
+
 /**
  * Supprimer un Ordre de Mission
  */

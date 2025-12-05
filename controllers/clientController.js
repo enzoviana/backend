@@ -91,16 +91,12 @@ exports.deleteClient = async (req, res) => {
   }
 };
 
-exports.updateClientEmail = async (req, res) => {
+exports.updateClient = async (req, res) => {
   try {
     const clientId = req.params.id;
-    const { email } = req.body;
+    const data = req.body;
 
-    console.log("✏️ updateClientEmail appelé :", clientId, email);
-
-    if (!email) {
-      return res.status(400).json({ message: "L'email est requis." });
-    }
+    console.log("✏️ updateClient appelé :", clientId, data);
 
     // 🔍 Vérifier que le client existe
     const client = await Client.findById(clientId);
@@ -108,32 +104,38 @@ exports.updateClientEmail = async (req, res) => {
       return res.status(404).json({ message: "Client introuvable." });
     }
 
-    // 📌 Vérifier si un autre client utilise déjà cet email dans la même agence
-    const duplicate = await Client.findOne({
-      _id: { $ne: clientId },
-      email: email,
-      agences: { $in: client.agences },
-    });
-
-    if (duplicate) {
-      return res.status(400).json({
-        message: "❌ Cet email est déjà utilisé par un autre client de cette agence.",
+    // 📌 S'il y a un email envoyé → vérifier les doublons
+    if (data.email) {
+      const duplicate = await Client.findOne({
+        _id: { $ne: clientId },
+        email: data.email,
+        agences: { $in: client.agences },
       });
+
+      if (duplicate) {
+        return res.status(400).json({
+          message: "❌ Cet email est déjà utilisé par un autre client de cette agence.",
+        });
+      }
     }
 
-    // 📩 Mettre à jour l'email
-    client.email = email;
+    // 🔄 Mettre à jour dynamiquement les champs envoyés
+    Object.keys(data).forEach((key) => {
+      client[key] = data[key];
+    });
+
+    // 💾 Sauvegarde
     await client.save();
 
     return res.status(200).json({
-      message: "✏️ Email du client mis à jour avec succès.",
+      message: "✏️ Client mis à jour avec succès.",
       client,
     });
 
   } catch (error) {
-    console.error("Erreur updateClientEmail :", error);
+    console.error("Erreur updateClient :", error);
     return res.status(500).json({
-      message: "Erreur serveur lors de la mise à jour de l'email.",
+      message: "Erreur serveur lors de la mise à jour du client.",
     });
   }
 };

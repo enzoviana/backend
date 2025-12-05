@@ -77,7 +77,7 @@ router.delete('/supplement/:id', authMiddleware, adminController.deleteSupplemen
 
 router.get("/clients", authMiddleware, clientController.getClients);
 router.delete("/clients/:id", authMiddleware, clientController.deleteClient);
-router.put("/clients/:id/email", authMiddleware, clientController.updateClientEmail);
+router.put("/clients/:id", authMiddleware, clientController.updateClient);
 
 
 // ---------------------- Ordre Mission ----------------------
@@ -86,6 +86,7 @@ router.get("/mission", authMiddleware, missionController.getOrdresMission);
 router.put("/mission/:ordreId/statut", authMiddleware, missionController.updateStatutOrdreMission);
 router.get("/mission/download/:fileId", authMiddleware, missionController.downloadFile);
 router.delete("/mission/:id", authMiddleware, missionController.deleteOrdreMission);
+router.put("/mission/:id/modifier-infos", authMiddleware, missionController.updateMissionInfos);
 
 router.get('/cagnotte', authMiddleware, agencyController.getCagnotteEtReduction);
 

@@ -886,6 +886,8 @@ const montantTTC = totalFinal;
 
 const shareAgencyId = data.shareAgency && data.shareAgency !== "" ? data.shareAgency : null;
 
+console.log("==== Client avant création devis ====", client);
+
 
     // 🧾 Création du devis
     const devis = new Devis({
