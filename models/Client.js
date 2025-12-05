@@ -23,7 +23,5 @@ const clientSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// Optionnel : index composé pour éviter doublon d’email dans la même agence
-clientSchema.index({ email: 1, agences: 1 }, { unique: true });
 
 module.exports = mongoose.model("Client", clientSchema);
