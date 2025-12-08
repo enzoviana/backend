@@ -117,6 +117,8 @@ surfaceMaison: {
     ref: "Agence",
     required: false,
   },
+  consentementFile: { type: Boolean, default: false },
+
 
   shareAgency : {
     type: mongoose.Schema.Types.ObjectId,

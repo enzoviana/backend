@@ -15,6 +15,59 @@ const Employe = require("../models/Employe")
 const cloudinary = require("../config/cloudinary"); // ton fichier cloudinary.js 
 const OpenAI = require("openai");
 
+const dns = require("dns");
+const net = require("net");
+
+async function smtpVerifyEmail(email) {
+  const domain = email.split("@")[1];
+  if (!domain) return false;
+
+  try {
+    const mxRecords = await dns.promises.resolveMx(domain);
+    if (!mxRecords || mxRecords.length === 0) return false;
+
+    // Tri : on prend le serveur MX avec la priorité la plus basse
+    const mx = mxRecords.sort((a, b) => a.priority - b.priority)[0];
+
+    return await new Promise((resolve) => {
+      const socket = net.createConnection(25, mx.exchange);
+
+      socket.setTimeout(5000);
+
+      socket.on("error", () => resolve(false));
+      socket.on("timeout", () => {
+        socket.destroy();
+        resolve(false);
+      });
+
+      socket.on("connect", () => {
+        socket.write("HELO dimotec.fr\r\n");
+        socket.write("MAIL FROM:<verification@dimotec.fr>\r\n");
+        socket.write(`RCPT TO:<${email}>\r\n`);
+      });
+
+      socket.on("data", (data) => {
+        const msg = data.toString();
+
+        if (/250 2.1.5/.test(msg)) {
+          socket.end();
+          resolve(true); // ✔️ Email existe
+        }
+
+        if (/550/.test(msg) || /551/.test(msg) || /553/.test(msg)) {
+          socket.end();
+          resolve(false); // ❌ Email invalide
+        }
+      });
+    });
+  } catch (err) {
+    return false;
+  }
+}
+
+
+
+
 /**
  * Récupérer tous les devis de l'utilisateur connecté
  * req.admin ou req.agence doit être défini par le middleware
@@ -1032,34 +1085,30 @@ await sendEmail({
 // 💌 Envoi de l’e-mail si le payeur est le client
 if (data.payer === "client") {
   const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
-  try {
-    await sendEmail({
-      to: client.email,
-      subject: `Votre devis ${devis.numero} est prêt`,
-      template: "devis.html",
-      variables: {
-        nomClient: `${client.prenom} ${client.nom}`,
-        lienDevis: lienDevis,
-        "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
-        "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
-      },
-    });
-    devis.emailNonDelivre = false; // Email bien envoyé
-    devis.statut = "Envoyé";       // statut normal
-    await devis.save();
-  } catch (err) {
-    console.error(`Erreur envoi email au client ${client.email}:`, err.message);
 
-    // Marquer le devis comme email non délivré et stocker l'email pour correction
+  // 🔍 VALIDATION SMTP AVANT ENVOI
+  console.log("📡 Vérification SMTP :", client.email);
+  const emailValide = await smtpVerifyEmail(client.email);
+
+  if (!emailValide) {
+    console.log("❌ Validation SMTP : adresse inexistante !");
+    
+    // ⚠️ Marquer le devis comme email non délivré
     devis.emailNonDelivre = true;
     devis.emailClientErrone = client.email;
-    devis.statut = "Email_Errone"; // ✅ statut email erroné
+    devis.statut = "Email_Errone";
     await devis.save();
+
+    console.log("⚠️ Devis marqué comme email non délivré.");
 
     // 🔔 Prévenir l'agence et Dimotec
     const agence = await Agence.findById(devis.agenceId);
-    const agenceEmail = agence?.emails_contact?.[0]?.email;
-    const dimotecEmail = "dimotec34@gmail.com"; // ou autre email Dimotec
+    const agenceEmail =
+      Array.isArray(agence?.emails_contact) && agence.emails_contact.length > 0
+        ? agence.emails_contact[0].email
+        : null;
+
+    const dimotecEmail = "dimotec34@gmail.com";
 
     const alertVariables = {
       clientNom: `${client.prenom} ${client.nom}`,
@@ -1073,15 +1122,92 @@ if (data.payer === "client") {
     destinataires.push(dimotecEmail);
 
     for (let dest of destinataires) {
+      console.log("📤 Envoi alerte à :", dest);
+
       await sendEmail({
         to: dest,
         subject: `⚠️ Problème d'envoi du devis ${devis.numero}`,
-        template: "alerteEmailClient.html", // un template simple avec les infos
+        template: "alerteEmailClient.html",
         variables: alertVariables,
       });
+
+      console.log("✅ Alerte envoyée à :", dest);
+    }
+
+    // ⚠️ On retourne quand même la réponse au front avec le statut Email_Errone
+    return res.status(201).json({
+      message: "✅ Devis créé mais l’e-mail client est invalide ou non délivré.",
+      devis,
+    });
+  }
+
+  // ✅ Si l’email est valide, envoi normal
+  try {
+    console.log("📤 Envoi e-mail au client :", client.email);
+
+    await sendEmail({
+      to: client.email,
+      subject: `Votre devis ${devis.numero} est prêt`,
+      template: "devis.html",
+      variables: {
+        nomClient: `${client.prenom} ${client.nom}`,
+        lienDevis: lienDevis,
+        "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
+        "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
+      },
+    });
+
+    console.log("✅ Email envoyé avec succès au client :", client.email);
+
+    devis.emailNonDelivre = false;
+    devis.statut = "Envoyé";
+    await devis.save();
+
+  } catch (err) {
+    console.error(`❌ Erreur envoi e-mail au client ${client.email}:`, err.message);
+
+    devis.emailNonDelivre = true;
+    devis.emailClientErrone = client.email;
+    devis.statut = "Email_Errone";
+    await devis.save();
+
+    console.log("⚠️ Devis marqué comme email non délivré.");
+
+    // 🔔 Prévenir l'agence et Dimotec
+    const agence = await Agence.findById(devis.agenceId);
+    const agenceEmail =
+      Array.isArray(agence?.emails_contact) && agence.emails_contact.length > 0
+        ? agence.emails_contact[0].email
+        : null;
+    const dimotecEmail = "dimotec34@gmail.com";
+
+    const alertVariables = {
+      clientNom: `${client.prenom} ${client.nom}`,
+      emailClient: client.email,
+      devisNumero: devis.numero,
+      agenceNom: agence?.nom_commercial || "Agence",
+    };
+
+    const destinataires = [];
+    if (agenceEmail) destinataires.push(agenceEmail);
+    destinataires.push(dimotecEmail);
+
+    for (let dest of destinataires) {
+      console.log("📤 Envoi alerte à :", dest);
+
+      await sendEmail({
+        to: dest,
+        subject: `⚠️ Problème d'envoi du devis ${devis.numero}`,
+        template: "alerteEmailClient.html",
+        variables: alertVariables,
+      });
+
+      console.log("✅ Alerte envoyée à :", dest);
     }
   }
 }
+
+
 
 
 

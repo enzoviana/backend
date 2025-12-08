@@ -271,6 +271,55 @@ exports.downloadFile = async (req, res) => {
   }
 };
 
+/**
+ * 📥 Télécharger le PDF de consentement lié à une mission
+ * Route : GET /api/mission/download-consent/:devisId
+ */
+exports.downloadConsentPdf = async (req, res) => {
+  try {
+    const { devisId } = req.params;
+    console.log("📥 Requête downloadConsentPdf pour devisId :", devisId);
+
+    // Cherche l'ordre de mission associé au devis
+    const mission = await OrdreMission.findOne({ devisId });
+    if (!mission || !mission.consentementPdf) {
+      return res.status(404).json({ message: "PDF de consentement introuvable." });
+    }
+
+    const fichier = mission.consentementPdf;
+    console.log("📂 Consentement trouvé :", fichier.nom, "→", fichier.url);
+
+    // Récupère le public_id depuis l'URL si non présent
+    let publicId;
+    if (fichier.public_id) {
+      publicId = fichier.public_id;
+    } else {
+      const parts = fichier.url.split('/upload/')[1]; 
+      publicId = parts.replace(/^v\d+\//, '');
+    }
+
+    // Type de resource pour Cloudinary
+    const ext = path.extname(fichier.nom).toLowerCase();
+    const resourceType = ext === '.pdf' ? 'raw' : 'image';
+
+    // Génère un lien signé Cloudinary valable 10 minutes
+    const downloadUrl = cloudinary.url(publicId, {
+      resource_type: resourceType,
+      sign_url: true,
+      expires_at: Math.floor(Date.now() / 1000) + 60 * 10
+    });
+
+    console.log("➡️ Lien signé Cloudinary :", downloadUrl);
+
+    // Redirection vers le lien signé pour téléchargement
+    res.redirect(downloadUrl);
+
+  } catch (error) {
+    console.error("❌ Erreur téléchargement PDF consentement :", error);
+    res.status(500).json({ message: "Erreur serveur lors du téléchargement du PDF de consentement." });
+  }
+};
+
 
 
 /**
@@ -311,6 +360,55 @@ const uploadedFiles = req.files.map(file => ({
     }
   }
 ];
+
+
+/**
+ * 📤 Upload du PDF de consentement
+ * Route : POST /api/client/upload-consent/:accesClientKey
+ */
+exports.uploadConsentPdfByClientKey = [
+  upload.single('consentementPdf'),
+  async (req, res) => {
+    try {
+      const { accesClientKey } = req.params;
+
+      const devis = await Devis.findOne({ accesClientKey });
+      if (!devis) {
+        return res.status(404).json({ message: "Clé d'accès invalide ou expirée." });
+      }
+
+      const mission = await OrdreMission.findOne({ devisId: devis._id });
+      if (!mission) {
+        return res.status(404).json({ message: "Aucun ordre de mission associé à ce devis." });
+      }
+
+      // 📄 Enregistrement PDF dans Mission
+      mission.consentementPdf = {
+        nom: req.file.originalname,
+        url: req.file.path,
+        public_id: req.file.filename || req.file.public_id,
+        dateDepot: new Date(),
+      };
+
+      await mission.save();
+
+      // 🔥 NOUVEAUTÉ : mise à jour du devis
+      devis.consentementFile = true;   // <-- tu peux aussi appeler ça consentementPdf selon ton modèle
+      await devis.save();
+
+      res.status(200).json({
+        message: "PDF de consentement uploadé avec succès.",
+        fichier: mission.consentementPdf,
+        devis
+      });
+
+    } catch (error) {
+      console.error("❌ ERREUR UPLOAD PDF CONSENTEMENT :", error);
+      res.status(500).json({ message: error.message || "Erreur serveur lors du dépôt du PDF de consentement." });
+    }
+  }
+];
+
 
 
 /**

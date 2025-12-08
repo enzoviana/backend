@@ -23,6 +23,12 @@ creePar: {
   partageAvec: [
     { type: mongoose.Schema.Types.ObjectId, ref: 'Employe' }
   ],
+  consentementPdf: {
+  nom: String,      // Nom du fichier, ex: Consentement.pdf
+  url: String,      // Chemin ou URL du fichier stocké
+  public_id: String, 
+  dateDepot: { type: Date, default: Date.now }
+},
 
   // ✅ Date et heure du RDV
   rdvDate: { type: Date, default: null },

@@ -13,8 +13,12 @@ router.post("/devis/:key/:devisId/accepter", devisController.accepterDevisViaLie
 router.post("/devis/:key/:devisId/refuser", devisController.refuserDevisViaLien);
 
 // Upload fichiers côté client
-router.post("/upload/:accesClientKey", missionController.uploadFileByClientKey);
-
+router.post("/upload/:accesClientKey", missionController.uploadFileByClientKey); 
+// 🚀 Upload PDF de consentement (single file)
+router.post(
+  "/upload-consent/:accesClientKey",
+  missionController.uploadConsentPdfByClientKey
+);
 // Upload PDF généré côté client pour un devis
 router.post(
   "/devis/:devisId/upload-pdf",

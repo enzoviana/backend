@@ -86,6 +86,8 @@ router.put("/clients/:id", authMiddleware, clientController.updateClient);
 router.get("/mission", authMiddleware, missionController.getOrdresMission);
 router.put("/mission/:ordreId/statut", authMiddleware, missionController.updateStatutOrdreMission);
 router.get("/mission/download/:fileId", authMiddleware, missionController.downloadFile);
+router.get("/mission/downloadConsentPdf/:devisId", authMiddleware, missionController.downloadConsentPdf);
+
 router.delete("/mission/:id", authMiddleware, missionController.deleteOrdreMission);
 router.put("/mission/:id/modifier-infos", authMiddleware, missionController.updateMissionInfos);
 

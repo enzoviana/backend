@@ -42,6 +42,7 @@ router.post(
 );
 
 
+router.get("/mission/downloadConsentPdf/:devisId", agencyAuth, missionController.downloadConsentPdf);
 
 // ---------------------- CONFIGURATION ----------------------
 // Diagnostics
