@@ -68,6 +68,8 @@ router.put("/clients/:id", agencyAuth, clientController.updateClient);
 
 // ---------------------- Mission ----------------------
 router.get("/mission", agencyAuth, missionController.getOrdresMission);
+router.get("/mission/:id", agencyAuth, missionController.getOrdreMissionById);
+
 router.put("/mission/:id/modifier-infos", agencyAuth, missionController.updateMissionInfos);
 // ---------------------- Mission ----------------------
 // Partager un ordre de mission avec un employé ou client
@@ -88,6 +90,10 @@ router.get('/me/cagnotte', agencyAuth, agencyController.getCagnotteEtReduction);
 
 router.get('/me', agencyAuth, agencyController.getInfosAgence);
 router.put('/me', agencyAuth, agencyController.updateInfosAgence);
+// 🔹 Nouvelle route pour mettre à jour uniquement le logo
+router.put(
+  '/me/logo', agencyAuth, upload.single('logo'), agencyController.updateLogoAgence
+);
 
 
 // ---------------------- Dashboard ----------------------

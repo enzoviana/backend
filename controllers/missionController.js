@@ -84,6 +84,84 @@ exports.getOrdresMission = async (req, res) => {
   }
 };
 
+/**
+ * 📋 Récupérer un seul ordre de mission par ID
+ */
+exports.getOrdreMissionById = async (req, res) => {
+  try {
+    const ordreId = req.params.id;
+
+    let query = { _id: ordreId };
+
+    // 🔐 Filtrage selon le rôle
+    if (req.user.role === "admin") {
+      // Admin → peut tout voir, pas besoin d’ajouter de condition
+    }
+
+    else if (req.role === "agence") {
+      // Agence → uniquement ses ordres
+      query.agenceId = req.agence._id;
+    }
+
+    else if (req.role === "employe") {
+      // Employé → doit être créateur OU dans partageAvec
+      const empId = req.user._id.toString();
+
+      query.$or = [
+        { "creePar.type": "Employe", "creePar.id": empId },
+        { partageAvec: empId }
+      ];
+    }
+
+    else {
+      return res.status(401).json({ message: "Utilisateur non authentifié." });
+    }
+
+    // 🔎 Recherche + populate
+    const ordre = await OrdreMission.findOne(query)
+      .populate({
+        path: "devisId",
+        populate: [
+          {
+            path: "pack",
+            populate: [
+              { path: "obligatoireDansPacks", model: "Diagnostic" },
+              { path: "diagnostics", model: "Diagnostic" }
+            ]
+          },
+          { path: "diagnosticsSelectionnes", model: "Diagnostic" },
+          { path: "supplementsSelectionnes", model: "Supplement" },
+        ],
+      })
+      .populate("clientId")
+      .populate("agenceId")
+      .lean();
+
+    if (!ordre) {
+      return res.status(404).json({ message: "Ordre de mission introuvable ou accès refusé." });
+    }
+
+    // 🗂 Ajout du public_id aux fichiers
+    if (ordre.fichiersClient) {
+      ordre.fichiersClient = ordre.fichiersClient.map((fichier) => {
+        if (!fichier.public_id && fichier.url) {
+          let publicId = fichier.url.split("/upload/")[1];
+          publicId = publicId.replace(/^v\d+\//, "");
+          return { ...fichier, public_id: publicId };
+        }
+        return fichier;
+      });
+    }
+
+    res.json({ ordre });
+
+  } catch (error) {
+    console.error("❌ Erreur récupération ordre de mission :", error);
+    res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+
 exports.updateMissionInfos = async (req, res) => {
   try {
     const missionId = req.params.id;

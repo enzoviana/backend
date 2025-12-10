@@ -12,6 +12,12 @@ const cloudinary = require('../config/cloudinary');
 const sendEmail = require('../utils/sendEmails');
 const Employe = require('../models/Employe');
 
+// --- Normalisation d'un string ---
+const normalizeString = (str) =>
+  str?.toString().toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/\s+/g, " ").trim();
+
+
+
 /**
  * LOGIN AGENCE OU EMPLOYÉ
  */
@@ -464,6 +470,34 @@ exports.getInfosAgence = async (req, res) => {
   }
 };
 
+// agencyController.js
+exports.updateLogoAgence = async (req, res) => {
+  try {
+    const agenceId = req.agence?._id || req.user?.agenceId || req.params.id;
+    if (!agenceId) return res.status(400).json({ message: "Aucun identifiant d'agence fourni." });
+
+    if (!req.file) return res.status(400).json({ message: "Aucun fichier logo fourni." });
+
+    const resultLogo = await cloudinary.uploader.upload(req.file.path, {
+      folder: "dimotec/agences",
+      public_id: `logo_${agenceId}`,
+      overwrite: true
+    });
+
+    const updatedAgence = await Agence.findByIdAndUpdate(
+      agenceId,
+      { $set: { logo: resultLogo.secure_url } },
+      { new: true, select: "-admin.mot_de_passe -__v" }
+    );
+
+    if (!updatedAgence) return res.status(404).json({ message: "Agence introuvable." });
+
+    res.status(200).json({ message: "✅ Logo mis à jour avec succès", logo: updatedAgence.logo });
+  } catch (error) {
+    console.error("❌ Erreur lors de la mise à jour du logo :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la mise à jour du logo.", error: error.message });
+  }
+};
 
 
 // ✅ Mise à jour complète des infos de l'agence
@@ -642,6 +676,53 @@ exports.updateInfosEmploye = async (req, res) => {
     });
   }
 };
+
+
+exports.updatePhotoEmploye = async (req, res) => {
+  try {
+    console.log("🟢 Début updatePhotoEmploye");
+    const employeId = req.user?._id;
+    if (!employeId) {
+      console.log("❌ Aucun identifiant d'employé fourni");
+      return res.status(400).json({ message: "Aucun identifiant d'employé fourni." });
+    }
+
+    const employe = await Employe.findById(employeId);
+    if (!employe) {
+      console.log("❌ Employé introuvable pour l'ID :", employeId);
+      return res.status(404).json({ message: "Employé introuvable." });
+    }
+
+    if (!req.file) {
+      console.log("❌ Aucun fichier photo fourni");
+      return res.status(400).json({ message: "Aucun fichier photo fourni." });
+    }
+
+    // 🔹 Upload vers Cloudinary
+    const resultPhoto = await cloudinary.uploader.upload(req.file.path, {
+      folder: "dimotec/employes",
+      public_id: `photo_${employeId}`,
+      overwrite: true
+    });
+
+    employe.photo_profil = resultPhoto.secure_url;
+    await employe.save();
+
+    console.log("✅ Photo de l'employé mise à jour :", employe.photo_profil);
+    res.status(200).json({
+      message: "✅ Photo de profil mise à jour avec succès",
+      photo_profil: employe.photo_profil
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur lors de la mise à jour de la photo employé :", error);
+    res.status(500).json({
+      message: "Erreur serveur lors de la mise à jour de la photo.",
+      error: error.message
+    });
+  }
+};
+
 
 
 
