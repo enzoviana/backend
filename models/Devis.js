@@ -38,12 +38,11 @@ const devisSchema = new mongoose.Schema({
 ],
 
 
-  /* 🏠 Informations sur le bien concerné */
-  bien: {
-    type: String,
-    enum: ["maison", "appartement", "local commercial", "terrain"],
-    required: true,
-  },
+/* 🏠 Informations sur le bien concerné */
+bien: {
+  type: String,
+  required: true, // tu peux garder l'obligation ou l'enlever selon ton besoin
+},
   transaction: {
     type: String,
     enum: ["vente", "location", "autre"],
