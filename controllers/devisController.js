@@ -1083,65 +1083,14 @@ await sendEmail({
 
 
 // 💌 Envoi de l’e-mail si le payeur est le client
+// 💌 Envoi de l’e-mail si le payeur est le client
 if (data.payer === "client") {
   const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
 
-  // 🔍 VALIDATION SMTP AVANT ENVOI
-  console.log("📡 Vérification SMTP :", client.email);
-  const emailValide = await smtpVerifyEmail(client.email);
+  // 🟡 D'abord on met un statut temporaire
+  devis.statut = "Envoi_En_Cours";
+  await devis.save();
 
-  if (!emailValide) {
-    console.log("❌ Validation SMTP : adresse inexistante !");
-    
-    // ⚠️ Marquer le devis comme email non délivré
-    devis.emailNonDelivre = true;
-    devis.emailClientErrone = client.email;
-    devis.statut = "Email_Errone";
-    await devis.save();
-
-    console.log("⚠️ Devis marqué comme email non délivré.");
-
-    // 🔔 Prévenir l'agence et Dimotec
-    const agence = await Agence.findById(devis.agenceId);
-    const agenceEmail =
-      Array.isArray(agence?.emails_contact) && agence.emails_contact.length > 0
-        ? agence.emails_contact[0].email
-        : null;
-
-    const dimotecEmail = "dimotec34@gmail.com";
-
-    const alertVariables = {
-      clientNom: `${client.prenom} ${client.nom}`,
-      emailClient: client.email,
-      devisNumero: devis.numero,
-      agenceNom: agence?.nom_commercial || "Agence",
-    };
-
-    const destinataires = [];
-    if (agenceEmail) destinataires.push(agenceEmail);
-    destinataires.push(dimotecEmail);
-
-    for (let dest of destinataires) {
-      console.log("📤 Envoi alerte à :", dest);
-
-      await sendEmail({
-        to: dest,
-        subject: `⚠️ Problème d'envoi du devis ${devis.numero}`,
-        template: "alerteEmailClient.html",
-        variables: alertVariables,
-      });
-
-      console.log("✅ Alerte envoyée à :", dest);
-    }
-
-    // ⚠️ On retourne quand même la réponse au front avec le statut Email_Errone
-    return res.status(201).json({
-      message: "✅ Devis créé mais l’e-mail client est invalide ou non délivré.",
-      devis,
-    });
-  }
-
-  // ✅ Si l’email est valide, envoi normal
   try {
     console.log("📤 Envoi e-mail au client :", client.email);
 
@@ -1151,7 +1100,7 @@ if (data.payer === "client") {
       template: "devis.html",
       variables: {
         nomClient: `${client.prenom} ${client.nom}`,
-        lienDevis: lienDevis,
+        lienDevis,
         "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
         "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
       },
@@ -1166,6 +1115,7 @@ if (data.payer === "client") {
   } catch (err) {
     console.error(`❌ Erreur envoi e-mail au client ${client.email}:`, err.message);
 
+    // ❗ Ici : email invalide ou boîte pleine OU serveur distant qui rejette
     devis.emailNonDelivre = true;
     devis.emailClientErrone = client.email;
     devis.statut = "Email_Errone";
@@ -1179,6 +1129,7 @@ if (data.payer === "client") {
       Array.isArray(agence?.emails_contact) && agence.emails_contact.length > 0
         ? agence.emails_contact[0].email
         : null;
+
     const dimotecEmail = "dimotec34@gmail.com";
 
     const alertVariables = {
@@ -1206,6 +1157,7 @@ if (data.payer === "client") {
     }
   }
 }
+
 
 
 

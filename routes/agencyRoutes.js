@@ -108,10 +108,11 @@ router.get('/employes', agencyAuth, agencyController.getEmployes);           // 
 
 // Mettre à jour ses infos (photo URL ou fichier)
 router.put(
-  '/employe/me',
+  '/employe/me/photo',
   agencyAuth,
-  upload.single('photo_profil'), // Multer gère le fichier optionnel
-  agencyController.updateInfosEmploye
+  upload.single('photo_profil'),
+  agencyController.updatePhotoEmploye
 );
+
 
 module.exports = router;

@@ -143,7 +143,7 @@ surfaceMaison: {
   numeroAdeme: { type: String },
   statut: {
     type: String,
-    enum: ["Brouillon", "Envoyé", "Accepté", "Refusé", "Email_Errone"],
+    enum: ["Brouillon", "Envoyé", "Accepté", "Refusé", "Email_Errone", "Envoi_En_Cours"],
     default: "Envoyé",
   },
   derniereRelance: { type: Date },
