@@ -1185,14 +1185,26 @@ exports.corrigerEmailDevis = async (req, res) => {
   const devis = await Devis.findById(devisId);
   if (!devis) return res.status(404).json({ message: "Devis introuvable." });
 
-  // Mettre à jour l'email et corriger le statut
+  // Mettre à jour email dans le devis
   devis.client.email = nouvelEmail;
   devis.emailNonDelivre = false;
-  devis.statut = "Envoyé"; // <-- mettre le statut à "Envoyé"
-  await devis.save();       // <-- sauvegarder avant l'envoi
+  devis.statut = "Envoyé";
+
+  // 📌 Corriger aussi le vrai client en BDD
+  const client = await Client.findOne({
+    nom: devis.client.nom,
+    prenom: devis.client.prenom,
+    telephone: devis.client.tel || devis.client.telephone
+  });
+
+  if (client) {
+    client.email = nouvelEmail;
+    await client.save();
+  }
+
+  await devis.save();
 
   try {
-    // Réessayer l'envoi
     await sendEmail({
       to: nouvelEmail,
       subject: `Votre devis ${devis.numero} est prêt`,
@@ -1205,13 +1217,13 @@ exports.corrigerEmailDevis = async (req, res) => {
       },
     });
 
-    // renvoyer l'objet complet pour que le front puisse mettre à jour le tableau
     return res.status(200).json({ message: "Email corrigé et envoyé avec succès.", devis });
   } catch (err) {
     console.error("Erreur renvoi email après correction :", err.message);
     return res.status(500).json({ message: "Impossible d'envoyer l'email après correction." });
   }
 };
+
 
 
 
@@ -1360,7 +1372,7 @@ await sendEmail({
 });
 
     return res.status(200).json({
-      message: "✅ Devis accepté, facture & ordre de mission créés, mails envoyés, cagnotte mise à jour.",
+      message: "Devis accepté, un Ordre de mission a été communiqué à votre diagnostiqueur pour  intervention",
       devis,
       ordre,
     });
