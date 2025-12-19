@@ -8,6 +8,8 @@ const devisSchema = new mongoose.Schema({
     unique: true,
   },
 
+  raisonRefus: String,
+
   /* 👤 Informations du client */
   client: {
     nom: { type: String, required: true },

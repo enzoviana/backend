@@ -1663,16 +1663,68 @@ exports.deleteDevis = async (req, res) => {
 exports.refuserDevisViaLien = async (req, res) => {
   try {
     const { key, devisId } = req.params;
+    const { reason } = req.body; // 🔹 récupérer la raison depuis le frontend
 
     const devis = await Devis.findOne({ _id: devisId, accesClientKey: key });
-    if (!devis) return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
+    if (!devis) 
+      return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
 
     devis.statut = "Refusé";
+    devis.raisonRefus = reason || ""; // 🔹 stocker la raison dans le modèle
     await devis.save();
 
     return res.status(200).json({ message: "✅ Devis refusé", devis });
   } catch (error) {
     console.error("Erreur refus via lien :", error);
     return res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+
+/**
+ * 📧 Indiquer qu'aucun document n'est disponible pour un devis
+ */
+exports.noDocumentsDevis = async (req, res) => {
+  try {
+    const { devisId, messageClient } = req.body;
+
+    // ✅ Vérification des données
+    if (!devisId) {
+      return res.status(400).json({ message: "L'ID du devis est requis." });
+    }
+
+    // 🔹 Récupérer le devis et le client
+    const devis = await Devis.findById(devisId).populate("client");
+    if (!devis) {
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    const clientNom = `${devis.client?.prenom || ""} ${devis.client?.nom || ""}`.trim();
+
+    // 🔹 Préparer les variables pour le template
+    const emailVariables = {
+      nomClient: clientNom,
+      numeroDevis: devis.numero,
+      messageClient: messageClient || "Le client indique qu'aucun document n'est disponible.",
+      lienDevis: `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`,
+      date: new Date().toLocaleString("fr-FR"),
+    };
+
+    // 💌 Envoi du mail à Dimotec
+    await sendEmail({
+      to: "dimotec34@gmail.com",
+      subject: `Devis ${devis.numero} : aucun document transmis`,
+      template: "noDocuments.html",
+      variables: emailVariables,
+    });
+
+    // 🔹 Réponse API
+    res.status(200).json({
+      message: "✅ Notification envoyée à Dimotec concernant l'absence de documents.",
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur envoi notification pas de documents :", error);
+    res.status(500).json({ message: "Erreur serveur lors de l'envoi de la notification." });
   }
 };

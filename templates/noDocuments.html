@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Réinitialisation de votre mot de passe</title>
+    <title>Notification - Aucun document à transmettre</title>
     <style>
         body {
             margin: 0;
@@ -14,9 +14,11 @@
         }
         .container {
             max-width: 600px;
-            margin: 0 auto;
+            margin: 20px auto;
             background-color: #ffffff;
             border: 1px solid #dddddd;
+            border-radius: 8px;
+            overflow: hidden;
         }
         .header {
             background-color: #ed891a;
@@ -24,26 +26,19 @@
             text-align: center;
             padding: 20px;
             font-size: 24px;
+            font-weight: bold;
         }
         .content {
             padding: 20px;
             font-size: 16px;
             line-height: 1.6;
         }
-        .button {
-            display: inline-block;
-            background-color: #ed891a;
-            color: #ffffff;
-            text-decoration: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            font-weight: bold;
-        }
         .footer {
             text-align: center;
-            padding: 10px;
+            padding: 15px;
             font-size: 12px;
             color: #777777;
+            background-color: #f9f9f9;
         }
     </style>
 </head>
@@ -51,25 +46,17 @@
     <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
         <tr>
             <td class="header">
-                Diagnostics Immobilier
+                Notification Dimotec
             </td>
         </tr>
         <tr>
             <td class="content">
-                <p>Bonjour M. / Mme {{nomClient}},</p>
-                
-                <p>Nous avons reçu une demande de réinitialisation de votre mot de passe pour votre compte Diagnostics Immobilier.</p>
-                
-                <p>Si vous êtes à l’origine de cette demande, veuillez cliquer sur le bouton ci-dessous pour définir un nouveau mot de passe :</p>
-                
-                <p>
-                    <a href="{{lienReinitialisation}}" class="button" style="color: #ffffff; background-color: #ed891a; text-decoration: none;">
-                        Réinitialiser mon mot de passe
-                    </a>
-                </p>
+                <p>Bonjour,</p>
 
-                <p>Ce lien est valable pendant 24 heures. Si vous n’avez pas demandé la réinitialisation de votre mot de passe, veuillez ignorer cet e-mail. Votre mot de passe actuel restera inchangé.</p>
-                
+                <p>Pour le <strong>devis n°{{numeroDevis}}</strong>, nous vous informons que le client <strong>{{nomClient}}</strong> n’a aucun document à transmettre.</p>
+
+                <p>Vous pouvez donc continuer le traitement de ce dossier sans attendre de documents supplémentaires.</p>
+
                 <p>Cordialement,<br>
                 L’équipe Diagnostics Immobilier</p>
             </td>

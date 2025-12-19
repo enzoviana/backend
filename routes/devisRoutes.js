@@ -27,7 +27,8 @@ router.post(
 );
 
 router.post("/devis/:devisId/signature", devisController.uploadSignature);
-
+// 🔹 Nouvelle route : aucun document à transmettre
+router.post('/no-documents', devisController.noDocumentsDevis)
 
 // Rappel devis
 router.post("/:id/rappel", authMiddleware, devisController.envoyerRappelDevis);
