@@ -114,5 +114,11 @@ router.put(
   agencyController.updatePhotoEmploye
 );
 
+// 📩 Parrainage – envoi email
+router.post(
+  "/parrainage/email",
+  agencyAuth,
+  agencyController.sendParrainageEmail
+);
 
 module.exports = router;

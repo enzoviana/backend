@@ -818,6 +818,58 @@ exports.getCagnotteEtReduction = async (req, res) => {
 
 
 
+/**
+ * 📩 Envoi d'un email de parrainage
+ * Body: { email }
+ */
+exports.sendParrainageEmail = async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    // 🔒 Vérification email
+    if (!email) {
+      return res.status(400).json({
+        message: "L'adresse email du destinataire est obligatoire."
+      });
+    }
+
+    // 🔎 Vérifie que l'agence est bien connectée
+    const agenceId = req.agence?._id || req.user?.agenceId;
+    if (!agenceId) {
+      return res.status(403).json({
+        message: "Action non autorisée."
+      });
+    }
+
+    const agence = await Agence.findById(agenceId).select("nom_commercial admin.email");
+    if (!agence) {
+      return res.status(404).json({
+        message: "Agence introuvable."
+      });
+    }
+
+    // 📩 Envoi email de parrainage
+    await sendEmail({
+      to: email,
+      subject: "🤝 Découvrez Dimotec – Recommandé par un partenaire",
+      template: "ParrainageDimotec.html", // ton template HTML
+      variables: {
+        nomAgence: agence.nom_commercial,
+        emailAgence: agence.admin.email
+      }
+    });
+
+    return res.status(200).json({
+      message: "✅ Email de parrainage envoyé avec succès."
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur envoi email parrainage :", error);
+    return res.status(500).json({
+      message: "Erreur serveur lors de l'envoi de l'email."
+    });
+  }
+};
 
 
 
