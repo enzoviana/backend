@@ -33,8 +33,8 @@ app.get('/', (req, res) => {
 });
 
 // Connexion à MongoDB
-const MONGO_LIVE = process.env.MONGO_LIVE || 'mongodb://127.0.0.1:27017/maBase';
-mongoose.connect(MONGO_LIVE, {
+const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/maBase';
+mongoose.connect(MONGO_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true
 })
