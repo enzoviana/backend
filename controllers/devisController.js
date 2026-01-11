@@ -77,35 +77,42 @@ exports.getDevis = async (req, res) => {
     let query = {};
 
     if (req.user.role === "admin") {
-      // 🧑‍💼 Admin → tous les devis
       query = {};
-    }  else if (req.role === "agence") {
-      // 🏢 Agence → uniquement ses ordres de mission
+    } else if (req.role === "agence") {
       query = { agenceId: req.agence._id };
     } else if (req.role === "employe") {
-      // 👨‍💻 Employé → uniquement les OM où il est creePar ou dans partageAvec
       const empId = req.user._id.toString();
-
       query = {
         $or: [
           { "creePar.type": "Employe", "creePar.id": empId },
         ]
       };
-    }  else {
+    } else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
     const devis = await Devis.find(query)
       .populate("pack")
       .populate("diagnosticsSelectionnes")
+      .populate({
+        path: "agenceId",
+        select: "nom_commercial" // ✅ on ne prend que le nom commercial
+      })
       .sort({ dateCreation: -1 });
 
-    res.json(devis);
+    // Ajouter un champ 'nomAgence' à chaque devis
+    const devisWithAgence = devis.map(d => ({
+      ...d.toObject(),
+      nomAgence: d.agenceId?.nom_commercial || null
+    }));
+
+    res.json(devisWithAgence);
   } catch (error) {
     console.error("Erreur récupération devis :", error);
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
+
 
 exports.downloadDevis = async (req, res) => {
   try {
