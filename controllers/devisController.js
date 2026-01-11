@@ -96,23 +96,27 @@ exports.getDevis = async (req, res) => {
       .populate("diagnosticsSelectionnes")
       .populate({
         path: "agenceId",
-        select: "nom_commercial" // ✅ on ne prend que le nom commercial
+        select: "nom_commercial"
       })
       .sort({ dateCreation: -1 });
 
-    // Ajouter un champ 'nomAgence' à chaque devis
-    const devisWithAgence = devis.map(d => ({
-      ...d.toObject(),
-      nomAgence: d.agenceId?.nom_commercial || null
+    // Pour chaque devis, récupérer l'ordre de mission associé et son statut
+    const devisWithOrdre = await Promise.all(devis.map(async (d) => {
+      const ordre = await OrdreMission.findOne({ devisId: d._id }).select('statut');
+      return {
+        ...d.toObject(),
+        nomAgence: d.agenceId?.nom_commercial || null,
+        ordreMissionStatut: ordre?.statut || null
+      };
     }));
 
-    res.json(devisWithAgence);
+    res.json(devisWithOrdre);
+
   } catch (error) {
     console.error("Erreur récupération devis :", error);
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
-
 
 exports.downloadDevis = async (req, res) => {
   try {
