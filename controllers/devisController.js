@@ -76,11 +76,12 @@ exports.getDevis = async (req, res) => {
   try {
     let query = {};
 
+    // --- Définition de la query selon le rôle ---
     if (req.user.role === "admin") {
       query = {};
-    } else if (req.role === "agence") {
+    } else if (req.user.role === "agence") {
       query = { agenceId: req.agence._id };
-    } else if (req.role === "employe") {
+    } else if (req.user.role === "employe") {
       const empId = req.user._id.toString();
       query = {
         $or: [
@@ -91,6 +92,7 @@ exports.getDevis = async (req, res) => {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
+    // --- Récupération des devis ---
     const devis = await Devis.find(query)
       .populate("pack")
       .populate("diagnosticsSelectionnes")
@@ -100,13 +102,24 @@ exports.getDevis = async (req, res) => {
       })
       .sort({ dateCreation: -1 });
 
-    // Pour chaque devis, récupérer l'ordre de mission associé et son statut
+    // --- Ajout du statut de l'ordre de mission pour chaque devis ---
     const devisWithOrdre = await Promise.all(devis.map(async (d) => {
       const ordre = await OrdreMission.findOne({ devisId: d._id }).select('statut');
+
       return {
-        ...d.toObject(),
-        nomAgence: d.agenceId?.nom_commercial || null,
-        ordreMissionStatut: ordre?.statut || null
+        _id: d._id,
+        numero: d.numero || `DV-${d._id.slice(-4)}`,
+        nomAgence: d.agenceId?.nom_commercial || 'DIMOTEC',
+        pack: d.pack || null,
+        diagnosticsSelectionnes: d.diagnosticsSelectionnes || [],
+        montantTTC: d.montantTTC || 0,
+        totalApresReduction: d.totalApresReduction || 0,
+        statut: d.statut || 'Envoyé',
+        client: d.client || null,
+        dateCreation: d.dateCreation || d.createdAt || new Date(),
+        accesClientKey: d.accesClientKey || null,
+        ordreMissionStatut: ordre?.statut || "Aucune", // ← jamais null
+        derniereRelance: d.derniereRelance || null
       };
     }));
 
