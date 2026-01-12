@@ -78,17 +78,21 @@ exports.getDevis = async (req, res) => {
 
     // --- Définition de la query selon le rôle ---
     if (req.user.role === "admin") {
+      // 🧑‍💼 Admin → tous les devis
       query = {};
-    } else if (req.user.role === "agence") {
+    }  else if (req.role === "agence") {
+      // 🏢 Agence → uniquement ses ordres de mission
       query = { agenceId: req.agence._id };
-    } else if (req.user.role === "employe") {
+    } else if (req.role === "employe") {
+      // 👨‍💻 Employé → uniquement les OM où il est creePar ou dans partageAvec
       const empId = req.user._id.toString();
+
       query = {
         $or: [
           { "creePar.type": "Employe", "creePar.id": empId },
         ]
       };
-    } else {
+    }  else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
