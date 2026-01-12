@@ -8,6 +8,9 @@ const authMiddleware = require('../middlewares/authMiddleware'); // JWT
 // Récupération devis via lien
 router.get("/devis/:key", devisController.getDevisViaLien);
 
+// marquage devis en ouvert 
+router.get("/devis/ouvrir/:key", devisController.ouvrirDevisViaLien);
+
 // Accepter / refuser devis
 router.post("/devis/:key/:devisId/accepter", devisController.accepterDevisViaLien);
 router.post("/devis/:key/:devisId/refuser", devisController.refuserDevisViaLien);

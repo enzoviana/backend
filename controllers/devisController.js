@@ -1627,6 +1627,36 @@ exports.getDevisViaLien = async (req, res) => {
   }
 };
 
+exports.ouvrirDevisViaLien = async (req, res) => {
+  try {
+    const { key } = req.params;
+
+    const devis = await Devis.findOne({ accesClientKey: key });
+
+    if (!devis) {
+      return res.status(404).json({ message: "Lien invalide ou expiré." });
+    }
+
+    // On ne change le statut que s'il n'est pas déjà ouvert ou finalisé
+    if (!["ouvert", "accepte", "refuse"].includes(devis.statut)) {
+      devis.statut = "ouvert";
+      devis.dateOuverture = new Date();
+      await devis.save();
+    }
+
+    return res.status(200).json({
+      message: "📬 Devis marqué comme ouvert",
+      statut: devis.statut
+    });
+
+  } catch (error) {
+    console.error("🚨 Erreur ouverture devis :", error);
+    return res.status(500).json({ message: "Erreur serveur." });
+  }
+};
+
+
+
 
 
 
