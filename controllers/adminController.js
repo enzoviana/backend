@@ -337,17 +337,26 @@ const devis = await Devis.find({ agenceId: agence._id })
   .sort({ dateCreation: -1 })
   .select("numero statut client.nom client.prenom client.email client.tel dateCreation totalFinal +montantTTC");
 
-        const devisFormatted = devis.map((d) => ({
-          id: d._id,
-          numero: d.numero,
-          statut: d.statut,
-          client: `${d.client.nom} ${d.client.prenom}`,
-          email: d.client.email,
-          telephone: d.client.tel,
-          date: formatDateFR(d.dateCreation),   // 🟦 formatage appliqué ici
-          total: d.totalFinal,
-          montantTTC: d.montantTTC
-        }));
+const devisFormatted = devis.map((d) => {
+  const ttc =
+    d.totalFinal ??
+    d.montantTTC ??
+    0;
+
+  return {
+    id: d._id,
+    numero: d.numero,
+    statut: d.statut,
+    client: `${d.client.nom} ${d.client.prenom}`,
+    email: d.client.email,
+    telephone: d.client.tel,
+    date: formatDateFR(d.dateCreation),
+
+    total: ttc,        // 🔥 toujours rempli
+    montantTTC: ttc   // compatibilité front
+  };
+});
+
 
         return {
           id: agence._id,
