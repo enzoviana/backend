@@ -346,6 +346,7 @@ exports.getAllAgences = async (req, res) => {
           telephone: d.client.tel,
           date: formatDateFR(d.dateCreation),   // 🟦 formatage appliqué ici
           total: d.totalFinal,
+          montantTTC: d.montantTTC
         }));
 
         return {
