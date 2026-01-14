@@ -335,12 +335,13 @@ exports.getAllAgences = async (req, res) => {
         // 🔹 Récupération des devis
 const devis = await Devis.find({ agenceId: agence._id })
   .sort({ dateCreation: -1 })
-  .select("numero statut client.nom client.prenom client.email client.tel dateCreation totalFinal +montantTTC");
+  .select("numero statut client.nom client.prenom client.email client.tel dateCreation totalFinal +montantTTC totalApresReduction");
 
 const devisFormatted = devis.map((d) => {
   const ttc =
     d.totalFinal ??
     d.montantTTC ??
+    d.totalApresReduction ??
     0;
 
   return {
