@@ -188,6 +188,22 @@ exports.envoyerRappelDevis = async (req, res) => {
       return res.status(404).json({ message: "Devis introuvable." });
     }
 
+    // 🔥 Vérifier si le devis a plus de 30 jours
+    const dateDevis = new Date(devis.createdAt || devis.dateCreation);
+    const maintenant = new Date();
+    const diffTemps = maintenant - dateDevis; // différence en ms
+    const diffJours = diffTemps / (1000 * 60 * 60 * 24); // conversion en jours
+
+    if (diffJours > 30) {
+      console.log(`⏰ Devis de plus de 30 jours (${Math.floor(diffJours)} jours) → passage en refusé`);
+      devis.statut = "Refusé"; // ou "REFUSE" selon ton modèle
+      await devis.save();
+      return res.status(200).json({
+        message: "Le devis a plus de 30 jours et a été automatiquement refusé.",
+        statut: devis.statut
+      });
+    }
+
     // ✅ Vérification email client
     console.log("📧 Email client :", devis.client?.email || "Aucun email");
     if (!devis.client?.email) {
@@ -229,6 +245,7 @@ exports.envoyerRappelDevis = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur lors de l'envoi du rappel." });
   }
 };
+
 
 /**
  * 🧾 Générer un devis recommandé via OpenAI en extrayant les infos depuis le prompt
