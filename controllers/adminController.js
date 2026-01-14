@@ -160,60 +160,68 @@ exports.getAdminDetails = async (req, res) => {
 
 exports.getClassementAgences = async (req, res) => {
   try {
-    // Récupère toutes les agences avec leurs devis et admin
-    const agences = await Agence.find().populate('devis').lean();
+    const agences = await Agence.find().lean();
 
-    const classement = await Promise.all(agences.map(async (agence) => {
-      // Cagnotte totale
-      let cagnotteTotale = agence.cagnotte || 0;
-      if (cagnotteTotale === 0) {
+    const classement = await Promise.all(
+      agences.map(async (agence) => {
+        // 🔹 Récupération des employés de l'agence
         const employes = await Employe.find({ agence: agence._id }).lean();
-        const sommeEmployes = employes.reduce((acc, e) => acc + (e.cagnotte || 0), 0);
-        cagnotteTotale = sommeEmployes;
-      }
+        const employeIds = employes.map(e => e._id);
 
-      // Nombre de devis
-      const nombreDevis = agence.devis ? agence.devis.length : 0;
+        // 🔹 Récupération des devis liés à l'agence
+        const devisListe = await Devis.find({
+          $or: [
+            { agenceId: agence._id },
+            { _id: { $in: agence.devis } }, // ceux déjà dans le tableau
+            { 'creePar.id': { $in: employeIds } } // ceux créés par les employés
+          ]
+        }).lean();
 
-      // Devis acceptés pour le taux de conversion
-      const devisAccepte = agence.devis ? agence.devis.filter(d => d.statut.toLowerCase() === 'accepté').length : 0;
-      const tauxConversion = nombreDevis > 0 ? (devisAccepte / nombreDevis) * 100 : 0;
+        // 🔹 Calcul des montants fiables pour chaque devis
+        const devisAvecMontant = devisListe.map(d => ({
+          ...d,
+          montant: d.totalFinal ?? d.montantTTC ?? d.totalApresReduction ?? 0
+        }));
 
-      // Cagnotte en attente
-      const cagnotteEnAttente = agence.cagnotteEnAttente || 0;
+        const nombreDevis = devisAvecMontant.length;
+        const devisAccepte = devisAvecMontant.filter(d => d.statut.toLowerCase() === 'accepté').length;
+        const tauxConversion = nombreDevis > 0 ? (devisAccepte / nombreDevis) * 100 : 0;
 
-      // Récupération email : on prend le premier email de l'agence si présent, sinon celui de l'admin
-      let emailAgence = null;
-      if (agence.emails_contact && agence.emails_contact.length > 0) {
-        emailAgence = agence.emails_contact[0].email;
-      } else if (agence.admin && agence.admin.email) {
-        emailAgence = agence.admin.email;
-      }
+        // 🔹 Cagnotte totale (employés + agence)
+        let cagnotteTotale = agence.cagnotte || 0;
+        if (cagnotteTotale === 0) {
+          const sommeEmployes = employes.reduce((acc, e) => acc + (e.cagnotte || 0), 0);
+          cagnotteTotale = sommeEmployes;
+        }
 
-      // Téléphone : admin si dispo
-      const telephone = agence.admin?.telephone_portable || agence.telephone_fixe || '';
+        // 🔹 Email et téléphone
+        let emailAgence = (agence.emails_contact && agence.emails_contact.length > 0)
+          ? agence.emails_contact[0].email
+          : agence.admin?.email || '';
 
-      return {
-        id: agence._id,
-        nom_commercial: agence.nom_commercial,
-        nom_responsable: agence.nom_responsable,
-        cagnotte: cagnotteTotale,
-        cagnotteEnAttente,
-        tauxConversion: parseFloat(tauxConversion.toFixed(2)),
-        nombreDevis,
-        email: emailAgence,
-        telephone,
-      };
-    }));
+        const telephone = agence.admin?.telephone_portable || agence.telephone_fixe || '';
 
-    // Tri du classement selon score (cagnotte + tauxConversion + nombreDevis)
+        return {
+          id: agence._id,
+          nom_commercial: agence.nom_commercial,
+          nom_responsable: agence.nom_responsable,
+          cagnotte: cagnotteTotale,
+          cagnotteEnAttente: agence.cagnotteEnAttente || 0,
+          tauxConversion: parseFloat(tauxConversion.toFixed(2)),
+          nombreDevis,
+          email: emailAgence,
+          telephone
+        };
+      })
+    );
+
+    // 🔹 Tri du classement selon score
     const classementTrie = classement.sort((a, b) => {
       const scoreA = a.cagnotte + a.tauxConversion * 10 + a.nombreDevis * 5;
       const scoreB = b.cagnotte + b.tauxConversion * 10 + b.nombreDevis * 5;
       return scoreB - scoreA;
     });
 
-    // Ajouter la position dans le classement
     const classementAvecPosition = classementTrie.map((agence, index) => ({
       position: index + 1,
       ...agence
@@ -225,6 +233,7 @@ exports.getClassementAgences = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors du classement des agences." });
   }
 };
+
 
 
 
