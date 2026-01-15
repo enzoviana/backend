@@ -1083,16 +1083,26 @@ exports.filterDiagnostics = async (req, res) => {
       }
       console.log(`🏠 Surface : ${surfaceMinDemande}-${surfaceMaxDemande} m²`);
     } else {
-      const mappingAppartement = {
-        "moins 20m²": "<20m2",
-        "20-40m²": "20-40m2",
-        "T1": "T1",
-        "T2": "T2",
-        "T3": "T3",
-        "T4": "T4",
-        "T5": "T5"
-      };
-      typeAppartement = mappingAppartement[normalizeString(surface)] || surface;
+const surfaceRaw = surface
+  .toString()
+  .toLowerCase()
+  .replace("m²", "m2")
+  .replace(/\s+/g, "")
+  .trim();
+
+const mappingAppartement = {
+  "moins20m2": "<20m2",
+  "<20m2": "<20m2",
+  "20-40m2": "20-40m2",
+  "t1": "T1",
+  "t2": "T2",
+  "t3": "T3",
+  "t4": "T4",
+  "t5": "T5"
+};
+
+typeAppartement = mappingAppartement[surfaceRaw];
+
       console.log(`🏢 Appartement type : ${typeAppartement}`);
     }
 
@@ -1126,9 +1136,10 @@ exports.filterDiagnostics = async (req, res) => {
       }
 
       if (typeBienNorm === "appartement" && diag.tarifsParAppartement?.length && typeAppartement) {
-        const tarifObj = diag.tarifsParAppartement.find(
-          t => normalizeString(t.typeAppartement) === normalizeString(typeAppartement)
-        );
+const tarifObj = diag.tarifsParAppartement.find(
+  t => t.typeAppartement === typeAppartement
+);
+
         if (tarifObj) {
           tarifTrouve = tarifObj.tarifs?.[secteur] ?? tarifObj.tarifs?.autre ?? 0;
         }
