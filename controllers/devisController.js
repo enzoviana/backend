@@ -123,7 +123,8 @@ exports.getDevis = async (req, res) => {
         dateCreation: d.dateCreation || d.createdAt || new Date(),
         accesClientKey: d.accesClientKey || null,
         ordreMissionStatut: ordre?.statut || "Aucune", // ← jamais null
-        derniereRelance: d.derniereRelance || null
+        derniereRelance: d.derniereRelance || null,
+        pdfUrl : d.pdfUrl || null
       };
     }));
 
