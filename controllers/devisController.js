@@ -1660,10 +1660,10 @@ exports.ouvrirDevisViaLien = async (req, res) => {
     }
 
     // On ne change le statut que s'il n'est pas déjà ouvert ou finalisé
-    if (!["ouvert", "accepte", "refuse"].includes(devis.statut)) {
+    if (!["ouvert", "Accepté", "Refusé"].includes(devis.statut)) {
       devis.statut = "ouvert";
       devis.dateOuverture = new Date();
-      await devis.save();
+      await devis.save(); 
     }
 
     return res.status(200).json({

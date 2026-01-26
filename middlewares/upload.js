@@ -1,7 +1,7 @@
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
-const OrdreMission = require('../models/OrdreMission'); // modèle Mongoose
+const OrdreMission = require('../models/OrdreMission');
 
 // Config Cloudinary
 cloudinary.config({
@@ -10,64 +10,71 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET,
 });
 
-// Fonction pour générer un public_id unique en vérifiant les doublons
+// Génération de public_id unique
 async function generateUniquePublicId(originalName, missionId) {
   const baseName = originalName.replace(/\.[^/.]+$/, '').replace(/\s+/g, '_');
   let publicId = `${Date.now()}-${baseName}`;
-  let count = 1;
-
-  const mission = await OrdreMission.findById(missionId);
-  const existingNames = mission?.fichiersClient.map(f => f.nom) || [];
-
-  while (existingNames.includes(publicId)) {
-    publicId = `${Date.now()}-${baseName}+${count}`;
-    count++;
+  
+  if (missionId) {
+    try {
+      const mission = await OrdreMission.findById(missionId);
+      const existingNames = mission?.fichiersClient.map(f => f.nom) || [];
+      let count = 1;
+      while (existingNames.includes(publicId)) {
+        publicId = `${Date.now()}-${baseName}_${count}`;
+        count++;
+      }
+    } catch (e) {
+      console.error("Erreur check doublons:", e);
+    }
   }
-
   return publicId;
 }
 
-// Stockage Multer + Cloudinary
+// Configuration du stockage
 const storage = new CloudinaryStorage({
   cloudinary,
   params: async (req, file) => {
-    console.log("📂 Upload reçu par CloudinaryStorage :", file.originalname);
-
-    const missionId = req.body.missionId;
-    const publicId = missionId 
-      ? await generateUniquePublicId(file.originalname, missionId)
-      : `${Date.now()}-${file.originalname.replace(/\.[^/.]+$/, '').replace(/\s+/g, '_')}`;
-
-    // Détecte le type de ressource
     const ext = file.originalname.split('.').pop().toLowerCase();
-    const resourceType = ['pdf','doc','docx','xls','xlsx','ppt','pptx','txt','csv'].includes(ext)
-      ? 'raw' // fichiers "non-images" → raw
-      : 'image'; // images → image
+    const missionId = req.body.missionId;
+    
+    const publicId = await generateUniquePublicId(file.originalname, missionId);
+
+    // Définition du type de ressource Cloudinary
+    // 'raw' est obligatoire pour les archives (zip, rar) et les fichiers Excel/Doc complexes
+    const isRaw = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', '7z', 'txt', 'csv'].includes(ext);
 
     return {
       folder: 'dimotec',
-      allowed_formats: [
-        'jpg','jpeg','png','webp',
-        'pdf','doc','docx','xls','xlsx',
-        'ppt','pptx','txt','csv'
-      ],
       public_id: publicId,
-      type: 'upload',
-      resource_type: resourceType, // ✅ crucial pour éviter les 404
+      resource_type: isRaw ? 'raw' : 'image', // 'raw' permet de stocker n'importe quel fichier binaire
+      // On ne met pas allowed_formats ici si resource_type est 'raw' (Cloudinary ne le supporte pas)
     };
   }
 });
 
-// Limite de taille à 5 Mo par fichier
+// Middleware Multer avec limites augmentées
 const upload = multer({
   storage,
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { 
+    fileSize: 50 * 1024 * 1024 // Limite augmentée à 50 Mo pour les ZIP/Archives
+  },
   fileFilter: (req, file, cb) => {
-    console.log("🔍 FileFilter appelé pour :", file.originalname);
-    cb(null, true);
+    const ext = file.originalname.split('.').pop().toLowerCase();
+    const allowedExtensions = [
+      'jpg', 'jpeg', 'png', 'webp', 
+      'pdf', 'doc', 'docx', 'xls', 'xlsx', 
+      'zip', 'rar', '7z', 'txt', 'csv'
+    ];
+
+    if (allowedExtensions.includes(ext)) {
+      cb(null, true);
+    } else {
+      cb(new Error(`Format de fichier .${ext} non supporté`), false);
+    }
   }
 });
 
-console.log("✅ Multer + CloudinaryStorage configuré (fichiers publics, max 5 Mo)");
+console.log("✅ Middleware Upload (Multer+Cloudinary) prêt : Max 50Mo, Support ZIP/RAR");
 
 module.exports = upload;
