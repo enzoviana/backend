@@ -8,11 +8,13 @@ const OrdreMission = require("../models/OrdreMission.js");
 const getDashboardStats = async (req, res) => {
   try {
     // === 1️⃣ Récupération des données ===
-    const [devis, agences, ordres] = await Promise.all([
-      Devis.find({}),
-      Agence.find({}),
-      OrdreMission.find({})
-    ]);
+const [devis, agences, ordres] = await Promise.all([
+  Devis.find({})
+    .populate('pack', 'nom') // On ne récupère que le champ 'nom' du pack
+    .populate('diagnosticsSelectionnes', 'nom'), // Idem pour les diagnostics
+  Agence.find({}),
+  OrdreMission.find({})
+]);
 
     const now = new Date();
 
@@ -66,25 +68,29 @@ const getDashboardStats = async (req, res) => {
       nombreAgencesParSemaine[semaineKey] = (nombreAgencesParSemaine[semaineKey] || 0) + 1;
     });
 
-    // === 5️⃣ Top diagnostics / packs ===
-    const topItems = {};
-    devis.forEach(d => {
-      // Diagnostics
-      if (d.diagnosticsSelectionnes) {
-        d.diagnosticsSelectionnes.forEach(diag => {
-          topItems[diag] = (topItems[diag] || 0) + 1;
-        });
-      }
-
-      // Packs
-      if (d.pack) {
-        topItems[d.pack] = (topItems[d.pack] || 0) + 1;
-      }
+// === 5️⃣ Top diagnostics / packs ===
+const topItems = {};
+devis.forEach(d => {
+  // Diagnostics
+  if (d.diagnosticsSelectionnes && Array.isArray(d.diagnosticsSelectionnes)) {
+    d.diagnosticsSelectionnes.forEach(diag => {
+      // Si diag est peuplé, on prend diag.nom, sinon on garde l'ID ou 'Inconnu'
+      const name = diag.nom || diag; 
+      topItems[name] = (topItems[name] || 0) + 1;
     });
+  }
+
+  // Packs
+  if (d.pack) {
+    // Si pack est peuplé, on prend d.pack.nom
+    const packName = d.pack.nom || d.pack;
+    topItems[packName] = (topItems[packName] || 0) + 1;
+  }
+});
 
     const topItemsArray = Object.entries(topItems)
       .sort((a,b) => b[1] - a[1])
-      .map(([name, count]) => ({ name, count }))
+      .map(([nom, count]) => ({ nom, count })) 
       .slice(0, 10); // top 10
 
     // === 6️⃣ Autres stats globales ===

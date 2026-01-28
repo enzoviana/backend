@@ -8,6 +8,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const agencyRoutes = require('./routes/agencyRoutes');
 const devisRoutes = require('./routes/devisRoutes');
 const dashboardRoutes = require('./routes/dashboardRoutes');
+const chatbotRoutes = require('./routes/chatbotRoutes');
 
 const app = express();
 
@@ -26,7 +27,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/agency', agencyRoutes);
 app.use('/api/client', devisRoutes);
 app.use('/api/dashboard', dashboardRoutes);
-app.use('/api/devis', devisRoutes)
+app.use('/api/devis', devisRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 // Test route
 app.get('/', (req, res) => {
   res.send('API est en ligne !');

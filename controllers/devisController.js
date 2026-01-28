@@ -453,10 +453,12 @@ exports.envoyerRappelsAutomatiques = async () => {
   try {
     console.log("📥 Lancement du job d'envoi des rappels...");
 
+    // Seuil de 48 heures
     const deuxJours = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const devisArelancer = await Devis.find({
-      statut: "Envoyé",
+      // MODIFICATION ICI : On accepte "Envoyé" OU "Ouvert"
+      statut: { $in: ["Envoyé", "ouvert"] },
       $or: [
         { derniereRelance: { $lt: deuxJours } },
         { derniereRelance: null }
@@ -464,7 +466,7 @@ exports.envoyerRappelsAutomatiques = async () => {
       'client.email': { $exists: true, $ne: "" }
     });
 
-    console.log(`🔍 ${devisArelancer.length} devis à relancer`);
+    console.log(`🔍 ${devisArelancer.length} devis à relancer (Statuts: Envoyé/Ouvert)`);
 
     for (const devis of devisArelancer) {
       const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
@@ -480,9 +482,10 @@ exports.envoyerRappelsAutomatiques = async () => {
         }
       });
 
+      // Mise à jour de la date de relance
       devis.derniereRelance = new Date();
       await devis.save();
-      console.log(`✅ Rappel envoyé pour le devis ${devis.numero}`);
+      console.log(`✅ Rappel envoyé pour le devis ${devis.numero} (${devis.statut})`);
     }
 
     console.log("✅ Tous les rappels ont été envoyés avec succès");
@@ -1282,149 +1285,19 @@ exports.accepterDevisViaLien = async (req, res) => {
     const { ville, date, numeroFiscalBien } = req.body;
 
     const devis = await Devis.findOne({ _id: devisId, accesClientKey: key });
-    if (!devis) return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
+    if (!devis) return res.status(404).json({ message: "Devis introuvable." });
 
-    // ✅ Mise à jour du devis
-    devis.statut = "Accepté";
+    // On enregistre les infos de signature SANS passer le statut à "Accepté"
     if (ville) devis.faitA = ville;
     if (date) devis.dateAcceptation = new Date(date);
     if (numeroFiscalBien) devis.numeroFiscalBien = numeroFiscalBien;
     devis.cgvAccepted = true;
     devis.rgpdAccepted = true;
+    
     await devis.save();
 
-    // 🔹 Trouver client réel si pas encore lié
-    let clientId = devis.clientId;
-    if (!clientId && devis.client?.email) {
-      const client = await Client.findOne({ email: devis.client.email });
-      if (!client) return res.status(400).json({ message: "Client introuvable pour créer la facture." });
-      clientId = client._id;
-    }
-
-
-    // ✅ Création Ordre de Mission
-    const ordre = new OrdreMission({
-      devisId: devis._id,
-      agenceId: devis.agenceId,
-      numero: `OM-${Date.now()}`,
-      clientId,
-      description: `Ordre de mission pour le devis ${devis.numero}`,
-      statut: "Commande",
-      creePar: devis.creePar,
-    });
-    await ordre.save();
-
-    const agence = await Agence.findById(devis.agenceId);
-
-    // 🔹 Gestion de la cagnotte après acceptation
-    if (devis.montantCagnotteUtilisee > 0) {
-      console.log('💰 Début traitement retrait cagnotte pour devis accepté');
-
-      let cible = null;
-      let auteur = 'Système';
-
-      if (agence.type_cagnotte === 'individuelle' && devis.creePar.type === 'Employe') {
-        // 🔹 Cagnotte individuelle : retirer à l'employé
-        cible = await Employe.findById(devis.creePar.id);
-        auteur = cible?.email || 'Employé';
-        if (!cible) return res.status(404).json({ message: "Employé introuvable pour retrait cagnotte." });
-
-        console.log('🟢 Retrait cagnotte individuelle de l’employé :', auteur);
-
-        const montantEnAttente = cible.cagnotteEnAttente || 0;
-        const montantARetirer = Math.min(montantEnAttente, devis.montantCagnotteUtilisee);
-
-        if (montantARetirer > 0) {
-          cible.cagnotteEnAttente -= montantARetirer;
-
-
-          cible.transactions_cagnotte.push({
-            montant: montantARetirer,
-            type: 'retrait',
-            description: `Montant utilisé pour le devis accepté (${devis.type})`,
-            reference: devis._id,
-            date: new Date()
-          });
-
-          await cible.save();
-          console.log('✅ Cagnotte employé mise à jour', {
-            cagnotte: cible.cagnotte,
-            cagnotteEnAttente: cible.cagnotteEnAttente
-          });
-        }
-
-      } else {
-        // 🔹 Cagnotte partagée ou agence créatrice
-        cible = agence;
-        auteur = agence.nom_commercial;
-
-        console.log('🟢 Retrait cagnotte partagée de l’agence');
-
-        const montantEnAttente = agence.cagnotteEnAttente || 0;
-        const montantARetirer = Math.min(montantEnAttente, devis.montantCagnotteUtilisee);
-
-        if (montantARetirer > 0) {
-          agence.cagnotteEnAttente -= montantARetirer;
-
-
-          agence.historiqueCagnotte.push({
-            montant: montantARetirer,
-            type: 'retrait',
-            description: `Montant utilisé pour le devis accepté (${devis.type})`,
-            par: auteur,
-            date: new Date()
-          });
-
-          await agence.save();
-          console.log('✅ Cagnotte agence mise à jour', {
-            cagnotte: agence.cagnotte,
-            cagnotteEnAttente: agence.cagnotteEnAttente
-          });
-        }
-      }
-      console.log('🔹 Fin traitement cagnotte pour devis accepté');
-    }
-
-// ✅ Email Agence
-const agenceEmail = agence?.emails_contact?.[0]?.email; // null si agence ou email inexistant
-const variables = {
-  nomClient: `${devis.client.prenom} ${devis.client.nom}`,
-  numero: ordre.numero || "",
-  devisNumero: devis.numero || "",
-  nomAgence: agence?.nom_commercial || "Dimotec", // <- protection ajoutée
-  dateCreation: new Date().toLocaleDateString("fr-FR") || "",
-  description: ordre.description || "",
-  statut: ordre.statut || "",
-  lienMission: `https://dimotec.datafuse.fr/ordre-mission`
-};
-
-// ✅ Envoi mail à l’agence si disponible
-if (agenceEmail) {
-  await sendEmail({
-    to: agenceEmail,
-    subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
-    template: "OrdreMission.html",
-    variables
-  });
-}
-
-// ✅ Envoi email → Dimotec systématique
-const dimotec = "dimotec34@gmail.com";
-await sendEmail({
-  to: dimotec,
-  subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
-  template: "OrdreMission.html",
-  variables
-});
-
-    return res.status(200).json({
-      message: "Devis accepté, un Ordre de mission a été communiqué à votre diagnostiqueur pour  intervention",
-      devis,
-      ordre,
-    });
-
+    return res.status(200).json({ message: "Données enregistrées, génération du PDF en cours..." });
   } catch (error) {
-    console.error("❌ Erreur acceptation via lien :", error);
     return res.status(500).json({ message: "Erreur serveur." });
   }
 };
@@ -1438,31 +1311,134 @@ exports.uploadPdfDevis = async (req, res) => {
   try {
     const { devisId } = req.params;
 
+    // 1️⃣ Vérification de la présence du fichier
     if (!req.file) {
       return res.status(400).json({ message: "Aucun fichier PDF reçu." });
     }
 
-    const pdfUrl = req.file.path; // URL Cloudinary
+    const pdfUrl = req.file.path; // URL récupérée depuis Cloudinary via multer-storage-cloudinary
 
-    // Mettre à jour le devis avec le lien du PDF
-    const devis = await Devis.findByIdAndUpdate(
-      devisId,
-      { pdfUrl },
-      { new: true }
-    );
-
+    // 2️⃣ Récupération du devis et des relations nécessaires
+    const devis = await Devis.findById(devisId);
     if (!devis) {
       return res.status(404).json({ message: "Devis introuvable." });
     }
 
-    return res.status(200).json({
-      message: "PDF du devis uploadé avec succès !",
-      pdfUrl,
-      devis
+    // 3️⃣ MISE À JOUR CRITIQUE : Passage au statut "Accepté" et enregistrement du PDF
+    devis.statut = "Accepté";
+    devis.pdfUrl = pdfUrl;
+    await devis.save();
+
+    // 4️⃣ LOGIQUE MÉTIER : Création de l'Ordre de Mission
+    let clientId = devis.clientId;
+    if (!clientId && devis.client?.email) {
+      const client = await Client.findOne({ email: devis.client.email });
+      clientId = client?._id;
+    }
+
+    const ordre = new OrdreMission({
+      devisId: devis._id,
+      agenceId: devis.agenceId,
+      numero: `OM-${Date.now()}`,
+      clientId,
+      description: `Ordre de mission automatique pour le devis ${devis.numero}`,
+      statut: "Commande",
+      creePar: devis.creePar,
     });
+    await ordre.save();
+
+    // 5️⃣ GESTION DE LA CAGNOTTE
+    const agence = await Agence.findById(devis.agenceId);
+    if (agence && devis.montantCagnotteUtilisee > 0) {
+      console.log('💰 Traitement du retrait de la cagnotte...');
+
+      let cible = null;
+      let auteur = 'Système';
+
+      if (agence.type_cagnotte === 'individuelle' && devis.creePar.type === 'Employe') {
+        // Retrait sur l'employé
+        cible = await Employe.findById(devis.creePar.id);
+        if (cible) {
+          auteur = cible.email || 'Employé';
+          const montantARetirer = Math.min(cible.cagnotteEnAttente || 0, devis.montantCagnotteUtilisee);
+          
+          if (montantARetirer > 0) {
+            cible.cagnotteEnAttente -= montantARetirer;
+            cible.transactions_cagnotte.push({
+              montant: montantARetirer,
+              type: 'retrait',
+              description: `Utilisé pour devis ${devis.numero} (Accepté)`,
+              reference: devis._id,
+              date: new Date()
+            });
+            await cible.save();
+          }
+        }
+      } else {
+        // Retrait sur la cagnotte partagée de l'agence
+        cible = agence;
+        auteur = agence.nom_commercial;
+        const montantARetirer = Math.min(agence.cagnotteEnAttente || 0, devis.montantCagnotteUtilisee);
+
+        if (montantARetirer > 0) {
+          agence.cagnotteEnAttente -= montantARetirer;
+          agence.historiqueCagnotte.push({
+            montant: montantARetirer,
+            type: 'retrait',
+            description: `Utilisé pour devis ${devis.numero} (Accepté)`,
+            par: auteur,
+            date: new Date()
+          });
+          await agence.save();
+        }
+      }
+    }
+
+    // 6️⃣ PRÉPARATION ET ENVOI DES EMAILS
+    const variablesEmail = {
+      nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+      numero: ordre.numero,
+      devisNumero: devis.numero,
+      nomAgence: agence?.nom_commercial || "Dimotec",
+      dateCreation: new Date().toLocaleDateString("fr-FR"),
+      description: ordre.description,
+      statut: ordre.statut,
+      lienMission: `https://dimotec.datafuse.fr/ordre-mission`
+    };
+
+    // Email à l'agence
+    const agenceEmail = agence?.emails_contact?.[0]?.email;
+    if (agenceEmail) {
+      await sendEmail({
+        to: agenceEmail,
+        subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+        template: "OrdreMission.html",
+        variables: variablesEmail
+      });
+    }
+
+    // Email de copie à Dimotec
+    await sendEmail({
+      to: "dimotec34@gmail.com",
+      subject: `[COPIE] Nouvel Ordre de Mission - ${ordre.numero}`,
+      template: "OrdreMission.html",
+      variables: variablesEmail
+    });
+
+    // 7️⃣ RÉPONSE FINALE
+    return res.status(200).json({
+      message: "PDF uploadé et devis accepté avec succès.",
+      pdfUrl,
+      devis,
+      ordre
+    });
+
   } catch (err) {
-    console.error("❌ Erreur uploadPdfDevis :", err);
-    return res.status(500).json({ message: "Erreur lors de l'upload du PDF." });
+    console.error("❌ Erreur critique dans uploadPdfDevis :", err);
+    return res.status(500).json({ 
+      message: "Erreur lors de la finalisation de l'acceptation via PDF.",
+      error: err.message 
+    });
   }
 };
 
