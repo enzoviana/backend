@@ -97,6 +97,7 @@ router.get('/cagnotte', authMiddleware, agencyController.getCagnotteEtReduction)
 router.get('/devis', authMiddleware, devisController.getDevis);
 router.post('/devis/corriger-email', authMiddleware, devisController.corrigerEmailDevis);
 router.post('/devis/ai', authMiddleware, devisController.generateDevisAI);
+router.patch('/devis/:id', authMiddleware, devisController.updateDevisInfos);
 
 router.delete("/devis/:id", authMiddleware, devisController.deleteDevis);
 router.post(
