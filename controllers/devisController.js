@@ -104,7 +104,9 @@ exports.getDevis = async (req, res) => {
         path: "agenceId",
         select: "nom_commercial"
       })
-      .sort({ dateCreation: -1 });
+      .sort({ dateCreation: -1 })
+      .lean();
+      
 
     // --- Ajout du statut de l'ordre de mission pour chaque devis ---
     const devisWithOrdre = await Promise.all(devis.map(async (d) => {
