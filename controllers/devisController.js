@@ -119,6 +119,8 @@ exports.getDevis = async (req, res) => {
         montantTTC: d.montantTTC || 0,
         totalApresReduction: d.totalApresReduction || 0,
         statut: d.statut || 'Envoyé',
+        locataire: d.locataire || null ,
+        adresseBien : d.adresseBien || null ,
         client: d.client || null,
         dateCreation: d.dateCreation || d.createdAt || new Date(),
         accesClientKey: d.accesClientKey || null,
