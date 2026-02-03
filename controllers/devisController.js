@@ -231,7 +231,7 @@ exports.envoyerRappelDevis = async (req, res) => {
     }
 
     // 🔗 Lien client
-    const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+    const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
     console.log("🔗 Lien du devis envoyé au client :", lienDevis);
 
     // 💌 Envoi e-mail
@@ -487,7 +487,7 @@ exports.envoyerRappelsAutomatiques = async () => {
     console.log(`🔍 ${devisArelancer.length} devis à relancer (Statuts: Envoyé/Ouvert)`);
 
     for (const devis of devisArelancer) {
-      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+      const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
       await sendEmail({
         to: devis.client.email,
@@ -1123,7 +1123,7 @@ const variables = {
   dateCreation: new Date().toLocaleDateString("fr-FR"),
   description: ordre.description,
   statut: ordre.statut,
-  lienMission: `https://dimotec.datafuse.fr/ordre-mission`
+  lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
 };
 
 // ✅ Envoi mail à l’agence si disponible
@@ -1157,7 +1157,7 @@ await sendEmail({
 // 💌 Envoi de l’e-mail si le payeur est le client
 // 💌 Envoi de l’e-mail si le payeur est le client
 if (data.payer === "client") {
-  const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+  const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
   // 🟡 D'abord on met un statut temporaire
   devis.statut = "Envoi_En_Cours";
@@ -1283,7 +1283,7 @@ exports.corrigerEmailDevis = async (req, res) => {
       template: "devis.html",
       variables: {
         nomClient: `${devis.client.prenom} ${devis.client.nom}`,
-        lienDevis: `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`,
+        lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
         "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
         "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
       },
@@ -1426,7 +1426,7 @@ exports.uploadPdfDevis = async (req, res) => {
       dateCreation: new Date().toLocaleDateString("fr-FR"),
       description: ordre.description,
       statut: ordre.statut,
-      lienMission: `https://dimotec.datafuse.fr/ordre-mission`
+      lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
     };
 
     // Email à l'agence
@@ -1781,7 +1781,7 @@ exports.noDocumentsDevis = async (req, res) => {
       nomClient: clientNom,
       numeroDevis: devis.numero,
       messageClient: messageClient || "Le client indique qu'aucun document n'est disponible.",
-      lienDevis: `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`,
+      lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
       date: new Date().toLocaleString("fr-FR"),
     };
 
@@ -2035,7 +2035,7 @@ exports.notifyNewAgency = async (req, res) => {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎉 Bienvenue sur DIMOTEC</h1>
+      <h1>🎉 Bienvenue sur Votre-Devis-Diagnostics.fr</h1>
       <p>Votre plateforme de gestion de diagnostics immobiliers</p>
     </div>
 
@@ -2067,7 +2067,7 @@ exports.notifyNewAgency = async (req, res) => {
       </div>
 
       <center>
-        <a href="https://dimotec.fr/inscription" class="cta-button">
+        <a href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
           Créer mon compte gratuitement
         </a>
       </center>
@@ -2303,7 +2303,7 @@ exports.notifyExistingAgency = async (req, res) => {
       </div>
 
       <center>
-        <a href="https://dimotec.fr/login" class="cta-button">
+        <a href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
           Accéder à mon espace
         </a>
       </center>
