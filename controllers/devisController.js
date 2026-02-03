@@ -1829,6 +1829,10 @@ exports.updateDevisInfos = async (req, res) => {
       return res.status(403).json({ message: "Vous n'avez pas la permission de modifier ce devis." });
     }
 
+    // 🔍 Détection du changement de statut vers "Accepté"
+    const ancienStatut = devis.statut;
+    const passeAAccepte = statut && statut === "Accepté" && ancienStatut !== "Accepté";
+
     if (statut) {
       devis.statut = statut;
     }
@@ -1879,6 +1883,68 @@ exports.updateDevisInfos = async (req, res) => {
     await devis.save();
 
     console.log(`✅ Devis ${devis.numero} mis à jour avec succès`);
+
+    // 🆕 Création automatique de l'ordre de mission si le devis passe à "Accepté"
+    if (passeAAccepte) {
+      console.log(`🚀 Création automatique de l'ordre de mission pour le devis ${devis.numero}`);
+
+      try {
+        // Vérifier qu'un ordre de mission n'existe pas déjà
+        const ordreMissionExistant = await OrdreMission.findOne({ devisId: devis._id });
+
+        if (ordreMissionExistant) {
+          console.log(`⚠️ Un ordre de mission existe déjà pour ce devis (${ordreMissionExistant.numero})`);
+        } else {
+          // Récupérer ou créer le client
+          let clientId = devis.clientId;
+
+          if (!clientId && devis.client?.email) {
+            let clientExist = await Client.findOne({ email: devis.client.email });
+
+            if (!clientExist) {
+              // Créer le client s'il n'existe pas
+              clientExist = new Client({
+                nom: devis.client.nom,
+                prenom: devis.client.prenom,
+                email: devis.client.email,
+                tel: devis.client.tel || '',
+                adresse: devis.client.adresse || '',
+                ville: devis.client.ville || '',
+                codePostal: devis.client.codePostal || '',
+                pays: devis.client.pays || 'France',
+                devis: [devis._id]
+              });
+              await clientExist.save();
+              console.log(`✅ Client créé : ${clientExist.email}`);
+            }
+
+            clientId = clientExist._id;
+            devis.clientId = clientId;
+            await devis.save();
+          }
+
+          // Créer l'ordre de mission
+          const nouvelOrdreMission = new OrdreMission({
+            devisId: devis._id,
+            agenceId: devis.agenceId || null, // 🔥 Inclure l'ID de l'agence si le devis est partagé
+            numero: `OM-${Date.now()}`,
+            clientId: clientId,
+            description: `Ordre de mission créé automatiquement pour le devis ${devis.numero}`,
+            statut: "Commande",
+            creePar: devis.creePar || {
+              id: req.user._id,
+              type: req.user.role === "admin" ? "Admin" : req.user.role === "agence" ? "Agence" : "Employe"
+            }
+          });
+
+          await nouvelOrdreMission.save();
+          console.log(`✅ Ordre de mission ${nouvelOrdreMission.numero} créé automatiquement`);
+        }
+      } catch (errorOM) {
+        console.error("❌ Erreur lors de la création de l'ordre de mission :", errorOM);
+        // Ne pas bloquer la mise à jour du devis si la création de l'OM échoue
+      }
+    }
 
     return res.status(200).json({
       message: "✅ Devis mis à jour avec succès",
