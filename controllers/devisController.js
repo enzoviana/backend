@@ -135,6 +135,8 @@ exports.getDevis = async (req, res) => {
         complement: d.adresseBien.complement || "",
         parcelle: d.adresseBien.parcelle || null
     } : null,
+      note: d.note || null,
+      numeroFiscalBien: d.numeroFiscalBien || null,
         client: d.client || null,
         dateCreation: d.dateCreation || d.createdAt || new Date(),
         accesClientKey: d.accesClientKey || null,
