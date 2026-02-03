@@ -1024,6 +1024,11 @@ console.log("==== Client avant création devis ====", client);
     siret: client.siret,
     remarques: client.remarques,
   },
+
+  // 🆕 Ajouter les champs locataire
+  locataire: data.locataire || null,
+  contactLocataire: data.contactLocataire || false,
+
       type: data.type,
       bien: data.bien,
       transaction: data.transaction,
@@ -1778,5 +1783,88 @@ exports.noDocumentsDevis = async (req, res) => {
   } catch (error) {
     console.error("❌ Erreur envoi notification pas de documents :", error);
     res.status(500).json({ message: "Erreur serveur lors de l'envoi de la notification." });
+  }
+};
+
+/**
+ * 📝 Mettre à jour les informations d'un devis existant
+ * Route : PATCH /api/agency/devis/:id
+ */
+exports.updateDevisInfos = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { client, locataire, contactLocataire, adresseBien, numeroFiscalBien, note } = req.body;
+
+    // 🔍 Vérification de l'existence du devis
+    const devis = await Devis.findById(id);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    // 🔐 Vérification des autorisations
+    if (req.user.role !== "admin" && req.role !== "agence") {
+      return res.status(403).json({ message: "Non autorisé." });
+    }
+
+    // Pour les agences, vérifier qu'elles sont propriétaires du devis
+    if (req.role === "agence" && devis.agenceId.toString() !== req.agence._id.toString()) {
+      return res.status(403).json({ message: "Vous n'avez pas la permission de modifier ce devis." });
+    }
+
+    // ✏️ Mise à jour des champs modifiables
+
+    // Informations client
+    if (client) {
+      if (client.nom) devis.client.nom = client.nom;
+      if (client.prenom) devis.client.prenom = client.prenom;
+      if (client.email) devis.client.email = client.email;
+      if (client.tel !== undefined) devis.client.tel = client.tel;
+    }
+
+    // Informations locataire
+    if (locataire) {
+      devis.locataire = {
+        nom: locataire.nom || '',
+        prenom: locataire.prenom || '',
+        tel: locataire.tel || ''
+      };
+    }
+
+    // Contact locataire
+    if (contactLocataire !== undefined) {
+      devis.contactLocataire = contactLocataire;
+    }
+
+    // Adresse du bien
+    if (adresseBien) {
+      devis.adresseBien = {
+        ...devis.adresseBien,
+        ...adresseBien
+      };
+    }
+
+    // Numéro fiscal
+    if (numeroFiscalBien !== undefined) {
+      devis.numeroFiscalBien = numeroFiscalBien;
+    }
+
+    // Note
+    if (note !== undefined) {
+      devis.note = note;
+    }
+
+    // 💾 Sauvegarde
+    await devis.save();
+
+    console.log(`✅ Devis ${devis.numero} mis à jour avec succès`);
+
+    return res.status(200).json({
+      message: "✅ Devis mis à jour avec succès",
+      devis
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur mise à jour devis :", error);
+    return res.status(500).json({ message: "Erreur serveur lors de la mise à jour du devis." });
   }
 };

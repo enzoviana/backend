@@ -25,6 +25,19 @@ const devisSchema = new mongoose.Schema({
     remarques: { type: String },
   },
 
+  /* 🏠 Informations du locataire (optionnel) */
+  locataire: {
+    nom: { type: String },
+    prenom: { type: String },
+    tel: { type: String }
+  },
+
+  /* 📞 Contact principal */
+  contactLocataire: {
+    type: Boolean,
+    default: false
+  },
+
   lignes: [
   {
     description: { type: String, required: true },

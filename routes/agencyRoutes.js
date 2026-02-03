@@ -41,6 +41,9 @@ router.post(
   devisController.createDevis
 );
 
+// 🆕 Modifier les informations d'un devis existant
+router.patch('/devis/:id', agencyAuth, devisController.updateDevisInfos);
+
 
 router.get("/mission/downloadConsentPdf/:devisId", agencyAuth, missionController.downloadConsentPdf);
 
