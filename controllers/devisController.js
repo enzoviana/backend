@@ -1894,7 +1894,7 @@ exports.updateDevisInfos = async (req, res) => {
 // 🆕 Notifier une nouvelle agence (invitation à rejoindre la plateforme)
 exports.notifyNewAgency = async (req, res) => {
   try {
-    const { devisId, agencyName, agencyEmail, devisNumero } = req.body;
+    const { devisId, agencyName, agencyEmail } = req.body;
 
     if (!agencyEmail || !agencyName) {
       return res.status(400).json({ message: "Nom et email de l'agence requis" });
@@ -2046,7 +2046,7 @@ exports.notifyNewAgency = async (req, res) => {
 
       <div class="devis-info">
         <strong>📋 Détails du devis :</strong>
-        <p><strong>Numéro :</strong> ${devisNumero || 'N/A'}</p>
+
         ${devis ? `
           <p><strong>Client :</strong> ${devis.client?.prenom || ''} ${devis.client?.nom || ''}</p>
           <p><strong>Montant :</strong> ${devis.montantTTC ? devis.montantTTC.toFixed(2) + ' €' : 'N/A'}</p>
@@ -2114,7 +2114,7 @@ exports.notifyNewAgency = async (req, res) => {
 // 🆕 Notifier une agence existante (devis créé en leur nom)
 exports.notifyExistingAgency = async (req, res) => {
   try {
-    const { devisId, agencyId, devisNumero } = req.body;
+    const { devisId, agencyId } = req.body;
 
     if (!agencyId) {
       return res.status(400).json({ message: "ID de l'agence requis" });
@@ -2274,10 +2274,7 @@ exports.notifyExistingAgency = async (req, res) => {
 
       <div class="devis-card">
         <h3>📄 Informations du devis</h3>
-        <div class="info-row">
-          <strong>Numéro de devis</strong>
-          <span>${devisNumero || 'N/A'}</span>
-        </div>
+
         ${devis ? `
           <div class="info-row">
             <strong>Client</strong>
@@ -2333,7 +2330,7 @@ exports.notifyExistingAgency = async (req, res) => {
     // Envoyer l'email
     await sendEmail({
       to: agencyEmail,
-      subject: `📋 Nouveau Devis ${devisNumero || ''} créé pour ${agence.nom_commercial}`,
+      subject: `📋 Nouveau Devis  créé pour ${agence.nom_commercial}`,
       html: emailHtml
     });
 
