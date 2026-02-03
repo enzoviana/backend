@@ -99,6 +99,10 @@ router.post('/devis/corriger-email', authMiddleware, devisController.corrigerEma
 router.post('/devis/ai', authMiddleware, devisController.generateDevisAI);
 router.patch('/devis/:id', authMiddleware, devisController.updateDevisInfos);
 
+// 🆕 Routes de notification d'agences
+router.post('/devis/notify-new-agency', authMiddleware, devisController.notifyNewAgency);
+router.post('/devis/notify-existing-agency', authMiddleware, devisController.notifyExistingAgency);
+
 router.delete("/devis/:id", authMiddleware, devisController.deleteDevis);
 router.post(
   '/devis',

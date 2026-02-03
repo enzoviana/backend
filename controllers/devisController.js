@@ -1890,3 +1890,459 @@ exports.updateDevisInfos = async (req, res) => {
     return res.status(500).json({ message: "Erreur serveur lors de la mise à jour du devis." });
   }
 };
+
+// 🆕 Notifier une nouvelle agence (invitation à rejoindre la plateforme)
+exports.notifyNewAgency = async (req, res) => {
+  try {
+    const { devisId, agencyName, agencyEmail, devisNumero } = req.body;
+
+    if (!agencyEmail || !agencyName) {
+      return res.status(400).json({ message: "Nom et email de l'agence requis" });
+    }
+
+    // Récupérer le devis pour avoir plus d'infos
+    const devis = await Devis.findById(devisId).populate('client');
+
+    // Template email pour nouvelle agence
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Invitation DIMOTEC</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #ed891a 0%, #f59e42 100%);
+      padding: 40px 30px;
+      text-align: center;
+      color: white;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .header p {
+      margin: 10px 0 0;
+      font-size: 16px;
+      opacity: 0.95;
+    }
+    .content {
+      padding: 40px 30px;
+    }
+    .content h2 {
+      color: #1e293b;
+      font-size: 22px;
+      margin: 0 0 20px;
+    }
+    .content p {
+      color: #64748b;
+      margin: 0 0 16px;
+      font-size: 15px;
+    }
+    .devis-info {
+      background: #f1f5f9;
+      border-left: 4px solid #ed891a;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 25px 0;
+    }
+    .devis-info strong {
+      color: #1e293b;
+      display: block;
+      margin-bottom: 8px;
+    }
+    .devis-info p {
+      margin: 5px 0;
+      color: #475569;
+    }
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #ed891a 0%, #f59e42 100%);
+      color: white;
+      padding: 16px 40px;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 20px 0;
+      transition: transform 0.2s;
+      box-shadow: 0 4px 12px rgba(237, 137, 26, 0.3);
+    }
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(237, 137, 26, 0.4);
+    }
+    .benefits {
+      background: #f8fafc;
+      padding: 25px;
+      border-radius: 12px;
+      margin: 25px 0;
+    }
+    .benefits h3 {
+      color: #1e293b;
+      font-size: 18px;
+      margin: 0 0 15px;
+    }
+    .benefits ul {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .benefits li {
+      padding: 10px 0;
+      color: #475569;
+      display: flex;
+      align-items: center;
+    }
+    .benefits li:before {
+      content: "✓";
+      color: #10b981;
+      font-weight: bold;
+      font-size: 20px;
+      margin-right: 12px;
+    }
+    .footer {
+      background: #f1f5f9;
+      padding: 30px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+    }
+    .footer a {
+      color: #ed891a;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎉 Bienvenue sur DIMOTEC</h1>
+      <p>Votre plateforme de gestion de diagnostics immobiliers</p>
+    </div>
+
+    <div class="content">
+      <h2>Bonjour ${agencyName},</h2>
+
+      <p>Nous avons le plaisir de vous informer qu'un devis a été réalisé en votre nom sur notre plateforme DIMOTEC.</p>
+
+      <div class="devis-info">
+        <strong>📋 Détails du devis :</strong>
+        <p><strong>Numéro :</strong> ${devisNumero || 'N/A'}</p>
+        ${devis ? `
+          <p><strong>Client :</strong> ${devis.client?.prenom || ''} ${devis.client?.nom || ''}</p>
+          <p><strong>Montant :</strong> ${devis.montantTTC ? devis.montantTTC.toFixed(2) + ' €' : 'N/A'}</p>
+        ` : ''}
+      </div>
+
+      <p><strong>Rejoignez DIMOTEC dès maintenant</strong> et profitez d'une plateforme complète pour gérer vos devis, ordres de mission et suivis clients.</p>
+
+      <div class="benefits">
+        <h3>Pourquoi nous rejoindre ?</h3>
+        <ul>
+          <li>Gestion centralisée de vos devis et interventions</li>
+          <li>Suivi en temps réel de vos projets</li>
+          <li>Communication facilitée avec vos clients</li>
+          <li>Outils de reporting et statistiques</li>
+          <li>Support technique dédié</li>
+        </ul>
+      </div>
+
+      <center>
+        <a href="https://dimotec.fr/inscription" class="cta-button">
+          Créer mon compte gratuitement
+        </a>
+      </center>
+
+      <p style="margin-top: 30px; color: #94a3b8; font-size: 14px;">
+        Une fois inscrit, vous pourrez accéder à ce devis et commencer à utiliser tous nos outils.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>
+        <strong>DIMOTEC</strong><br>
+        La solution professionnelle pour vos diagnostics immobiliers
+      </p>
+      <p style="margin-top: 15px;">
+        Des questions ? Contactez-nous à <a href="mailto:contact@dimotec.fr">contact@dimotec.fr</a>
+      </p>
+      <p style="margin-top: 10px; color: #94a3b8;">
+        © ${new Date().getFullYear()} DIMOTEC - Tous droits réservés
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // Envoyer l'email
+    await sendEmail({
+      to: agencyEmail,
+      subject: `🎉 Invitation DIMOTEC - Un devis a été créé pour ${agencyName}`,
+      html: emailHtml
+    });
+
+    console.log(`✅ Email d'invitation envoyé à ${agencyEmail}`);
+
+    res.status(200).json({ message: "Email d'invitation envoyé avec succès" });
+
+  } catch (error) {
+    console.error("❌ Erreur envoi email nouvelle agence:", error);
+    res.status(500).json({ message: "Erreur lors de l'envoi de l'email" });
+  }
+};
+
+// 🆕 Notifier une agence existante (devis créé en leur nom)
+exports.notifyExistingAgency = async (req, res) => {
+  try {
+    const { devisId, agencyId, devisNumero } = req.body;
+
+    if (!agencyId) {
+      return res.status(400).json({ message: "ID de l'agence requis" });
+    }
+
+    // Récupérer l'agence et le devis
+    const agence = await Agence.findById(agencyId);
+    const devis = await Devis.findById(devisId).populate('client');
+
+    if (!agence) {
+      return res.status(404).json({ message: "Agence introuvable" });
+    }
+
+    const agencyEmail = agence.emails_contact?.[0]?.email || agence.email;
+
+    if (!agencyEmail) {
+      return res.status(400).json({ message: "Aucun email trouvé pour cette agence" });
+    }
+
+    // Template email pour agence existante
+    const emailHtml = `
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Nouveau Devis DIMOTEC</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      line-height: 1.6;
+      color: #333;
+      background-color: #f8fafc;
+      margin: 0;
+      padding: 0;
+    }
+    .container {
+      max-width: 600px;
+      margin: 40px auto;
+      background: #ffffff;
+      border-radius: 16px;
+      overflow: hidden;
+      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .header {
+      background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+      padding: 40px 30px;
+      text-align: center;
+      color: white;
+    }
+    .header h1 {
+      margin: 0;
+      font-size: 28px;
+      font-weight: 700;
+    }
+    .header p {
+      margin: 10px 0 0;
+      font-size: 16px;
+      opacity: 0.95;
+    }
+    .content {
+      padding: 40px 30px;
+    }
+    .content h2 {
+      color: #1e293b;
+      font-size: 22px;
+      margin: 0 0 20px;
+    }
+    .content p {
+      color: #64748b;
+      margin: 0 0 16px;
+      font-size: 15px;
+    }
+    .devis-card {
+      background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+      border: 2px solid #3b82f6;
+      border-radius: 12px;
+      padding: 25px;
+      margin: 25px 0;
+    }
+    .devis-card h3 {
+      color: #1e40af;
+      font-size: 18px;
+      margin: 0 0 15px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .devis-card .info-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 10px 0;
+      border-bottom: 1px solid #bfdbfe;
+    }
+    .devis-card .info-row:last-child {
+      border-bottom: none;
+    }
+    .devis-card .info-row strong {
+      color: #1e293b;
+    }
+    .devis-card .info-row span {
+      color: #475569;
+    }
+    .cta-button {
+      display: inline-block;
+      background: linear-gradient(135deg, #3b82f6 0%, #60a5fa 100%);
+      color: white;
+      padding: 16px 40px;
+      text-decoration: none;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 16px;
+      margin: 20px 0;
+      transition: transform 0.2s;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+    .cta-button:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(59, 130, 246, 0.4);
+    }
+    .alert {
+      background: #fef3c7;
+      border-left: 4px solid #f59e0b;
+      padding: 15px 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    .alert p {
+      margin: 0;
+      color: #92400e;
+      font-size: 14px;
+    }
+    .footer {
+      background: #f1f5f9;
+      padding: 30px;
+      text-align: center;
+      color: #64748b;
+      font-size: 13px;
+    }
+    .footer a {
+      color: #3b82f6;
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>📋 Nouveau Devis</h1>
+      <p>Un devis a été créé en votre nom</p>
+    </div>
+
+    <div class="content">
+      <h2>Bonjour ${agence.nom_commercial},</h2>
+
+      <p>Nous vous informons qu'un nouveau devis a été créé en votre nom sur la plateforme DIMOTEC.</p>
+
+      <div class="devis-card">
+        <h3>📄 Informations du devis</h3>
+        <div class="info-row">
+          <strong>Numéro de devis</strong>
+          <span>${devisNumero || 'N/A'}</span>
+        </div>
+        ${devis ? `
+          <div class="info-row">
+            <strong>Client</strong>
+            <span>${devis.client?.prenom || ''} ${devis.client?.nom || ''}</span>
+          </div>
+          <div class="info-row">
+            <strong>Email client</strong>
+            <span>${devis.client?.email || 'N/A'}</span>
+          </div>
+          <div class="info-row">
+            <strong>Montant TTC</strong>
+            <span style="font-weight: 600; color: #1e40af;">${devis.montantTTC ? devis.montantTTC.toFixed(2) + ' €' : 'N/A'}</span>
+          </div>
+          <div class="info-row">
+            <strong>Date de création</strong>
+            <span>${new Date(devis.dateCreation).toLocaleDateString('fr-FR')}</span>
+          </div>
+        ` : ''}
+      </div>
+
+      <div class="alert">
+        <p><strong>⏰ Action requise :</strong> Connectez-vous à votre espace pour consulter les détails complets et suivre l'évolution de ce devis.</p>
+      </div>
+
+      <center>
+        <a href="https://dimotec.fr/login" class="cta-button">
+          Accéder à mon espace
+        </a>
+      </center>
+
+      <p style="margin-top: 30px; color: #94a3b8; font-size: 14px;">
+        Ce devis est maintenant visible dans votre tableau de bord. Vous pouvez le consulter, le modifier et suivre son statut à tout moment.
+      </p>
+    </div>
+
+    <div class="footer">
+      <p>
+        <strong>DIMOTEC</strong><br>
+        Plateforme de gestion de diagnostics immobiliers
+      </p>
+      <p style="margin-top: 15px;">
+        Besoin d'aide ? <a href="mailto:support@dimotec.fr">support@dimotec.fr</a>
+      </p>
+      <p style="margin-top: 10px; color: #94a3b8;">
+        © ${new Date().getFullYear()} DIMOTEC - Tous droits réservés
+      </p>
+    </div>
+  </div>
+</body>
+</html>
+    `;
+
+    // Envoyer l'email
+    await sendEmail({
+      to: agencyEmail,
+      subject: `📋 Nouveau Devis ${devisNumero || ''} créé pour ${agence.nom_commercial}`,
+      html: emailHtml
+    });
+
+    console.log(`✅ Email de notification envoyé à ${agencyEmail}`);
+
+    res.status(200).json({ message: "Email de notification envoyé avec succès" });
+
+  } catch (error) {
+    console.error("❌ Erreur envoi email agence existante:", error);
+    res.status(500).json({ message: "Erreur lors de l'envoi de l'email" });
+  }
+};
