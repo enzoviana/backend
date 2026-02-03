@@ -121,8 +121,20 @@ exports.getDevis = async (req, res) => {
         montantTTC: d.montantTTC || 0,
         totalApresReduction: d.totalApresReduction || 0,
         statut: d.statut || 'Envoyé',
-        locataire: d.locataire || null ,
-        adresseBien : d.adresseBien || null ,
+       locataire: d.locataire ? {
+        nom: d.locataire.nom || "",
+        prenom: d.locataire.prenom || "",
+        tel: d.locataire.tel || ""
+    } : null,
+
+    adresseBien: d.adresseBien ? {
+        adresse: d.adresseBien.adresse || "",
+        codePostal: d.adresseBien.codePostal || "",
+        ville: d.adresseBien.ville || "",
+        etage: d.adresseBien.etage || "",
+        complement: d.adresseBien.complement || "",
+        parcelle: d.adresseBien.parcelle || null
+    } : null,
         client: d.client || null,
         dateCreation: d.dateCreation || d.createdAt || new Date(),
         accesClientKey: d.accesClientKey || null,
@@ -139,7 +151,7 @@ exports.getDevis = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
-
+ 
 exports.downloadDevis = async (req, res) => {
   try {
     const { devisId } = req.params;
