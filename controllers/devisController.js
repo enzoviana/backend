@@ -1811,7 +1811,7 @@ exports.noDocumentsDevis = async (req, res) => {
 exports.updateDevisInfos = async (req, res) => {
   try {
     const { id } = req.params;
-    const { client, locataire, contactLocataire, adresseBien, numeroFiscalBien, note } = req.body;
+    const { client, locataire, contactLocataire, adresseBien, numeroFiscalBien, note, statut } = req.body;
 
     // 🔍 Vérification de l'existence du devis
     const devis = await Devis.findById(id);
@@ -1827,6 +1827,10 @@ exports.updateDevisInfos = async (req, res) => {
     // Pour les agences, vérifier qu'elles sont propriétaires du devis
     if (req.role === "agence" && devis.agenceId.toString() !== req.agence._id.toString()) {
       return res.status(403).json({ message: "Vous n'avez pas la permission de modifier ce devis." });
+    }
+
+    if (statut) {
+      devis.statut = statut;
     }
 
     // ✏️ Mise à jour des champs modifiables
