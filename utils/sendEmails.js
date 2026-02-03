@@ -53,7 +53,7 @@ async function sendEmail({ to, subject, template, variables = {}, html }) {
 
     console.log(`✅ E-mail envoyé à ${to}${template ? ` avec le template "${template}"` : ' (HTML direct)'}`);
   } catch (error) {
-    console.error('❌ Erreur lors de l'envoi de l'e-mail :', error);
+    console.error("❌ Erreur lors de l'envoi de l'e-mail :", error);
     throw error;
   }
 }
