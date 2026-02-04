@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nouveau Devis Créé</title>
+    <style>
+        body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; margin: 0; padding: 0; }
+        .container { max-width: 600px; margin: 20px auto; border: 1px solid #e0e0e0; border-radius: 8px; overflow: hidden; }
+        .header { background-color: #2563eb; color: #ffffff; padding: 20px; text-align: center; }
+        .content { padding: 30px; }
+        .footer { background-color: #f9fafb; color: #6b7280; padding: 15px; text-align: center; font-size: 12px; }
+        .info-box { background-color: #f3f4f6; border-radius: 6px; padding: 20px; margin: 20px 0; }
+        .button { display: inline-block; padding: 12px 24px; background-color: #2563eb; color: #ffffff !important; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 10px; }
+        .label { font-weight: bold; color: #4b5563; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin: 0; font-size: 20px;">Nouveau Devis Généré</h1>
+        </div>
+        
+        <div class="content">
+            <p>Bonjour,</p>
+            <p>Un nouveau devis vient d'être créé via votre plateforme. Voici un résumé des informations :</p>
+            
+            <div class="info-box">
+                <p><span class="label">Numéro du devis :</span> {{numero}}</p>
+                <p><span class="label">Client :</span> {{nomClient}}</p>
+                <p><span class="label">Montant TTC :</span> {{montant}}€</p>
+                <p><span class="label">Date :</span> {{dateCreation}}</p>
+            </div>
+
+            <p>Le client a reçu son lien d'accès par e-mail automatiquement.</p>
+            
+            <div style="text-align: center;">
+                <a href="{{lienDevis}}" class="button">Consulter le devis</a>
+            </div>
+
+            <p style="margin-top: 25px;">Cordialement,<br><strong>L'équipe Dimotec</strong></p>
+        </div>
+        
+        <div class="footer">
+            Ceci est une notification automatique. Ne pas répondre à cet e-mail.
+        </div>
+    </div>
+</body>
+</html>
