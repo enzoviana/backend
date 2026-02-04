@@ -1159,13 +1159,13 @@ await sendEmail({
 if (data.payer === "client") {
   const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
-  // 🟡 D'abord on met un statut temporaire
   devis.statut = "Envoi_En_Cours";
   await devis.save();
 
   try {
     console.log("📤 Envoi e-mail au client :", client.email);
 
+    // 1. Mail au Client
     await sendEmail({
       to: client.email,
       subject: `Votre devis ${devis.numero} est prêt`,
@@ -1179,6 +1179,27 @@ if (data.payer === "client") {
     });
 
     console.log("✅ Email envoyé avec succès au client :", client.email);
+
+    // --- AJOUT : Notification à l'agence ---
+    const agence = await Agence.findById(devis.agenceId);
+    const agenceEmail = agence?.emails_contact?.[0]?.email;
+    
+    if (agenceEmail) {
+      console.log("📤 Envoi copie à l'agence :", agenceEmail);
+      await sendEmail({
+        to: agenceEmail,
+        subject: `Nouveau devis créé - ${devis.numero} - ${client.prenom} ${client.nom}`,
+        template: "notification_agence_devis.html", // Assure-toi que ce template existe ou utilise devis.html
+        variables: {
+          nomClient: `${client.prenom} ${client.nom}`,
+          numero: devis.numero,
+          montant: devis.montantTTC,
+          lienDevis
+        },
+      });
+      console.log("✅ Notification envoyée à l'agence");
+    }
+    // ---------------------------------------
 
     devis.emailNonDelivre = false;
     devis.statut = "Envoyé";
@@ -1200,7 +1221,7 @@ if (data.payer === "client") {
     const agenceEmail =
       Array.isArray(agence?.emails_contact) && agence.emails_contact.length > 0
         ? agence.emails_contact[0].email
-        : null;
+        : null; 
 
     const dimotecEmail = "dimotec34@gmail.com";
 
