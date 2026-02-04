@@ -2385,7 +2385,7 @@ exports.notifyExistingAgency = async (req, res) => {
         Plateforme de gestion de diagnostics immobiliers
       </p>
       <p style="margin-top: 15px;">
-        Besoin d'aide ? <a href="mailto:support@dimotec.fr">support@dimotec.fr</a>
+        Besoin d'aide ? <a href="mailto:support@votre-devis-diagnostics.fr">support@votre-devis-diagnostics.fr</a>
       </p>
       <p style="margin-top: 10px; color: #94a3b8;">
         © ${new Date().getFullYear()} DIMOTEC - Tous droits réservés
