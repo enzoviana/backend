@@ -60,12 +60,17 @@ async function sendEmail({ to, subject, template, variables = {}, html }) {
     }
 
     // 📤 Envoi de l'e-mail (1 seule tentative)
-    const info = await transporter.sendMail({
-      from: `"${process.env.EMAIL_SENDER_NAME || 'Dimotec Diagnostic'}" <${process.env.SMTP_USER}>`,
-      to,
-      subject,
-      html: htmlContent
-    });
+const info = await transporter.sendMail({
+  from: `"${process.env.EMAIL_SENDER_NAME || 'Dimotec Diagnostic'}" <${process.env.SMTP_USER}>`,
+  to,
+  subject,
+  html: htmlContent,
+  envelope: {
+    from: process.env.BOUNCEMAIL, // <-- Ici tu rediriges les bounces
+    to
+  }
+});
+
 
     console.log(`✅ E-mail envoyé à ${to} [ID: ${info.messageId}]`);
     return info;
