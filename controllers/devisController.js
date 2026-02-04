@@ -1194,7 +1194,7 @@ if (data.payer === "client") {
           nomClient: `${client.prenom} ${client.nom}`,
           numero: devis.numero,
           montant: devis.montantTTC,
-          lienDevis
+          lienDevis : "https://agence.votre-devis-diagnostics.fr/billing"
         },
       });
       console.log("✅ Notification envoyée à l'agence");
