@@ -561,6 +561,36 @@ exports.updateStatutOrdreMission = async (req, res) => {
       });
     }
 
+    // 🆕 Envoi email à l'agence si rdvDate défini
+    if (envoyerMail && ordre.agenceId) {
+      const agenceEmail = ordre.agenceId.emails_contact?.[0]?.email || ordre.agenceId.email;
+
+      if (agenceEmail) {
+        try {
+          await sendEmail({
+            to: agenceEmail,
+            subject: `Rendez-vous confirmé - ${ordre.numero}`,
+            template: "ConfirmationRdvAgence.html",
+            variables: {
+              nomAgence: ordre.agenceId.nom_commercial || "Agence",
+              numeroMission: ordre.numero,
+              dateRdv: ordre.rdvDate.toLocaleDateString("fr-FR"),
+              heureRdv: ordre.rdvDate.toLocaleTimeString("fr-FR", { hour: '2-digit', minute: '2-digit' }),
+              nomClient: (ordre.clientId?.prenom || '') + ' ' + (ordre.clientId?.nom || ''),
+              telClient: ordre.clientId?.telephone || ordre.clientId?.tel || "Non renseigné",
+              adresseIntervention: ordre.clientId?.adresse + ' ' + ordre.clientId?.ville + ' ' + ordre.clientId?.codePostal || "Adresse non précisée"
+            }
+          });
+          console.log(`✅ Email de confirmation RDV envoyé à l'agence : ${agenceEmail}`);
+        } catch (emailError) {
+          console.error("❌ Erreur lors de l'envoi de l'email à l'agence :", emailError);
+          // Ne pas bloquer l'opération si l'email échoue
+        }
+      } else {
+        console.warn("⚠️ Aucun email trouvé pour l'agence");
+      }
+    }
+
     /*
     ────────────────────────────────
        💰 Crédit cagnotte si Payée

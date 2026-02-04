@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Confirmation rendez-vous - Agence</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #3b82f6;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .info-box {
+            background-color: #f0f7ff;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .button {
+            display: inline-block;
+            background-color: #3b82f6;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 12px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+
+<table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+
+    <tr>
+        <td class="header">
+            Nouveau Rendez-vous Confirmé
+        </td>
+    </tr>
+
+    <tr>
+        <td class="content">
+
+            <p>Bonjour {{nomAgence}},</p>
+
+            <p>Un rendez-vous a été fixé pour l'ordre de mission <strong>{{numeroMission}}</strong>.</p>
+
+            <div class="info-box">
+                <h3 style="margin-top: 0;">Détails du rendez-vous</h3>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li><strong>Date :</strong> {{dateRdv}}</li>
+                    <li><strong>Heure :</strong> {{heureRdv}}</li>
+                    <li><strong>Client :</strong> {{nomClient}}</li>
+                    <li><strong>Téléphone client :</strong> {{telClient}}</li>
+                    <li><strong>Adresse de l'intervention :</strong> {{adresseIntervention}}</li>
+                </ul>
+            </div>
+
+            <p>Le client a été notifié par email de ce rendez-vous.</p>
+
+            <p>N'oubliez pas de préparer tous les documents nécessaires avant votre intervention.</p>
+
+            <p>Cordialement,<br>
+                <strong>L'équipe DIMOTEC</strong>
+            </p>
+
+        </td>
+    </tr>
+
+    <tr>
+        <td class="footer">
+            © 2025 DIMOTEC. Tous droits réservés.<br>
+            contact@dimotec.fr
+        </td>
+    </tr>
+
+</table>
+
+</body>
+</html>
