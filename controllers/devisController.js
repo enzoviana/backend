@@ -126,6 +126,8 @@ exports.getDevis = async (req, res) => {
         prenom: d.locataire.prenom || "",
         tel: d.locataire.tel || ""
     } : null,
+    contactLocataire: d.contactLocataire || false,
+    clefEnAgence: d.clefEnAgence || false,
 
     adresseBien: d.adresseBien ? {
         adresse: d.adresseBien.adresse || "",
@@ -1046,6 +1048,7 @@ console.log("==== Client avant création devis ====", client);
   // 🆕 Ajouter les champs locataire
   locataire: data.locataire || null,
   contactLocataire: data.contactLocataire || false,
+  clefEnAgence: data.clefEnAgence || false,
 
       type: data.type,
       bien: data.bien,
@@ -1832,7 +1835,7 @@ exports.noDocumentsDevis = async (req, res) => {
 exports.updateDevisInfos = async (req, res) => {
   try {
     const { id } = req.params;
-    const { client, locataire, contactLocataire, adresseBien, numeroFiscalBien, note, statut } = req.body;
+    const { client, locataire, contactLocataire, clefEnAgence, adresseBien, numeroFiscalBien, note, statut } = req.body;
 
     // 🔍 Vérification de l'existence du devis
     const devis = await Devis.findById(id);
@@ -1880,6 +1883,11 @@ exports.updateDevisInfos = async (req, res) => {
     // Contact locataire
     if (contactLocataire !== undefined) {
       devis.contactLocataire = contactLocataire;
+    }
+
+    // Clef en agence
+    if (clefEnAgence !== undefined) {
+      devis.clefEnAgence = clefEnAgence;
     }
 
     // Adresse du bien

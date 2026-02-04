@@ -38,6 +38,12 @@ const devisSchema = new mongoose.Schema({
     default: false
   },
 
+  /* 🔑 Clefs en agence */
+  clefEnAgence: {
+    type: Boolean,
+    default: false
+  },
+
   lignes: [
   {
     description: { type: String, required: true },
