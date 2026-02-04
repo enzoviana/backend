@@ -2101,7 +2101,7 @@ exports.notifyNewAgency = async (req, res) => {
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎉 Bienvenue sur Votre-Devis-Diagnostics.fr</h1>
+      <h1>🎉 Bienvenue sur Votre Devis Diagnostics </h1>
       <p>Votre plateforme de gestion de diagnostics immobiliers</p>
     </div>
 
