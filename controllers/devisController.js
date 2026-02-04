@@ -1273,13 +1273,9 @@ await sendEmail({
 
 
 
-// 💌 Envoi de l’e-mail si le payeur est le client
-// 💌 Envoi de l’e-mail si le payeur est le client
+// 💌 Envoi de l'e-mail si le payeur est le client
 if (data.payer === "client") {
   const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
-
-  devis.statut = "Envoi_En_Cours";
-  await devis.save();
 
   try {
     console.log("📤 Envoi e-mail au client :", client.email);
@@ -1299,10 +1295,10 @@ if (data.payer === "client") {
 
     console.log("✅ Email envoyé avec succès au client :", client.email);
 
-    // ⏱️ Attente 2 secondes pour éviter rate limit
-    await sleep(2000);
+    // ⏱️ Attente 10 secondes pour éviter rate limit Hostinger
+    await sleep(10000);
 
-    // --- AJOUT : Notification à l'agence ---
+    // --- Notification à l'agence ---
     const agence = await Agence.findById(devis.agenceId);
     const agenceEmail = agence?.emails_contact?.[0]?.email;
 
@@ -1311,7 +1307,7 @@ if (data.payer === "client") {
       await sendEmail({
         to: agenceEmail,
         subject: `Nouveau devis créé - ${devis.numero} - ${client.prenom} ${client.nom}`,
-        template: "notification_agence_devis.html", // Assure-toi que ce template existe ou utilise devis.html
+        template: "notification_agence_devis.html",
         variables: {
           nomClient: `${client.prenom} ${client.nom}`,
           numero: devis.numero,
@@ -1321,77 +1317,11 @@ if (data.payer === "client") {
       });
       console.log("✅ Notification envoyée à l'agence");
     }
-    // ---------------------------------------
 
-    // ⚠️ On garde "Envoi_En_Cours" au lieu de "Envoyé"
-    // Le statut sera mis à jour après vérification des bounces
+    // ✅ Email envoyé avec succès
     devis.emailNonDelivre = false;
-    // devis.statut reste "Envoi_En_Cours" défini plus haut
+    devis.statut = "Envoyé";
     await devis.save();
-
-    // 🕐 Vérification différée des bounces (5 minutes)
-    setTimeout(async () => {
-      try {
-        const devisActualise = await Devis.findById(devis._id);
-        if (!devisActualise || devisActualise.statut !== "Envoi_En_Cours") {
-          return; // Le statut a déjà été modifié manuellement
-        }
-
-        // Vérifier les bounces via IMAP
-        const isBounced = await verifierBouncesIMAP(client.email, devis.numero);
-
-        if (isBounced) {
-          console.log(`⚠️ Bounce détecté pour ${client.email} - Devis ${devis.numero}`);
-          devisActualise.emailNonDelivre = true;
-          devisActualise.emailClientErrone = client.email;
-          devisActualise.statut = "Email_Errone";
-          await devisActualise.save();
-
-          // Notification agence et Dimotec
-          const agence = await Agence.findById(devisActualise.agenceId);
-          const agenceEmail = agence?.emails_contact?.[0]?.email || null;
-          const dimotecEmail = "dimotec34@gmail.com";
-
-          const alertVariables = {
-            clientNom: `${client.prenom} ${client.nom}`,
-            emailClient: client.email,
-            devisNumero: devis.numero,
-            agenceNom: agence?.nom_commercial || "Agence",
-          };
-
-          const destinataires = [];
-          if (agenceEmail) destinataires.push(agenceEmail);
-          destinataires.push(dimotecEmail);
-
-          for (let i = 0; i < destinataires.length; i++) {
-            const dest = destinataires[i];
-            await sendEmail({
-              to: dest,
-              subject: `⚠️ Email non délivré - Devis ${devis.numero}`,
-              template: "alerteEmailClient.html",
-              variables: alertVariables,
-            });
-
-            // ⏱️ Attente entre chaque email (sauf le dernier)
-            if (i < destinataires.length - 1) {
-              await sleep(2000);
-            }
-          }
-        } else {
-          console.log(`✅ Email confirmé délivré pour ${client.email} - Devis ${devis.numero}`);
-          devisActualise.statut = "Envoyé";
-          await devisActualise.save();
-        }
-      } catch (error) {
-        console.error("Erreur vérification bounce:", error);
-        // En cas d'erreur de vérification, on passe en "Envoyé" par défaut
-        const devisActualise = await Devis.findById(devis._id);
-        if (devisActualise?.statut === "Envoi_En_Cours") {
-          devisActualise.statut = "Envoyé";
-          await devisActualise.save();
-        }
-      }
-    }, 5 * 60 * 1000); // 5 minutes
 
   } catch (err) {
     console.error(`❌ Erreur envoi e-mail au client ${client.email}:`, err.message);

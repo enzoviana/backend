@@ -37,12 +37,9 @@ const transporter = nodemailer.createTransport({
 const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
 
 /**
- * 📧 Envoie un e-mail basé sur un template HTML ou HTML direct avec retry automatique
+ * 📧 Envoie un e-mail basé sur un template HTML ou HTML direct (1 seule tentative)
  */
-async function sendEmail({ to, subject, template, variables = {}, html, retryCount = 0 }) {
-  const MAX_RETRIES = 3;
-  const RETRY_DELAYS = [5000, 15000, 30000]; // 5s, 15s, 30s
-
+async function sendEmail({ to, subject, template, variables = {}, html }) {
   try {
     let htmlContent;
 
@@ -62,7 +59,7 @@ async function sendEmail({ to, subject, template, variables = {}, html, retryCou
       throw new Error('Vous devez fournir soit "template" soit "html"');
     }
 
-    // 📤 Envoi de l'e-mail (Réutilise le transporter existant)
+    // 📤 Envoi de l'e-mail (1 seule tentative)
     const info = await transporter.sendMail({
       from: `"${process.env.EMAIL_SENDER_NAME || 'Dimotec Diagnostic'}" <${process.env.SMTP_USER}>`,
       to,
@@ -74,33 +71,7 @@ async function sendEmail({ to, subject, template, variables = {}, html, retryCou
     return info;
 
   } catch (error) {
-    // 🔴 Détection erreur Rate Limit Hostinger (451 4.7.1)
-    const isRateLimit = error.message?.includes('451') ||
-                        error.message?.includes('ratelimit') ||
-                        error.message?.includes('Ratelimit') ||
-                        error.responseCode === 451;
-
-    if (isRateLimit && retryCount < MAX_RETRIES) {
-      const delay = RETRY_DELAYS[retryCount];
-      console.warn(`⚠️ Rate limit détecté pour ${to}. Retry ${retryCount + 1}/${MAX_RETRIES} dans ${delay/1000}s...`);
-
-      await sleep(delay);
-
-      // 🔄 Retry avec compteur incrémenté
-      return sendEmail({ to, subject, template, variables, html, retryCount: retryCount + 1 });
-    }
-
-    // 🚨 Échec définitif après tous les retries ou autre erreur
     console.error(`❌ Erreur lors de l'envoi de l'e-mail à ${to}:`, error.message);
-
-    // Créer une erreur plus explicite pour le rate limit
-    if (isRateLimit) {
-      const rateError = new Error(`Rate limit Hostinger atteint. Email non envoyé après ${MAX_RETRIES} tentatives.`);
-      rateError.code = 'RATE_LIMIT_EXCEEDED';
-      rateError.originalError = error;
-      throw rateError;
-    }
-
     throw error;
   }
 }
