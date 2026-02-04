@@ -18,6 +18,9 @@ const OpenAI = require("openai");
 const dns = require("dns");
 const net = require("net");
 
+// 🕐 Fonction d'attente pour éviter rate limit
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 async function smtpVerifyEmail(email) {
   const domain = email.split("@")[1];
   if (!domain) return false;
@@ -1239,7 +1242,7 @@ const variables = {
   lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
 };
 
-// ✅ Envoi mail à l’agence si disponible
+// ✅ Envoi mail à l'agence si disponible
 if (agenceEmail) {
   await sendEmail({
     to: agenceEmail,
@@ -1247,6 +1250,9 @@ if (agenceEmail) {
     template: "OrdreMission.html",
     variables
   });
+
+  // ⏱️ Attente 2 secondes avant email suivant
+  await sleep(2000);
 }
 
 // ✅ Envoi mail Dimotec systématique
@@ -1293,10 +1299,13 @@ if (data.payer === "client") {
 
     console.log("✅ Email envoyé avec succès au client :", client.email);
 
+    // ⏱️ Attente 2 secondes pour éviter rate limit
+    await sleep(2000);
+
     // --- AJOUT : Notification à l'agence ---
     const agence = await Agence.findById(devis.agenceId);
     const agenceEmail = agence?.emails_contact?.[0]?.email;
-    
+
     if (agenceEmail) {
       console.log("📤 Envoi copie à l'agence :", agenceEmail);
       await sendEmail({
@@ -1354,13 +1363,19 @@ if (data.payer === "client") {
           if (agenceEmail) destinataires.push(agenceEmail);
           destinataires.push(dimotecEmail);
 
-          for (let dest of destinataires) {
+          for (let i = 0; i < destinataires.length; i++) {
+            const dest = destinataires[i];
             await sendEmail({
               to: dest,
               subject: `⚠️ Email non délivré - Devis ${devis.numero}`,
               template: "alerteEmailClient.html",
               variables: alertVariables,
             });
+
+            // ⏱️ Attente entre chaque email (sauf le dernier)
+            if (i < destinataires.length - 1) {
+              await sleep(2000);
+            }
           }
         } else {
           console.log(`✅ Email confirmé délivré pour ${client.email} - Devis ${devis.numero}`);
@@ -1409,7 +1424,8 @@ if (data.payer === "client") {
     if (agenceEmail) destinataires.push(agenceEmail);
     destinataires.push(dimotecEmail);
 
-    for (let dest of destinataires) {
+    for (let i = 0; i < destinataires.length; i++) {
+      const dest = destinataires[i];
       console.log("📤 Envoi alerte à :", dest);
 
       await sendEmail({
@@ -1420,6 +1436,11 @@ if (data.payer === "client") {
       });
 
       console.log("✅ Alerte envoyée à :", dest);
+
+      // ⏱️ Attente entre chaque email (sauf le dernier)
+      if (i < destinataires.length - 1) {
+        await sleep(2000);
+      }
     }
   }
 }
@@ -2669,13 +2690,19 @@ exports.verifierBouncesDevis = async (req, res) => {
           if (agenceEmail) destinataires.push(agenceEmail);
           destinataires.push(dimotecEmail);
 
-          for (let dest of destinataires) {
+          for (let i = 0; i < destinataires.length; i++) {
+            const dest = destinataires[i];
             await sendEmail({
               to: dest,
               subject: `⚠️ Email non délivré - Devis ${devis.numero}`,
               template: "alerteEmailClient.html",
               variables: alertVariables,
             });
+
+            // ⏱️ Attente entre chaque email (sauf le dernier)
+            if (i < destinataires.length - 1) {
+              await sleep(2000);
+            }
           }
         } else {
           console.log(`✅ Email confirmé délivré pour ${emailClient}`);
