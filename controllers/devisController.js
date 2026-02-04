@@ -1274,11 +1274,12 @@ await sendEmail({
 
 
 // 💌 Envoi de l'e-mail si le payeur est le client
+// 💌 Envoi de l'e-mail si le payeur est le client
 if (data.payer === "client") {
   const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
   try {
-    console.log("📤 Envoi e-mail au client :", client.email);
+    console.log("📤 Tentative d'envoi e-mail au client :", client.email);
 
     // 1. Mail au Client
     await sendEmail({
@@ -1295,8 +1296,13 @@ if (data.payer === "client") {
 
     console.log("✅ Email envoyé avec succès au client :", client.email);
 
-    // ⏱️ Attente 10 secondes pour éviter rate limit Hostinger
-    await sleep(10000);
+    // ✅ Mise à jour du statut : Succès
+    devis.emailNonDelivre = false;
+    devis.statut = "Envoyé";
+    await devis.save();
+
+    // ⏱️ Courte attente avant la suite pour ménager Hostinger
+    await sleep(2000);
 
     // --- Notification à l'agence ---
     const agence = await Agence.findById(devis.agenceId);
@@ -1312,78 +1318,49 @@ if (data.payer === "client") {
           nomClient: `${client.prenom} ${client.nom}`,
           numero: devis.numero,
           montant: devis.montantTTC,
-          lienDevis : "https://agence.votre-devis-diagnostics.fr/billing"
+          lienDevis: "https://agence.votre-devis-diagnostics.fr/billing"
         },
       });
       console.log("✅ Notification envoyée à l'agence");
     }
 
-    // ✅ Email envoyé avec succès
-    devis.emailNonDelivre = false;
-    devis.statut = "Envoyé";
-    await devis.save();
-
   } catch (err) {
-    console.error(`❌ Erreur envoi e-mail au client ${client.email}:`, err.message);
+    console.error(`❌ Erreur SMTP (Mail non envoyé) pour ${client.email}:`, err.message);
 
-    // ❗ Ici : email invalide ou boîte pleine OU serveur distant qui rejette
+    // ❗ On marque l'erreur en BDD, mais on ne bloque pas la réponse au front
     devis.emailNonDelivre = true;
     devis.emailClientErrone = client.email;
     devis.statut = "Email_Errone";
     await devis.save();
 
-    console.log("⚠️ Devis marqué comme email non délivré.");
-
-    // 🔔 Prévenir l'agence et Dimotec
-    const agence = await Agence.findById(devis.agenceId);
-    const agenceEmail =
-      Array.isArray(agence?.emails_contact) && agence.emails_contact.length > 0
-        ? agence.emails_contact[0].email
-        : null; 
-
-    const dimotecEmail = "dimotec34@gmail.com";
-
-    const alertVariables = {
-      clientNom: `${client.prenom} ${client.nom}`,
-      emailClient: client.email,
-      devisNumero: devis.numero,
-      agenceNom: agence?.nom_commercial || "Agence",
-    };
-
-    const destinataires = [];
-    if (agenceEmail) destinataires.push(agenceEmail);
-    destinataires.push(dimotecEmail);
-
-    for (let i = 0; i < destinataires.length; i++) {
-      const dest = destinataires[i];
-      console.log("📤 Envoi alerte à :", dest);
-
+    // 🔔 Tentative d'alerte silencieuse (optionnelle)
+    try {
+      const dimotecEmail = "dimotec34@gmail.com";
       await sendEmail({
-        to: dest,
-        subject: `⚠️ Problème d'envoi du devis ${devis.numero}`,
+        to: dimotecEmail,
+        subject: `⚠️ Échec envoi devis ${devis.numero}`,
         template: "alerteEmailClient.html",
-        variables: alertVariables,
+        variables: {
+          clientNom: `${client.prenom} ${client.nom}`,
+          emailClient: client.email,
+          devisNumero: devis.numero,
+          error: err.message
+        },
       });
-
-      console.log("✅ Alerte envoyée à :", dest);
-
-      // ⏱️ Attente entre chaque email (sauf le dernier)
-      if (i < destinataires.length - 1) {
-        await sleep(2000);
-      }
+    } catch (silentErr) {
+      console.error("Impossible d'envoyer l'alerte d'échec SMTP.");
     }
   }
 }
 
+// ✅ RÉPONSE FINALE : Toujours renvoyée au front-end si on arrive ici
+return res.status(201).json({
+  message: "✅ Devis créé avec succès.",
+  note: "Le devis est enregistré en base de données.",
+  devis,
+});
 
 
-
-
-
-    return res.status(201).json({
-      message: "✅ Devis créé avec succès et e-mail envoyé au client",
-      devis,
-    });
 
   } catch (error) {
     console.error("Erreur création devis :", error);
