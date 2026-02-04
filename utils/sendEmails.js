@@ -64,11 +64,9 @@ const info = await transporter.sendMail({
   from: `"${process.env.EMAIL_SENDER_NAME || 'Dimotec Diagnostic'}" <${process.env.SMTP_USER}>`,
   to,
   subject,
-  html: htmlContent,
-  envelope: {
-    from: process.env.BOUNCEMAIL, // <-- Ici tu rediriges les bounces
-    to
-  }
+  html: htmlContent
+  // Note: Le paramètre envelope avec BOUNCEMAIL est supprimé car Hostinger
+  // rejette les envois avec une adresse d'expédition différente du compte SMTP
 });
 
 

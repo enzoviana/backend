@@ -10,8 +10,10 @@ async function checkBounces() {
 
     const config = {
       imap: {
-        user: process.env.BOUNCEMAIL,
-        password: process.env.BOUNCEMDP,
+        // Utiliser SMTP_USER car les bounces arrivent sur l'adresse d'envoi
+        // et non sur BOUNCEMAIL (car Hostinger ne permet pas l'envelope spoofing)
+        user: process.env.SMTP_USER,
+        password: process.env.SMTP_PASS,
         host: process.env.IMAP_HOST || 'imap.hostinger.com',
         port: 993,
         tls: true,
