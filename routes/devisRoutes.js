@@ -36,4 +36,7 @@ router.post('/no-documents', devisController.noDocumentsDevis)
 // Rappel devis
 router.post("/:id/rappel", authMiddleware, devisController.envoyerRappelDevis);
 
+// Vérification manuelle des bounces pour les devis en "Envoi_En_Cours"
+router.post("/verifier-bounces", authMiddleware, devisController.verifierBouncesDevis);
+
 module.exports = router;

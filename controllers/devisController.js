@@ -65,8 +65,118 @@ async function smtpVerifyEmail(email) {
   }
 }
 
+/**
+ * Vérifier les bounces via IMAP
+ * Lit la boîte mail pour détecter les emails de rebond (bounce)
+ */
+async function verifierBouncesIMAP(emailClient, devisNumero) {
+  try {
+    const Imap = require('imap');
+    const { simpleParser } = require('mailparser');
 
+    const imap = new Imap({
+      user: process.env.SMTP_USER,
+      password: process.env.SMTP_PASS,
+      host: process.env.IMAP_HOST || 'imap.gmail.com',
+      port: parseInt(process.env.IMAP_PORT) || 993,
+      tls: true,
+      tlsOptions: { rejectUnauthorized: false }
+    });
 
+    return new Promise((resolve, reject) => {
+      let bounceDetected = false;
+
+      imap.once('ready', () => {
+        imap.openBox('INBOX', false, (err, box) => {
+          if (err) {
+            console.error('Erreur ouverture INBOX:', err);
+            imap.end();
+            return resolve(false);
+          }
+
+          // Chercher les emails de bounce des dernières 24h
+          const searchCriteria = [
+            ['SINCE', new Date(Date.now() - 24 * 60 * 60 * 1000)],
+            ['OR',
+              ['FROM', 'mailer-daemon@'],
+              ['FROM', 'postmaster@']
+            ]
+          ];
+
+          imap.search(searchCriteria, (err, results) => {
+            if (err || !results || results.length === 0) {
+              imap.end();
+              return resolve(false);
+            }
+
+            const f = imap.fetch(results, { bodies: '' });
+
+            f.on('message', (msg) => {
+              msg.on('body', (stream) => {
+                simpleParser(stream, async (err, parsed) => {
+                  if (err) return;
+
+                  const body = parsed.text || '';
+                  const subject = parsed.subject || '';
+
+                  // Vérifier si le bounce concerne cet email
+                  if (
+                    (body.includes(emailClient) || subject.includes(emailClient)) &&
+                    (subject.toLowerCase().includes('undelivered') ||
+                     subject.toLowerCase().includes('delivery failure') ||
+                     subject.toLowerCase().includes('returned mail') ||
+                     body.includes('550') ||
+                     body.includes('User unknown') ||
+                     body.includes('does not exist'))
+                  ) {
+                    console.log(`🔴 Bounce détecté pour ${emailClient}`);
+                    bounceDetected = true;
+                  }
+                });
+              });
+            });
+
+            f.once('end', () => {
+              imap.end();
+              resolve(bounceDetected);
+            });
+
+            f.once('error', (err) => {
+              console.error('Erreur fetch:', err);
+              imap.end();
+              resolve(false);
+            });
+          });
+        });
+      });
+
+      imap.once('error', (err) => {
+        console.error('Erreur IMAP:', err);
+        resolve(false);
+      });
+
+      imap.once('end', () => {
+        if (!bounceDetected) {
+          resolve(false);
+        }
+      });
+
+      imap.connect();
+
+      // Timeout de 30 secondes
+      setTimeout(() => {
+        if (imap.state === 'authenticated') {
+          imap.end();
+        }
+        resolve(bounceDetected);
+      }, 30000);
+    });
+
+  } catch (error) {
+    console.error('Erreur verifierBouncesIMAP:', error);
+    return false;
+  }
+}
 
 /**
  * Récupérer tous les devis de l'utilisateur connecté
@@ -1204,9 +1314,69 @@ if (data.payer === "client") {
     }
     // ---------------------------------------
 
+    // ⚠️ On garde "Envoi_En_Cours" au lieu de "Envoyé"
+    // Le statut sera mis à jour après vérification des bounces
     devis.emailNonDelivre = false;
-    devis.statut = "Envoyé";
+    // devis.statut reste "Envoi_En_Cours" défini plus haut
     await devis.save();
+
+    // 🕐 Vérification différée des bounces (5 minutes)
+    setTimeout(async () => {
+      try {
+        const devisActualise = await Devis.findById(devis._id);
+        if (!devisActualise || devisActualise.statut !== "Envoi_En_Cours") {
+          return; // Le statut a déjà été modifié manuellement
+        }
+
+        // Vérifier les bounces via IMAP
+        const isBounced = await verifierBouncesIMAP(client.email, devis.numero);
+
+        if (isBounced) {
+          console.log(`⚠️ Bounce détecté pour ${client.email} - Devis ${devis.numero}`);
+          devisActualise.emailNonDelivre = true;
+          devisActualise.emailClientErrone = client.email;
+          devisActualise.statut = "Email_Errone";
+          await devisActualise.save();
+
+          // Notification agence et Dimotec
+          const agence = await Agence.findById(devisActualise.agenceId);
+          const agenceEmail = agence?.emails_contact?.[0]?.email || null;
+          const dimotecEmail = "dimotec34@gmail.com";
+
+          const alertVariables = {
+            clientNom: `${client.prenom} ${client.nom}`,
+            emailClient: client.email,
+            devisNumero: devis.numero,
+            agenceNom: agence?.nom_commercial || "Agence",
+          };
+
+          const destinataires = [];
+          if (agenceEmail) destinataires.push(agenceEmail);
+          destinataires.push(dimotecEmail);
+
+          for (let dest of destinataires) {
+            await sendEmail({
+              to: dest,
+              subject: `⚠️ Email non délivré - Devis ${devis.numero}`,
+              template: "alerteEmailClient.html",
+              variables: alertVariables,
+            });
+          }
+        } else {
+          console.log(`✅ Email confirmé délivré pour ${client.email} - Devis ${devis.numero}`);
+          devisActualise.statut = "Envoyé";
+          await devisActualise.save();
+        }
+      } catch (error) {
+        console.error("Erreur vérification bounce:", error);
+        // En cas d'erreur de vérification, on passe en "Envoyé" par défaut
+        const devisActualise = await Devis.findById(devis._id);
+        if (devisActualise?.statut === "Envoi_En_Cours") {
+          devisActualise.statut = "Envoyé";
+          await devisActualise.save();
+        }
+      }
+    }, 5 * 60 * 1000); // 5 minutes
 
   } catch (err) {
     console.error(`❌ Erreur envoi e-mail au client ${client.email}:`, err.message);
@@ -2439,5 +2609,98 @@ exports.notifyExistingAgency = async (req, res) => {
   } catch (error) {
     console.error("❌ Erreur envoi email agence existante:", error);
     res.status(500).json({ message: "Erreur lors de l'envoi de l'email" });
+  }
+};
+
+/**
+ * Vérifier manuellement les bounces pour tous les devis en "Envoi_En_Cours"
+ * Route: POST /api/public/verifier-bounces
+ */
+exports.verifierBouncesDevis = async (req, res) => {
+  try {
+    console.log("🔍 Vérification manuelle des bounces en cours...");
+
+    // Récupérer tous les devis en "Envoi_En_Cours"
+    const devisEnCours = await Devis.find({ statut: "Envoi_En_Cours" });
+
+    if (devisEnCours.length === 0) {
+      return res.status(200).json({
+        message: "Aucun devis en attente de vérification",
+        total: 0,
+        envoyes: 0,
+        errones: 0
+      });
+    }
+
+    let nbEnvoyes = 0;
+    let nbErrones = 0;
+
+    // Vérifier chaque devis
+    for (const devis of devisEnCours) {
+      try {
+        const emailClient = devis.client?.email;
+        if (!emailClient) continue;
+
+        console.log(`Vérification de ${emailClient} - Devis ${devis.numero}`);
+
+        const isBounced = await verifierBouncesIMAP(emailClient, devis.numero);
+
+        if (isBounced) {
+          console.log(`⚠️ Bounce détecté pour ${emailClient}`);
+          devis.emailNonDelivre = true;
+          devis.emailClientErrone = emailClient;
+          devis.statut = "Email_Errone";
+          await devis.save();
+          nbErrones++;
+
+          // Notification agence et Dimotec
+          const agence = await Agence.findById(devis.agenceId);
+          const agenceEmail = agence?.emails_contact?.[0]?.email || null;
+          const dimotecEmail = "dimotec34@gmail.com";
+
+          const alertVariables = {
+            clientNom: `${devis.client.prenom} ${devis.client.nom}`,
+            emailClient: emailClient,
+            devisNumero: devis.numero,
+            agenceNom: agence?.nom_commercial || "Agence",
+          };
+
+          const destinataires = [];
+          if (agenceEmail) destinataires.push(agenceEmail);
+          destinataires.push(dimotecEmail);
+
+          for (let dest of destinataires) {
+            await sendEmail({
+              to: dest,
+              subject: `⚠️ Email non délivré - Devis ${devis.numero}`,
+              template: "alerteEmailClient.html",
+              variables: alertVariables,
+            });
+          }
+        } else {
+          console.log(`✅ Email confirmé délivré pour ${emailClient}`);
+          devis.statut = "Envoyé";
+          await devis.save();
+          nbEnvoyes++;
+        }
+      } catch (error) {
+        console.error(`Erreur vérification devis ${devis.numero}:`, error);
+        // En cas d'erreur, passer en "Envoyé" par défaut
+        devis.statut = "Envoyé";
+        await devis.save();
+        nbEnvoyes++;
+      }
+    }
+
+    res.status(200).json({
+      message: "Vérification des bounces terminée",
+      total: devisEnCours.length,
+      envoyes: nbEnvoyes,
+      errones: nbErrones
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur vérification bounces:", error);
+    res.status(500).json({ message: "Erreur lors de la vérification des bounces" });
   }
 };

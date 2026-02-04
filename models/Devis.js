@@ -178,6 +178,10 @@ surfaceMaison: {
   default: false,
 },
 
+emailNonDelivre: { type: Boolean, default: false },
+emailClientErrone: { type: String, default: null },
+
+
   copropriete: {          // ✅ Nouveau champ pour savoir si la copropriété est incluse
     type: Boolean,
     default: false,
