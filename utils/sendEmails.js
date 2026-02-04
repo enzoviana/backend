@@ -23,7 +23,12 @@ const transporter = nodemailer.createTransport({
   // ⚡ Optimisation Heroku : Garder la connexion ouverte
   pool: true, 
   maxConnections: 5,
-  maxMessages: 100
+  maxMessages: 100,
+  connectionTimeout: 10000, // Attend 10s la connexion
+  greetingTimeout: 10000,   // Attend 10s la réponse du serveur
+  socketTimeout: 15000,     // Attend 15s le transfert
+  debug: true,              // Affiche tout dans les logs Heroku
+  logger: true
 });
 
 /**
