@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        .container { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; color: #333; max-width: 600px; margin: 0 auto; border: 1px solid #e4e4e4; border-radius: 8px; overflow: hidden; }
+        .header { background-color: #f87171; color: white; padding: 20px; text-align: center; }
+        .content { padding: 30px; line-height: 1.6; }
+        .footer { background-color: #f9fafb; color: #6b7280; padding: 15px; text-align: center; font-size: 12px; }
+        .badge { background-color: #fee2e2; color: #dc2626; padding: 4px 12px; border-radius: 99px; font-weight: bold; font-size: 14px; }
+        .button { display: inline-block; background-color: #2563eb; color: white !important; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; margin-top: 20px; }
+        .info-box { background-color: #f3f4f6; border-left: 4px solid #9ca3af; padding: 15px; margin: 20px 0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 style="margin:0;">⚠️ Échec de distribution</h1>
+        </div>
+        <div class="content">
+            <p>Bonjour <strong>{{nomAgence}}</strong>,</p>
+            
+            <p>L'e-mail contenant le devis n'a pas pu être délivré à votre client. Le serveur de destination a retourné une erreur définitive (Bounce).</p>
+
+            <div class="info-box">
+                <strong>Détails du dossier :</strong><br>
+                • Numéro : <strong>{{numeroDevis}}</strong><br>
+                • Client : {{nomClient}}<br>
+                • Email erroné : <span style="color: #dc2626;">{{emailErrone}}</span>
+            </div>
+
+            <p><strong>Pourquoi cela arrive-t-il ?</strong><br>
+            Le plus souvent, il s'agit d'une faute de frappe dans l'adresse ou d'une boîte mail qui n'existe plus.</p>
+
+            <p>Merci de corriger l'adresse e-mail directement depuis votre espace partenaire pour renvoyer le devis.</p>
+
+            <a href="{{link}}" class="button">Accéder au tableau de bord</a>
+        </div>
+        <div class="footer">
+            Ceci est un message automatique de Dimotec Diagnostic.
+        </div>
+    </div>
+</body>
+</html>

@@ -1220,8 +1220,8 @@ if (data.payer === "agence") {
 const agence = await Agence.findById(devis.agenceId);
 const agenceEmail = agence?.emails_contact?.[0]?.email; // null si agence ou email inexistant
 const dimotecEmail = "dimotec34@gmail.com";
-
-const variables = {
+// 1. On prépare les variables communes (sans le lien pour l'instant)
+const baseVariables = {
   nomClient: `${devis.client.prenom} ${devis.client.nom}`,
   numero: ordre.numero,
   devisNumero: devis.numero,
@@ -1229,28 +1229,33 @@ const variables = {
   dateCreation: new Date().toLocaleDateString("fr-FR"),
   description: ordre.description,
   statut: ordre.statut,
-  lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
 };
 
-// ✅ Envoi mail à l'agence si disponible
+// ✅ Envoi mail à l'AGENCE (Lien vers agence.votre-devis...)
 if (agenceEmail) {
   await sendEmail({
     to: agenceEmail,
     subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
     template: "OrdreMission.html",
-    variables
+    variables: {
+      ...baseVariables,
+      lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Agence
+    }
   });
 
   // ⏱️ Attente 2 secondes avant email suivant
   await sleep(2000);
 }
 
-// ✅ Envoi mail Dimotec systématique
+// ✅ Envoi mail DIMOTEC (Lien vers admin.votre-devis...)
 await sendEmail({
   to: dimotecEmail,
-  subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+  subject: `[ADMIN] Nouvel Ordre de Mission - ${ordre.numero}`,
   template: "OrdreMission.html",
-  variables
+  variables: {
+    ...baseVariables,
+    lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Admin
+  }
 });
 
 
@@ -1279,7 +1284,7 @@ if (data.payer === "client") {
       variables: {
         nomClient: `${client.prenom} ${client.nom}`,
         lienDevis,
-        "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
+        "[Adresse email]": req.agence?.email || "support@votre-devis-diagnostics.fr",
         "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
       },
     });
@@ -1396,7 +1401,7 @@ exports.corrigerEmailDevis = async (req, res) => {
       variables: {
         nomClient: `${devis.client.prenom} ${devis.client.nom}`,
         lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
-        "[Adresse email]": req.agence?.email || "contact@dimotec.fr",
+        "[Adresse email]": req.agence?.email || "support@votre-devis-diagnostics.fr",
         "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
       },
     });
@@ -2266,7 +2271,7 @@ exports.notifyNewAgency = async (req, res) => {
         La solution professionnelle pour vos diagnostics immobiliers
       </p>
       <p style="margin-top: 15px;">
-        Des questions ? Contactez-nous à <a href="mailto:contact@dimotec.fr">contact@dimotec.fr</a>
+        Des questions ? Contactez-nous à <a href="mailto:support@votre-devis-diagnostics.fr">support@votre-devis-diagnostics.fr</a>
       </p>
       <p style="margin-top: 10px; color: #94a3b8;">
         © ${new Date().getFullYear()} DIMOTEC - Tous droits réservés
