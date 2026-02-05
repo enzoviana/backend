@@ -1124,6 +1124,17 @@ const montantTTC = totalFinal;
 
     console.log("===== Totaux calculés =====", { totalAvantRemise, totalApresReduction, totalFinal, montantTTC });
 
+    // 🆕 1. PLACE LE BLOC ICI
+let typeAffichage = "Diagnostics à la carte"; 
+if (data.type === "pack_complet" && data.pack) {
+    const packInfo = await Pack.findById(data.pack); 
+    typeAffichage = `PACK : ${packInfo?.nom?.toUpperCase() || "COMPLET"}`;
+} else if (data.type === "diagnostic") {
+    typeAffichage = "DIAGNOSTICS";
+} else if (data.type === "audit") {
+    typeAffichage = "AUDIT ÉNERGÉTIQUE";
+}
+
 const shareAgencyId = data.shareAgency && data.shareAgency !== "" ? data.shareAgency : null;
 
 console.log("==== Client avant création devis ====", client);
@@ -1265,6 +1276,7 @@ await sendEmail({
     devis,
   });
 }
+
 
 
 
