@@ -1547,8 +1547,10 @@ exports.uploadPdfDevis = async (req, res) => {
       }
     }
 
-    // 6️⃣ PRÉPARATION ET ENVOI DES EMAILS
-    const variablesEmail = {
+// 6️⃣ PRÉPARATION ET ENVOI DES EMAILS
+    
+    // On définit les variables communes
+    const variablesEmailBase = {
       nomClient: `${devis.client.prenom} ${devis.client.nom}`,
       numero: ordre.numero,
       devisNumero: devis.numero,
@@ -1556,26 +1558,31 @@ exports.uploadPdfDevis = async (req, res) => {
       dateCreation: new Date().toLocaleDateString("fr-FR"),
       description: ordre.description,
       statut: ordre.statut,
-      lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
     };
 
-    // Email à l'agence
+    // Email à l'agence (Lien spécifique Agency)
     const agenceEmail = agence?.emails_contact?.[0]?.email;
     if (agenceEmail) {
       await sendEmail({
         to: agenceEmail,
         subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
         template: "OrdreMission.html",
-        variables: variablesEmail
+        variables: {
+          ...variablesEmailBase,
+          lienMission: `https://agency.votre-devis-diagnostics.fr/ordre-mission`
+        }
       });
     }
 
-    // Email de copie à Dimotec
+    // Email de copie à Dimotec (Lien spécifique Admin)
     await sendEmail({
       to: "dimotec34@gmail.com",
       subject: `[COPIE] Nouvel Ordre de Mission - ${ordre.numero}`,
       template: "OrdreMission.html",
-      variables: variablesEmail
+      variables: {
+        ...variablesEmailBase,
+        lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
+      }
     });
 
     // 7️⃣ RÉPONSE FINALE
