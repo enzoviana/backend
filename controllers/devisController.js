@@ -72,7 +72,7 @@ async function smtpVerifyEmail(email) {
  * Vérifier les bounces via IMAP
  * Lit la boîte mail pour détecter les emails de rebond (bounce)
  */
-async function verifierBouncesIMAP(emailClient, devisNumero) {
+async function verifierBouncesIMAP() {
   try {
     const Imap = require('imap');
     const { simpleParser } = require('mailparser');
@@ -86,54 +86,56 @@ async function verifierBouncesIMAP(emailClient, devisNumero) {
       tlsOptions: { rejectUnauthorized: false }
     });
 
-    return new Promise((resolve, reject) => {
-      let bounceDetected = false;
+    return new Promise((resolve) => {
+      const bouncedEmails = new Set();
 
       imap.once('ready', () => {
-        imap.openBox('INBOX', false, (err, box) => {
+        imap.openBox('INBOX', false, (err) => {
           if (err) {
             console.error('Erreur ouverture INBOX:', err);
             imap.end();
-            return resolve(false);
+            return resolve([]);
           }
 
-          // Chercher les emails de bounce des dernières 24h
           const searchCriteria = [
-            ['SINCE', new Date(Date.now() - 24 * 60 * 60 * 1000)],
-            ['OR',
-              ['FROM', 'mailer-daemon@'],
-              ['FROM', 'postmaster@']
-            ]
+            ['SINCE', new Date(Date.now() - 24 * 60 * 60 * 1000)], // dernières 24h
+            ['OR', ['FROM', 'mailer-daemon'], ['FROM', 'postmaster']]
           ];
 
           imap.search(searchCriteria, (err, results) => {
-            if (err || !results || results.length === 0) {
+            if (err || !results?.length) {
               imap.end();
-              return resolve(false);
+              return resolve([]);
             }
 
             const f = imap.fetch(results, { bodies: '' });
 
             f.on('message', (msg) => {
               msg.on('body', (stream) => {
-                simpleParser(stream, async (err, parsed) => {
+                simpleParser(stream, (err, parsed) => {
                   if (err) return;
 
-                  const body = parsed.text || '';
-                  const subject = parsed.subject || '';
+                  const body = (parsed.text || '').toLowerCase();
 
-                  // Vérifier si le bounce concerne cet email
-                  if (
-                    (body.includes(emailClient) || subject.includes(emailClient)) &&
-                    (subject.toLowerCase().includes('undelivered') ||
-                     subject.toLowerCase().includes('delivery failure') ||
-                     subject.toLowerCase().includes('returned mail') ||
-                     body.includes('550') ||
-                     body.includes('User unknown') ||
-                     body.includes('does not exist'))
-                  ) {
-                    console.log(`🔴 Bounce détecté pour ${emailClient}`);
-                    bounceDetected = true;
+                  // Détection des hard bounces
+                  const isHardBounce =
+                    body.includes('550') ||
+                    body.includes('5.1.1') ||
+                    body.includes('does not exist') ||
+                    body.includes('user unknown');
+
+                  if (!isHardBounce) return;
+
+                  // Extraction de tous les emails dans le corps
+                  const emailRegex = /<([a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,})>/gi;
+                  let match;
+                  while ((match = emailRegex.exec(body)) !== null) {
+                    const email = match[1].toLowerCase();
+                    // On ignore l'email d'envoi
+                    if (email !== process.env.SMTP_USER.toLowerCase()) {
+                      bouncedEmails.add(email);
+                      console.log(`🔴 Bounce réel détecté pour ${email}`);
+                    }
                   }
                 });
               });
@@ -141,13 +143,13 @@ async function verifierBouncesIMAP(emailClient, devisNumero) {
 
             f.once('end', () => {
               imap.end();
-              resolve(bounceDetected);
+              resolve([...bouncedEmails]);
             });
 
             f.once('error', (err) => {
               console.error('Erreur fetch:', err);
               imap.end();
-              resolve(false);
+              resolve([...bouncedEmails]);
             });
           });
         });
@@ -155,31 +157,19 @@ async function verifierBouncesIMAP(emailClient, devisNumero) {
 
       imap.once('error', (err) => {
         console.error('Erreur IMAP:', err);
-        resolve(false);
-      });
-
-      imap.once('end', () => {
-        if (!bounceDetected) {
-          resolve(false);
-        }
+        resolve([]);
       });
 
       imap.connect();
-
-      // Timeout de 30 secondes
-      setTimeout(() => {
-        if (imap.state === 'authenticated') {
-          imap.end();
-        }
-        resolve(bounceDetected);
-      }, 30000);
     });
 
-  } catch (error) {
-    console.error('Erreur verifierBouncesIMAP:', error);
-    return false;
+  } catch (err) {
+    console.error('Erreur verifierBouncesIMAP:', err);
+    return [];
   }
 }
+
+
 
 /**
  * Récupérer tous les devis de l'utilisateur connecté
