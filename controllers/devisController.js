@@ -1323,6 +1323,7 @@ if (data.payer === "client") {
         template: "notification_agence_devis.html",
         variables: {
           nomClient: `${client.prenom} ${client.nom}`,
+          typeDevis: typeAffichage,
           numero: devis.numero,
           montant: devis.montantTTC,
           lienDevis: "https://agence.votre-devis-diagnostics.fr/billing"
