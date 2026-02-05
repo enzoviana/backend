@@ -409,28 +409,52 @@ exports.uploadFileByClientKey = [
   async (req, res) => {
     try {
       console.log("🔑 Clé client reçue :", req.params.accesClientKey);
-      console.log("📂 Fichiers reçus par Multer :", req.files);
-
+      
       const { accesClientKey } = req.params;
 
+      // 1. Trouver le devis et vérifier s'il n'est pas déjà expiré
       const devis = await Devis.findOne({ accesClientKey });
-      if (!devis) return res.status(404).json({ message: "Clé d'accès invalide ou expirée." });
+      
+      if (!devis) {
+        return res.status(404).json({ message: "Clé d'accès invalide." });
+      }
 
+      // Vérification de la date d'expiration (sécurité supplémentaire)
+      if (devis.accesClientExpire && new Date() > devis.accesClientExpire) {
+        return res.status(403).json({ message: "Le lien d'accès a expiré. Les documents ont déjà été validés." });
+      }
+
+      // 2. Trouver la mission
       const mission = await OrdreMission.findOne({ devisId: devis._id });
-      console.log('mission trouvé: ',mission)
-      if (!mission) return res.status(404).json({ message: "Aucun ordre de mission associé à ce devis." });
+      if (!mission) {
+        return res.status(404).json({ message: "Aucun ordre de mission associé à ce devis." });
+      }
 
-const uploadedFiles = req.files.map(file => ({
-  nom: file.originalname,
-  url: file.path,
-  public_id: file.filename || file.public_id, // ← ici
-  dateDepot: new Date(),
-}));
+      if (!req.files || req.files.length === 0) {
+        return res.status(400).json({ message: "Aucun fichier n'a été téléchargé." });
+      }
 
+      // 3. Préparer les fichiers pour la base de données
+      const uploadedFiles = req.files.map(file => ({
+        nom: file.originalname,
+        url: file.path,
+        public_id: file.filename || file.public_id,
+        dateDepot: new Date(),
+      }));
+
+      // 4. Mise à jour de la mission
       mission.fichiersClient.push(...uploadedFiles);
       await mission.save();
 
-      res.status(200).json({ message: "Fichiers déposés avec succès.", fichiers: uploadedFiles });
+      // 5. 🛡️ COUPER L'ACCÈS : On expire la clé du devis maintenant que l'upload est réussi
+      devis.accesClientExpire = new Date();
+      devis.note = (devis.note || "") + `\n[Système] Documents déposés par le client le ${new Date().toLocaleString("fr-FR")}. Accès fermé.`;
+      await devis.save();
+
+      res.status(200).json({ 
+        message: "✅ Fichiers déposés avec succès. L'accès est désormais clôturé.", 
+        fichiers: uploadedFiles 
+      });
 
     } catch (error) {
       console.error("❌ ERREUR COMPLÈTE UPLOAD FILE :", error);
@@ -438,7 +462,6 @@ const uploadedFiles = req.files.map(file => ({
     }
   }
 ];
-
 
 /**
  * 📤 Upload du PDF de consentement

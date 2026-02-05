@@ -1900,39 +1900,47 @@ exports.noDocumentsDevis = async (req, res) => {
   try {
     const { devisId, messageClient } = req.body;
 
-    // ✅ Vérification des données
     if (!devisId) {
       return res.status(400).json({ message: "L'ID du devis est requis." });
     }
 
-    // 🔹 Récupérer le devis et le client
+    // 1. Récupérer le devis
     const devis = await Devis.findById(devisId).populate("client");
     if (!devis) {
       return res.status(404).json({ message: "Devis introuvable." });
     }
 
+    // 2. COUPER L'ACCÈS : On expire le lien immédiatement
+    // On peut aussi changer le statut si besoin (ex: "Traitement_En_Cours")
+    devis.accesClientExpire = new Date(); 
+    
+    // Optionnel : enregistrer dans les notes du devis l'action
+    devis.note = (devis.note || "") + `\n[Système] Le client a validé l'absence de documents le ${new Date().toLocaleString("fr-FR")}. Accès fermé.`;
+    
+    await devis.save();
+
     const clientNom = `${devis.client?.prenom || ""} ${devis.client?.nom || ""}`.trim();
 
-    // 🔹 Préparer les variables pour le template
+    // 3. Préparer les variables pour Dimotec
     const emailVariables = {
       nomClient: clientNom,
       numeroDevis: devis.numero,
       messageClient: messageClient || "Le client indique qu'aucun document n'est disponible.",
+      // Le lien admin reste le même pour que VOUS puissiez voir le devis
       lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
       date: new Date().toLocaleString("fr-FR"),
     };
 
-    // 💌 Envoi du mail à Dimotec
+    // 4. Envoi du mail à Dimotec
     await sendEmail({
       to: "dimotec34@gmail.com",
-      subject: `Devis ${devis.numero} : aucun document transmis`,
+      subject: `⚠️ Devis ${devis.numero} : Pas de documents transmis`,
       template: "noDocuments.html",
       variables: emailVariables,
     });
 
-    // 🔹 Réponse API
     res.status(200).json({
-      message: "✅ Notification envoyée à Dimotec concernant l'absence de documents.",
+      message: "✅ Notification envoyée. L'accès au portail documents est désormais clos.",
     });
 
   } catch (error) {
