@@ -408,33 +408,49 @@ exports.uploadFileByClientKey = [
   upload.array('fichiers', 10), 
   async (req, res) => {
     try {
-      console.log("🔑 Clé client reçue :", req.params.accesClientKey);
-      
+      console.log("--- 🚀 DÉBUT UPLOAD CLIENT KEY ---");
       const { accesClientKey } = req.params;
+      console.log("🔑 Clé reçue dans l'URL :", accesClientKey);
+      console.log("📂 Nombre de fichiers reçus :", req.files ? req.files.length : 0);
 
-      // 1. Trouver le devis et vérifier s'il n'est pas déjà expiré
+      // 1. Recherche du Devis
       const devis = await Devis.findOne({ accesClientKey });
       
       if (!devis) {
+        console.error("❌ ERROR 404: Devis introuvable pour la clé :", accesClientKey);
         return res.status(404).json({ message: "Clé d'accès invalide." });
       }
+      
+      console.log("✅ Devis trouvé :", {
+        id: devis._id,
+        numero: devis.numero,
+        expire: devis.accesClientExpire
+      });
 
-      // Vérification de la date d'expiration (sécurité supplémentaire)
+      // Vérification de l'expiration
       if (devis.accesClientExpire && new Date() > devis.accesClientExpire) {
-        return res.status(403).json({ message: "Le lien d'accès a expiré. Les documents ont déjà été validés." });
+        console.warn("⚠️ ACCÈS REFUSÉ : Le lien a expiré le", devis.accesClientExpire);
+        return res.status(403).json({ message: "Le lien d'accès a expiré." });
       }
 
-      // 2. Trouver la mission
+      // 2. Recherche de la mission liée
+      console.log("🔍 Recherche OrdreMission avec devisId :", devis._id);
       const mission = await OrdreMission.findOne({ devisId: devis._id });
+      
       if (!mission) {
+        console.error("❌ ERROR 404: Aucune mission (OrdreMission) trouvée pour ce devis.");
+        // Vérifiez si votre champ s'appelle bien 'devisId' dans le modèle OrdreMission
         return res.status(404).json({ message: "Aucun ordre de mission associé à ce devis." });
       }
+      
+      console.log("✅ Mission trouvée :", mission._id);
 
       if (!req.files || req.files.length === 0) {
+        console.warn("⚠️ Aucun fichier reçu dans req.files");
         return res.status(400).json({ message: "Aucun fichier n'a été téléchargé." });
       }
 
-      // 3. Préparer les fichiers pour la base de données
+      // 3. Préparer les fichiers
       const uploadedFiles = req.files.map(file => ({
         nom: file.originalname,
         url: file.path,
@@ -442,22 +458,25 @@ exports.uploadFileByClientKey = [
         dateDepot: new Date(),
       }));
 
-      // 4. Mise à jour de la mission
+      // 4. Sauvegarde Mission
       mission.fichiersClient.push(...uploadedFiles);
       await mission.save();
+      console.log("💾 Fichiers ajoutés à l'Ordre de Mission avec succès.");
 
-      // 5. 🛡️ COUPER L'ACCÈS : On expire la clé du devis maintenant que l'upload est réussi
+      // 5. Clôture de l'accès
       devis.accesClientExpire = new Date();
-      devis.note = (devis.note || "") + `\n[Système] Documents déposés par le client le ${new Date().toLocaleString("fr-FR")}. Accès fermé.`;
+      devis.note = (devis.note || "") + `\n[Système] Documents déposés le ${new Date().toLocaleString("fr-FR")}. Accès fermé.`;
       await devis.save();
+      console.log("🔒 Accès client révoqué (date d'expiration mise à jour).");
 
+      console.log("--- ✅ FIN UPLOAD RÉUSSIE ---");
       res.status(200).json({ 
-        message: "✅ Fichiers déposés avec succès. L'accès est désormais clôturé.", 
+        message: "✅ Fichiers déposés avec succès.", 
         fichiers: uploadedFiles 
       });
 
     } catch (error) {
-      console.error("❌ ERREUR COMPLÈTE UPLOAD FILE :", error);
+      console.error("❌ ERREUR CRITIQUE UPLOAD FILE :", error);
       res.status(500).json({ message: error.message || "Erreur serveur lors du dépôt des fichiers." });
     }
   }
