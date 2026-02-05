@@ -1569,7 +1569,7 @@ exports.uploadPdfDevis = async (req, res) => {
         template: "OrdreMission.html",
         variables: {
           ...variablesEmailBase,
-          lienMission: `https://agency.votre-devis-diagnostics.fr/ordre-mission`
+          lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission`
         }
       });
     }
