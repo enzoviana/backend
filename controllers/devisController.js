@@ -1898,6 +1898,7 @@ exports.refuserDevisViaLien = async (req, res) => {
  */
 exports.noDocumentsDevis = async (req, res) => {
   try {
+    console.log("--- 🚀 DÉBUT PROCÉDURE : AUCUN DOCUMENT ---");
     const { devisId, messageClient } = req.body;
 
     if (!devisId) {
@@ -1907,44 +1908,55 @@ exports.noDocumentsDevis = async (req, res) => {
     // 1. Récupérer le devis
     const devis = await Devis.findById(devisId).populate("client");
     if (!devis) {
+      console.error("❌ ERROR 404: Devis introuvable pour ID :", devisId);
       return res.status(404).json({ message: "Devis introuvable." });
     }
 
-    // 2. COUPER L'ACCÈS : On expire le lien immédiatement
-    // On peut aussi changer le statut si besoin (ex: "Traitement_En_Cours")
+    // Sauvegarde de la clé pour l'email avant suppression (si besoin du lien dans le mail admin)
+    const oldKey = devis.accesClientKey;
+
+    // 2. 🛡️ DESTRUCTION DE L'ACCÈS
+    // On vide la clé ET on expire la date pour une clôture immédiate et définitive
+    devis.accesClientKey = undefined; 
     devis.accesClientExpire = new Date(); 
     
-    // Optionnel : enregistrer dans les notes du devis l'action
-    devis.note = (devis.note || "") + `\n[Système] Le client a validé l'absence de documents le ${new Date().toLocaleString("fr-FR")}. Accès fermé.`;
+    devis.note = (devis.note || "") + `\n[Système] Le client a validé l'absence de documents le ${new Date().toLocaleString("fr-FR")}. Clé d'accès supprimée. Accès fermé.`;
     
     await devis.save();
+    console.log(`🔒 Accès révoqué pour le devis ${devis.numero}. Clé supprimée.`);
 
     const clientNom = `${devis.client?.prenom || ""} ${devis.client?.nom || ""}`.trim();
 
-    // 3. Préparer les variables pour Dimotec
+    // 3. Préparer les variables pour l'email
     const emailVariables = {
       nomClient: clientNom,
       numeroDevis: devis.numero,
       messageClient: messageClient || "Le client indique qu'aucun document n'est disponible.",
-      // Le lien admin reste le même pour que VOUS puissiez voir le devis
-      lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
+      // Ici, on utilise l'ID pour l'admin car la clé client n'existe plus
+      lienDevis: `https://votre-plateforme-admin.fr/devis/${devis._id}`, 
       date: new Date().toLocaleString("fr-FR"),
     };
 
     // 4. Envoi du mail à Dimotec
-    await sendEmail({
-      to: "dimotec34@gmail.com",
-      subject: `⚠️ Devis ${devis.numero} : Pas de documents transmis`,
-      template: "noDocuments.html",
-      variables: emailVariables,
-    });
+    try {
+      await sendEmail({
+        to: "dimotec34@gmail.com",
+        subject: `⚠️ Devis ${devis.numero} : Pas de documents transmis`,
+        template: "noDocuments.html",
+        variables: emailVariables,
+      });
+      console.log("📧 Email de notification envoyé à Dimotec.");
+    } catch (mailErr) {
+      console.error("⚠️ Erreur lors de l'envoi de l'email (mais l'accès a été coupé) :", mailErr);
+    }
 
+    console.log("--- ✅ PROCÉDURE TERMINÉE ---");
     res.status(200).json({
       message: "✅ Notification envoyée. L'accès au portail documents est désormais clos.",
     });
 
   } catch (error) {
-    console.error("❌ Erreur envoi notification pas de documents :", error);
+    console.error("❌ ERREUR SERVEUR noDocumentsDevis :", error);
     res.status(500).json({ message: "Erreur serveur lors de l'envoi de la notification." });
   }
 };

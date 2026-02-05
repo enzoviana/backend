@@ -410,47 +410,30 @@ exports.uploadFileByClientKey = [
     try {
       console.log("--- 🚀 DÉBUT UPLOAD CLIENT KEY ---");
       const { accesClientKey } = req.params;
-      console.log("🔑 Clé reçue dans l'URL :", accesClientKey);
-      console.log("📂 Nombre de fichiers reçus :", req.files ? req.files.length : 0);
-
-      // 1. Recherche du Devis
+      
+      // 1. Recherche du Devis via la clé
       const devis = await Devis.findOne({ accesClientKey });
       
       if (!devis) {
-        console.error("❌ ERROR 404: Devis introuvable pour la clé :", accesClientKey);
-        return res.status(404).json({ message: "Clé d'accès invalide." });
+        console.error("❌ ERROR 404: Clé inexistante ou déjà supprimée :", accesClientKey);
+        return res.status(404).json({ message: "Clé d'accès invalide ou déjà utilisée." });
       }
       
-      console.log("✅ Devis trouvé :", {
-        id: devis._id,
-        numero: devis.numero,
-        expire: devis.accesClientExpire
-      });
-
-      // Vérification de l'expiration
-      if (devis.accesClientExpire && new Date() > devis.accesClientExpire) {
-        console.warn("⚠️ ACCÈS REFUSÉ : Le lien a expiré le", devis.accesClientExpire);
-        return res.status(403).json({ message: "Le lien d'accès a expiré." });
-      }
+      console.log("✅ Devis identifié :", devis.numero);
 
       // 2. Recherche de la mission liée
-      console.log("🔍 Recherche OrdreMission avec devisId :", devis._id);
       const mission = await OrdreMission.findOne({ devisId: devis._id });
       
       if (!mission) {
-        console.error("❌ ERROR 404: Aucune mission (OrdreMission) trouvée pour ce devis.");
-        // Vérifiez si votre champ s'appelle bien 'devisId' dans le modèle OrdreMission
-        return res.status(404).json({ message: "Aucun ordre de mission associé à ce devis." });
+        console.error("❌ ERROR 404: Aucun OrdreMission pour devisId :", devis._id);
+        return res.status(404).json({ message: "Ordre de mission introuvable." });
       }
-      
-      console.log("✅ Mission trouvée :", mission._id);
 
       if (!req.files || req.files.length === 0) {
-        console.warn("⚠️ Aucun fichier reçu dans req.files");
-        return res.status(400).json({ message: "Aucun fichier n'a été téléchargé." });
+        return res.status(400).json({ message: "Aucun fichier reçu." });
       }
 
-      // 3. Préparer les fichiers
+      // 3. Traitement des fichiers
       const uploadedFiles = req.files.map(file => ({
         nom: file.originalname,
         url: file.path,
@@ -458,30 +441,32 @@ exports.uploadFileByClientKey = [
         dateDepot: new Date(),
       }));
 
-      // 4. Sauvegarde Mission
+      // 4. Sauvegarde dans la mission
       mission.fichiersClient.push(...uploadedFiles);
       await mission.save();
-      console.log("💾 Fichiers ajoutés à l'Ordre de Mission avec succès.");
+      console.log("💾 Documents enregistrés dans la mission.");
 
-      // 5. Clôture de l'accès
+      // 5. 🛡️ SUPPRESSION DÉFINITIVE DE LA CLÉ
+      // On vide la clé ET on expire la date pour une double sécurité
+      devis.accesClientKey = undefined; 
       devis.accesClientExpire = new Date();
-      devis.note = (devis.note || "") + `\n[Système] Documents déposés le ${new Date().toLocaleString("fr-FR")}. Accès fermé.`;
+      devis.note = (devis.note || "") + `\n[Système] ${uploadedFiles.length} documents déposés le ${new Date().toLocaleString("fr-FR")}. Clé d'accès supprimée.`;
+      
       await devis.save();
-      console.log("🔒 Accès client révoqué (date d'expiration mise à jour).");
+      console.log("🔒 Clé d'accès supprimée de la base de données.");
 
-      console.log("--- ✅ FIN UPLOAD RÉUSSIE ---");
+      console.log("--- ✅ OPÉRATION TERMINÉE ---");
       res.status(200).json({ 
-        message: "✅ Fichiers déposés avec succès.", 
+        message: "Documents transmis avec succès. L'accès sécurisé est maintenant clos.", 
         fichiers: uploadedFiles 
       });
 
     } catch (error) {
-      console.error("❌ ERREUR CRITIQUE UPLOAD FILE :", error);
-      res.status(500).json({ message: error.message || "Erreur serveur lors du dépôt des fichiers." });
+      console.error("❌ ERREUR SERVEUR :", error);
+      res.status(500).json({ message: "Erreur lors du dépôt des fichiers." });
     }
   }
 ];
-
 /**
  * 📤 Upload du PDF de consentement
  * Route : POST /api/client/upload-consent/:accesClientKey
