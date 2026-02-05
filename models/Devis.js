@@ -105,7 +105,7 @@ surfaceMaison: {
   /* 📦 Type de formule */
   type: {
     type: String,
-    enum: ["pack_complet", "diagnostic", "audit"],
+    enum: ["pack_complet", "diagnostic", "audit", "manuel"],
     required: true,
   },
 
