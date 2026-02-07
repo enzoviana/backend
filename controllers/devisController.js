@@ -1968,7 +1968,21 @@ exports.noDocumentsDevis = async (req, res) => {
 exports.updateDevisInfos = async (req, res) => {
   try {
     const { id } = req.params;
-    const { client, locataire, contactLocataire, clefEnAgence, adresseBien, numeroFiscalBien, note, statut } = req.body;
+    const { 
+      client, 
+      locataire, 
+      contactLocataire, 
+      clefEnAgence, 
+      adresseBien, 
+      numeroFiscalBien, 
+      note, 
+      statut,
+      // Nouveaux champs financiers
+      totalAvantRemise,
+      montantTTC,
+      montantCagnotteUtilisee,
+      reductionPourcent
+    } = req.body;
 
     // 🔍 Vérification de l'existence du devis
     const devis = await Devis.findById(id);
@@ -1994,7 +2008,25 @@ exports.updateDevisInfos = async (req, res) => {
       devis.statut = statut;
     }
 
-    // ✏️ Mise à jour des champs modifiables
+    // ✏️ Mise à jour des montants financiers (Lien avec vos inputs front-end)
+    if (totalAvantRemise !== undefined) {
+      devis.totalAvantRemise = totalAvantRemise;
+    }
+
+    if (montantTTC !== undefined) {
+      devis.montantTTC = montantTTC;
+      devis.totalApresReduction = montantTTC; // Synchronisation du prix final
+    }
+
+    if (montantCagnotteUtilisee !== undefined) {
+      devis.montantCagnotteUtilisee = montantCagnotteUtilisee;
+    }
+
+    if (reductionPourcent !== undefined) {
+      devis.reductionPourcent = reductionPourcent;
+    }
+
+    // ✏️ Mise à jour des autres champs modifiables
 
     // Informations client
     if (client) {
@@ -2041,30 +2073,27 @@ exports.updateDevisInfos = async (req, res) => {
       devis.note = note;
     }
 
-    // 💾 Sauvegarde
+    // 💾 Sauvegarde globale
     await devis.save();
 
-    console.log(`✅ Devis ${devis.numero} mis à jour avec succès`);
+    console.log(`✅ Devis ${devis.numero} mis à jour avec succès (Montants inclus)`);
 
     // 🆕 Création automatique de l'ordre de mission si le devis passe à "Accepté"
     if (passeAAccepte) {
       console.log(`🚀 Création automatique de l'ordre de mission pour le devis ${devis.numero}`);
 
       try {
-        // Vérifier qu'un ordre de mission n'existe pas déjà
         const ordreMissionExistant = await OrdreMission.findOne({ devisId: devis._id });
 
         if (ordreMissionExistant) {
           console.log(`⚠️ Un ordre de mission existe déjà pour ce devis (${ordreMissionExistant.numero})`);
         } else {
-          // Récupérer ou créer le client
           let clientId = devis.clientId;
 
           if (!clientId && devis.client?.email) {
             let clientExist = await Client.findOne({ email: devis.client.email });
 
             if (!clientExist) {
-              // Créer le client s'il n'existe pas
               clientExist = new Client({
                 nom: devis.client.nom,
                 prenom: devis.client.prenom,
@@ -2085,10 +2114,9 @@ exports.updateDevisInfos = async (req, res) => {
             await devis.save();
           }
 
-          // Créer l'ordre de mission
           const nouvelOrdreMission = new OrdreMission({
             devisId: devis._id,
-            agenceId: devis.agenceId || null, // 🔥 Inclure l'ID de l'agence si le devis est partagé
+            agenceId: devis.agenceId || null,
             numero: `OM-${Date.now()}`,
             clientId: clientId,
             description: `Ordre de mission créé automatiquement pour le devis ${devis.numero}`,
@@ -2104,7 +2132,6 @@ exports.updateDevisInfos = async (req, res) => {
         }
       } catch (errorOM) {
         console.error("❌ Erreur lors de la création de l'ordre de mission :", errorOM);
-        // Ne pas bloquer la mise à jour du devis si la création de l'OM échoue
       }
     }
 
