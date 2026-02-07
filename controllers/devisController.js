@@ -2158,7 +2158,7 @@ exports.notifyNewAgency = async (req, res) => {
     // Récupérer le devis pour avoir plus d'infos
     const devis = await Devis.findById(devisId).populate('client');
 
-    // Template email pour nouvelle agence
+// Template email pour nouvelle agence
     const emailHtml = `
 <!DOCTYPE html>
 <html lang="fr">
@@ -2168,209 +2168,145 @@ exports.notifyNewAgency = async (req, res) => {
   <title>Invitation DIMOTEC</title>
   <style>
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+      font-family: 'Segoe UI', Arial, sans-serif;
       line-height: 1.6;
-      color: #333;
+      color: #334155;
       background-color: #f8fafc;
       margin: 0;
       padding: 0;
     }
     .container {
       max-width: 600px;
-      margin: 40px auto;
+      margin: 20px auto;
       background: #ffffff;
-      border-radius: 16px;
+      border-radius: 12px;
       overflow: hidden;
-      box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+      border: 1px solid #e2e8f0;
     }
     .header {
       background: linear-gradient(135deg, #ed891a 0%, #f59e42 100%);
-      padding: 40px 30px;
+      padding: 35px 25px;
       text-align: center;
       color: white;
     }
-    .header h1 {
-      margin: 0;
-      font-size: 28px;
-      font-weight: 700;
-    }
-    .header p {
-      margin: 10px 0 0;
-      font-size: 16px;
-      opacity: 0.95;
-    }
     .content {
-      padding: 40px 30px;
-    }
-    .content h2 {
-      color: #1e293b;
-      font-size: 22px;
-      margin: 0 0 20px;
-    }
-    .content p {
-      color: #64748b;
-      margin: 0 0 16px;
-      font-size: 15px;
+      padding: 35px 30px;
     }
     .devis-info {
       background: #f1f5f9;
-      border-left: 4px solid #ed891a;
+      border-radius: 12px;
       padding: 20px;
-      border-radius: 8px;
-      margin: 25px 0;
+      margin: 20px 0;
+      border: 1px solid #e2e8f0;
     }
-    .devis-info strong {
-      color: #1e293b;
-      display: block;
-      margin-bottom: 8px;
+    /* Section demandée par le client */
+    .benefits-section {
+      margin: 30px 0;
+      padding-top: 20px;
+      border-top: 1px solid #f1f5f9;
     }
-    .devis-info p {
-      margin: 5px 0;
+    .benefit-row {
+      margin-bottom: 20px;
+      display: table; /* Meilleur support mail que flex */
+      width: 100%;
+    }
+    .benefit-icon {
+      display: table-cell;
+      width: 40px;
+      vertical-align: top;
+      font-size: 20px;
+    }
+    .benefit-text {
+      display: table-cell;
+      vertical-align: top;
+      font-size: 14px;
       color: #475569;
+    }
+    .highlight-box {
+      background-color: #f0fdf4;
+      border: 1px dashed #22c55e;
+      padding: 15px;
+      border-radius: 8px;
+      text-align: center;
+      margin-top: 25px;
+      color: #166534;
+      font-weight: 600;
+      font-size: 14px;
     }
     .cta-button {
       display: inline-block;
-      background: linear-gradient(135deg, #ed891a 0%, #f59e42 100%);
-      color: white;
-      padding: 16px 40px;
+      background-color: #ed891a;
+      color: #ffffff !important;
+      padding: 16px 32px;
       text-decoration: none;
-      border-radius: 12px;
-      font-weight: 600;
-      font-size: 16px;
-      margin: 20px 0;
-      transition: transform 0.2s;
-      box-shadow: 0 4px 12px rgba(237, 137, 26, 0.3);
-    }
-    .cta-button:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 6px 16px rgba(237, 137, 26, 0.4);
-    }
-    .benefits {
-      background: #f8fafc;
-      padding: 25px;
-      border-radius: 12px;
-      margin: 25px 0;
-    }
-    .benefits h3 {
-      color: #1e293b;
-      font-size: 18px;
-      margin: 0 0 15px;
-    }
-    .benefits ul {
-      list-style: none;
-      padding: 0;
-      margin: 0;
-    }
-    .benefits li {
-      padding: 10px 0;
-      color: #475569;
-      display: flex;
-      align-items: center;
-    }
-    .benefits li:before {
-      content: "✓";
-      color: #10b981;
+      border-radius: 10px;
       font-weight: bold;
-      font-size: 20px;
-      margin-right: 12px;
+      margin-top: 25px;
     }
     .footer {
-      background: #f1f5f9;
-      padding: 30px;
+      background: #f8fafc;
+      padding: 25px;
       text-align: center;
-      color: #64748b;
-      font-size: 13px;
-    }
-    .footer a {
-      color: #ed891a;
-      text-decoration: none;
+      font-size: 12px;
+      color: #94a3b8;
+      border-top: 1px solid #f1f5f9;
     }
   </style>
 </head>
 <body>
   <div class="container">
     <div class="header">
-      <h1>🎉 Bienvenue sur Votre Devis Diagnostics </h1>
-      <p>Votre plateforme de gestion de diagnostics immobiliers</p>
+      <h1 style="margin:0; font-size: 24px;">🎉 Nouveau Devis Disponible</h1>
+      <p style="margin:10px 0 0; opacity: 0.9;">Propulsé par la plateforme DIMOTEC</p>
     </div>
 
     <div class="content">
-      <h2>Bonjour ${agencyName},</h2>
-
-      <p>Nous avons le plaisir de vous informer qu'un devis de diagnostic a été réalisé pour votre client.</p>
+      <h2 style="color: #1e293b; margin-top: 0;">Bonjour ${agencyName},</h2>
+      <p>Un devis de diagnostic vient d'être réalisé pour l'un de vos clients. Vous pouvez le consulter dès maintenant sur votre espace.</p>
 
       <div class="devis-info">
-        <strong>📋 Détails du devis :</strong>
-        <p><strong>Numéro :</strong> ${devisNumero || 'N/A'}</p>
+        <strong style="color: #ed891a; font-size: 13px; text-transform: uppercase;">Détails de l'offre</strong>
+        <p style="margin: 10px 0 5px 0;"><strong>Numéro :</strong> ${devisNumero || 'N/A'}</p>
         ${devis ? `
-          <p><strong>Client :</strong> ${devis.client?.prenom || ''} ${devis.client?.nom || ''}</p>
-          <p><strong>Montant :</strong> ${devis.montantTTC ? devis.montantTTC.toFixed(2) + ' €' : 'N/A'}</p>
+          <p style="margin: 5px 0;"><strong>Client :</strong> ${devis.client?.prenom || ''} ${devis.client?.nom || ''}</p>
+          <p style="margin: 5px 0;"><strong>Montant :</strong> ${devis.montantTTC ? devis.montantTTC.toFixed(2) + ' €' : 'N/A'}</p>
         ` : ''}
       </div>
 
-      <p><strong>Rejoignez DIMOTEC dès maintenant</strong> et profitez d'une plateforme complète pour gérer vos devis, ordres de mission et suivis clients.</p>
+      <div class="benefits-section">
+        <h3 style="color: #1e293b; font-size: 18px; margin-bottom: 20px;">Pourquoi nous rejoindre ?</h3>
+        
+        <div class="benefit-row">
+          <div class="benefit-icon">⚡</div>
+          <div class="benefit-text">Afin de faciliter votre quotidien, vous réalisez et envoyez vos devis de diagnostic en <strong>instantané</strong>.</div>
+        </div>
 
-      <div class="benefits">
-        <h3>Pourquoi nous rejoindre ?</h3>
-       <div class="container-promo">
-  
-  <div class="features-grid">
-    <div class="feature-card">
-      <div class="icon-box icon-green">
-        <i class="fas fa-bolt"></i>
+        <div class="benefit-row">
+          <div class="benefit-icon">🤝</div>
+          <div class="benefit-text">Votre technicien de diagnostic n'a plus besoin de vous relancer pour vous demander des documents ou informations complémentaires.</div>
+        </div>
+
+        <div class="benefit-row">
+          <div class="benefit-icon">📈</div>
+          <div class="benefit-text">Vous êtes informé en <strong>temps réel</strong> de l'avancement du dossier, des relances si nécessaires et jusqu'à son règlement.</div>
+        </div>
+
+        <div class="highlight-box">
+          📍 Toutes vos demandes et dossiers sont centralisés sur votre plateforme dédiée.
+        </div>
       </div>
-      <h4>Instantanéité</h4>
-      <p>Afin de faciliter votre quotidien, vous réalisez et envoyez vos devis de diagnostic en <strong>instantané</strong>.</p>
-    </div>
-
-    <div class="feature-card">
-      <div class="icon-box icon-blue">
-        <i class="fas fa-file-signature"></i>
-      </div>
-      <h4>Fluidité</h4>
-      <p>Votre technicien n'a plus besoin de vous relancer pour demander des documents ou informations complémentaires.</p>
-    </div>
-
-    <div class="feature-card">
-      <div class="icon-box icon-orange">
-        <i class="fas fa-eye"></i>
-      </div>
-      <h4>Suivi 360°</h4>
-      <p>Vous êtes informé en <strong>temps réel</strong> de l'avancement, des relances et jusqu'au règlement final.</p>
-    </div>
-  </div>
-
-  <div class="transition-banner">
-    <p>
-      <i class="fas fa-cloud"></i>
-      Toutes vos demandes et dossiers sont centralisés sur votre plateforme dédiée.
-    </p>
-  </div>
-
-
 
       <center>
-        <a style="color: white"  href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
-          Créer mon compte gratuitement
+        <a href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
+          Accéder à mon espace gratuit
         </a>
       </center>
-
-      <p style="margin-top: 30px; color: #94a3b8; font-size: 14px;">
-        Une fois inscrit, vous pourrez accéder à ce devis et commencer à utiliser tous nos outils.
-      </p>
     </div>
 
     <div class="footer">
-      <p>
-        <strong>DIMOTEC</strong><br>
-        La solution professionnelle pour vos diagnostics immobiliers
-      </p>
-      <p style="margin-top: 15px;">
-        Des questions ? Contactez-nous à <a href="mailto:support@votre-devis-diagnostics.fr">support@votre-devis-diagnostics.fr</a>
-      </p>
-      <p style="margin-top: 10px; color: #94a3b8;">
-        © ${new Date().getFullYear()} DIMOTEC - Tous droits réservés
-      </p>
+      <p><strong>DIMOTEC</strong> - La solution professionnelle pour vos diagnostics</p>
+      <p>Besoin d'aide ? <a href="mailto:support@votre-devis-diagnostics.fr" style="color: #ed891a;">Contactez le support</a></p>
+      <p>© ${new Date().getFullYear()} DIMOTEC</p>
     </div>
   </div>
 </body>
