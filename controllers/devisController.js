@@ -183,7 +183,7 @@ exports.getDevis = async (req, res) => {
     if (req.user.role === "admin") {
       // 🧑‍💼 Admin → tous les devis
       query = {};
-    }  else if (req.role === "agence") {
+    } else if (req.role === "agence") {
       // 🏢 Agence → uniquement ses ordres de mission
       query = { agenceId: req.agence._id };
     } else if (req.role === "employe") {
@@ -195,7 +195,7 @@ exports.getDevis = async (req, res) => {
           { "creePar.type": "Employe", "creePar.id": empId },
         ]
       };
-    }  else {
+    } else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
 
@@ -209,7 +209,7 @@ exports.getDevis = async (req, res) => {
       })
       .sort({ dateCreation: -1 })
       .lean();
-      
+
 
     // --- Ajout du statut de l'ordre de mission pour chaque devis ---
     const devisWithOrdre = await Promise.all(devis.map(async (d) => {
@@ -224,30 +224,30 @@ exports.getDevis = async (req, res) => {
         montantTTC: d.montantTTC || 0,
         totalApresReduction: d.totalApresReduction || 0,
         statut: d.statut || 'Envoyé',
-       locataire: d.locataire ? {
-        nom: d.locataire.nom || "",
-        prenom: d.locataire.prenom || "",
-        tel: d.locataire.tel || ""
-    } : null,
-    contactLocataire: d.contactLocataire || false,
-    clefEnAgence: d.clefEnAgence || false,
+        locataire: d.locataire ? {
+          nom: d.locataire.nom || "",
+          prenom: d.locataire.prenom || "",
+          tel: d.locataire.tel || ""
+        } : null,
+        contactLocataire: d.contactLocataire || false,
+        clefEnAgence: d.clefEnAgence || false,
 
-    adresseBien: d.adresseBien ? {
-        adresse: d.adresseBien.adresse || "",
-        codePostal: d.adresseBien.codePostal || "",
-        ville: d.adresseBien.ville || "",
-        etage: d.adresseBien.etage || "",
-        complement: d.adresseBien.complement || "",
-        parcelle: d.adresseBien.parcelle || null
-    } : null,
-      note: d.note || null,
-      numeroFiscalBien: d.numeroFiscalBien || null,
+        adresseBien: d.adresseBien ? {
+          adresse: d.adresseBien.adresse || "",
+          codePostal: d.adresseBien.codePostal || "",
+          ville: d.adresseBien.ville || "",
+          etage: d.adresseBien.etage || "",
+          complement: d.adresseBien.complement || "",
+          parcelle: d.adresseBien.parcelle || null
+        } : null,
+        note: d.note || null,
+        numeroFiscalBien: d.numeroFiscalBien || null,
         client: d.client || null,
         dateCreation: d.dateCreation || d.createdAt || new Date(),
         accesClientKey: d.accesClientKey || null,
         ordreMissionStatut: ordre?.statut || "Aucune", // ← jamais null
         derniereRelance: d.derniereRelance || null,
-        pdfUrl : d.pdfUrl || null
+        pdfUrl: d.pdfUrl || null
       };
     }));
 
@@ -258,7 +258,7 @@ exports.getDevis = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur." });
   }
 };
- 
+
 exports.downloadDevis = async (req, res) => {
   try {
     const { devisId } = req.params;
@@ -466,13 +466,13 @@ exports.generateDevisAI = async (req, res) => {
         .filter(d => {
           const nameLower = d.nom.toLowerCase();
           return promptLower.includes(nameLower) ||
-                 (/dpe/.test(promptLower) && /dpe/.test(nameLower)) ||
-                 (/amiante/.test(promptLower) && /amiante/.test(nameLower)) ||
-                 (/plomb/.test(promptLower) && /plomb/.test(nameLower)) ||
-                 (/termites/.test(promptLower) && /termites/.test(nameLower)) ||
-                 (/gaz/.test(promptLower) && /gaz/.test(nameLower)) ||
-                 (/élec|elect/.test(promptLower) && /élec|elect/.test(nameLower)) ||
-                 (/erp|ernmt/.test(promptLower) && /erp|ernmt/.test(nameLower));
+            (/dpe/.test(promptLower) && /dpe/.test(nameLower)) ||
+            (/amiante/.test(promptLower) && /amiante/.test(nameLower)) ||
+            (/plomb/.test(promptLower) && /plomb/.test(nameLower)) ||
+            (/termites/.test(promptLower) && /termites/.test(nameLower)) ||
+            (/gaz/.test(promptLower) && /gaz/.test(nameLower)) ||
+            (/élec|elect/.test(promptLower) && /élec|elect/.test(nameLower)) ||
+            (/erp|ernmt/.test(promptLower) && /erp|ernmt/.test(nameLower));
         });
 
       // Supprimer doublons
@@ -553,7 +553,7 @@ Propose un devis recommandé en listant :
         nom: d.nom,
         selected: true
       })) : [],
-      supplements: [] 
+      supplements: []
     };
 
     return res.status(200).json(responseJSON);
@@ -631,34 +631,34 @@ exports.createDevis = async (req, res) => {
       return res.status(400).json({ message: "Client, type de devis et type de bien requis." });
     }
 
-    console.log('utilisateur : ',req.user)
+    console.log('utilisateur : ', req.user)
 
 
-// 🔹 Déterminer l’ID de l’agence / entreprise
-let agenceId;
+    // 🔹 Déterminer l’ID de l’agence / entreprise
+    let agenceId;
 
-if (req.user?.role === "admin") {
-  // Admin superuser : pas besoin d'agence
-  agenceId = null; // ou undefined
-} else if (req.user?.role === "employe") {
-  agenceId = req.user.agence; // ID de l'agence de l'employé
-} else if (req.role === "agence") {
-  agenceId = req.user._id; // l'agence elle-même
-}
+    if (req.user?.role === "admin") {
+      // Admin superuser : pas besoin d'agence
+      agenceId = null; // ou undefined
+    } else if (req.user?.role === "employe") {
+      agenceId = req.user.agence; // ID de l'agence de l'employé
+    } else if (req.role === "agence") {
+      agenceId = req.user._id; // l'agence elle-même
+    }
 
-// Plus de 401 pour admin
-if (!agenceId && req.user?.role !== "admin") {
-  return res.status(401).json({ message: "Agence non authentifiée." });
-}
-// 🔐 Déterminer qui crée le devis
-let creePar;
-if (req.user?.role === "employe") {
-  creePar = { id: req.user._id, type: "Employe" };
-} else if (req.user?.role === "admin") {
-  creePar = { id: req.user.id, type: "Admin" };
-} else {
-  creePar = { id: agenceId, type: "Agence" };
-}
+    // Plus de 401 pour admin
+    if (!agenceId && req.user?.role !== "admin") {
+      return res.status(401).json({ message: "Agence non authentifiée." });
+    }
+    // 🔐 Déterminer qui crée le devis
+    let creePar;
+    if (req.user?.role === "employe") {
+      creePar = { id: req.user._id, type: "Employe" };
+    } else if (req.user?.role === "admin") {
+      creePar = { id: req.user.id, type: "Admin" };
+    } else {
+      creePar = { id: agenceId, type: "Agence" };
+    }
 
     // 🔎 Préparer les données client
     const clientPayload = {
@@ -670,255 +670,255 @@ if (req.user?.role === "employe") {
     delete clientPayload.tel;
 
     // 🏠 Si aucune adresse client fournie → utiliser l'adresse du bien
-if (!clientPayload.adresse && data.adresseBien?.adresse) {
-  clientPayload.adresse = data.adresseBien.adresse;
-}
-if (!clientPayload.ville && data.adresseBien?.ville) {
-  clientPayload.ville = data.adresseBien.ville;
-}
-if (!clientPayload.codePostal && data.adresseBien?.codePostal) {
-  clientPayload.codePostal = data.adresseBien.codePostal;
-}
+    if (!clientPayload.adresse && data.adresseBien?.adresse) {
+      clientPayload.adresse = data.adresseBien.adresse;
+    }
+    if (!clientPayload.ville && data.adresseBien?.ville) {
+      clientPayload.ville = data.adresseBien.ville;
+    }
+    if (!clientPayload.codePostal && data.adresseBien?.codePostal) {
+      clientPayload.codePostal = data.adresseBien.codePostal;
+    }
 
     // 🔎 Recherche ou création du client
-// 🔎 Création systématique du client
-const client = new Client(clientPayload);
-await client.save();
+    // 🔎 Création systématique du client
+    const client = new Client(clientPayload);
+    await client.save();
 
 
-let secteur;
+    let secteur;
 
-if (req.user.role === "admin") {
-  // Super admin → secteur envoyé depuis le front
-  secteur = (data.secteur || "autre")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-} else {
-  // Agence ou employé → secteur de l’agence
-  secteur = (req.agence?.alerte_secteur || "autre")
-    .toLowerCase()
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "");
-}
+    if (req.user.role === "admin") {
+      // Super admin → secteur envoyé depuis le front
+      secteur = (data.secteur || "autre")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    } else {
+      // Agence ou employé → secteur de l’agence
+      secteur = (req.agence?.alerte_secteur || "autre")
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    }
 
 
     // 💰 Calcul du montant avant remise
     let totalAvantRemise = 0;
 
     // --- Pack complet ---
-// --- Pack complet ---
-if (data.type === "pack_complet" && data.pack) {
-  const pack = await Pack.findById(data.pack).populate("diagnostics");
-  if (!pack) return res.status(400).json({ message: "Pack invalide." });
+    // --- Pack complet ---
+    if (data.type === "pack_complet" && data.pack) {
+      const pack = await Pack.findById(data.pack).populate("diagnostics");
+      if (!pack) return res.status(400).json({ message: "Pack invalide." });
 
-  let tarifTrouve = 0;
+      let tarifTrouve = 0;
 
-  // 🏠 MAISON → tarifsParSurface
-  if (data.bien === "maison" && data.surfaceMaison && pack.tarifsParSurface?.length) {
-    let surfaceMinDemande = 0;
-    let surfaceMaxDemande = 0;
-    const surface = data.surfaceMaison.toString();
+      // 🏠 MAISON → tarifsParSurface
+      if (data.bien === "maison" && data.surfaceMaison && pack.tarifsParSurface?.length) {
+        let surfaceMinDemande = 0;
+        let surfaceMaxDemande = 0;
+        const surface = data.surfaceMaison.toString();
 
-    if (surface.includes("-")) {
-      const match = surface.match(/(\d+)\s*-\s*(\d+)/);
-      surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
-      surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
-    } else {
-      const valeur = parseInt(surface, 10);
-      surfaceMinDemande = valeur;
-      surfaceMaxDemande = valeur;
-    }
-
-    for (let tps of pack.tarifsParSurface) {
-      const overlap = !(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax);
-      if (overlap) {
-        tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-        break;
-      }
-    }
-  }
-
-  // 🏢 APPARTEMENT → tarifsParAppartement
-  if (data.bien === "appartement" && data.surfaceAppartement && pack.tarifsParAppartement?.length) {
-    // 🔹 Mapping types appartement
-    const mappingAppartement = {
-      "moins 20m²": "<20m2",
-      "20-40m²": "20-40m2",
-      "T1": "T1",
-      "T2": "T2",
-      "T3": "T3",
-      "T4": "T4",
-      "T5": "T5"
-    };
-    const typeAppartement = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
-
-    const appart = pack.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
-    if (appart) {
-      tarifTrouve = appart.tarifs?.[secteur] ?? appart.tarifs?.autre ?? 0;
-      console.log(`Appartement : type=${typeAppartement}, secteur='${secteur}', tarifTrouve=${tarifTrouve}`);
-    } else {
-      console.log(`⚠️ Appartement : aucun tarif trouvé pour type=${typeAppartement}, secteur='${secteur}'`);
-    }
-  }
-
-  // 🚧 AUTRES BIENS → tarifsParSurface (valeur unique)
-  else if (data.bien !== "maison" && data.bien !== "appartement" && pack.tarifsParSurface?.length) {
-    let valeur = parseInt(data.surfaceMaison || data.surfaceAppartement || data.surface || 0, 10); // la valeur que l'utilisateur a envoyée
-    if (!isNaN(valeur)) {
-      const tpsTrouve = pack.tarifsParSurface.find(tps => valeur >= tps.surfaceMin && valeur <= tps.surfaceMax);
-      if (tpsTrouve) {
-        tarifTrouve = tpsTrouve.tarifs?.[secteur] ?? tpsTrouve.tarifs?.autre ?? 0;
-      }
-    }
-  }
-
-  totalAvantRemise = Number(tarifTrouve) || 0;
-}
-
-
-// --- Diagnostics ---
-// --- Diagnostics ---
-else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
-
-  console.log("=== 🧪 MODE : DIAGNOSTICS À LA CARTE ===");
-  console.log("Diagnostics sélectionnés :", data.diagnosticsSelectionnes);
-
-  const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
-  
-  console.log("Diagnostics chargés depuis MongoDB :", diagnostics);
-
-  // 🔹 Normalisation type appartement
-  let typeAppartement = null;
-  if (data.bien === "appartement" && data.surfaceAppartement) {
-    const mappingAppartement = {
-      "moins 20m²": "<20m2",
-      "20-40m²": "20-40m2",
-      "T1": "T1",
-      "T2": "T2",
-      "T3": "T3",
-      "T4": "T4",
-      "T5": "T5"
-    };
-    typeAppartement = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
-    console.log("Type appartement normalisé :", typeAppartement);
-  }
-
-  // 🔹 Normalisation secteur
-  console.log("Secteur brut :", secteur);
-
-  secteur = (secteur || "autre")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .trim();
-
-  console.log("Secteur normalisé :", secteur);
-
-  totalAvantRemise = diagnostics.reduce((sum, d) => {
-    console.log("\n--- Diagnostic analysé :", d.nom, " ---");
-
-    let tarifTrouve = 0;
-
-    // 🏠 MAISON
-    if (data.bien === "maison" && d.tarifsParSurface?.length) {
-
-      console.log("Mode maison - tarifsParSurface :", d.tarifsParSurface);
-
-      let surfaceMin = 0, surfaceMax = 0;
-      let surface = data.surfaceMaison;
-
-      console.log("Surface maison envoyée (brut) :", surface);
-
-      // 🔧 Fix : enlever “m²”, espaces, caractères spéciaux
-      surface = surface.replace(/[^\d-]/g, "");
-      console.log("Surface maison nettoyée :", surface);
-
-      if (surface) {
         if (surface.includes("-")) {
-          const match = surface.match(/(\d+)-(\d+)/);
-          surfaceMin = match ? parseInt(match[1], 10) : 0;
-          surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+          const match = surface.match(/(\d+)\s*-\s*(\d+)/);
+          surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
+          surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
         } else {
           const valeur = parseInt(surface, 10);
-          surfaceMin = valeur;
-          surfaceMax = valeur;
+          surfaceMinDemande = valeur;
+          surfaceMaxDemande = valeur;
+        }
+
+        for (let tps of pack.tarifsParSurface) {
+          const overlap = !(surfaceMaxDemande < tps.surfaceMin || surfaceMinDemande > tps.surfaceMax);
+          if (overlap) {
+            tarifTrouve = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+            break;
+          }
         }
       }
 
-      console.log(`Surface min=${surfaceMin}, max=${surfaceMax}`);
+      // 🏢 APPARTEMENT → tarifsParAppartement
+      if (data.bien === "appartement" && data.surfaceAppartement && pack.tarifsParAppartement?.length) {
+        // 🔹 Mapping types appartement
+        const mappingAppartement = {
+          "moins 20m²": "<20m2",
+          "20-40m²": "20-40m2",
+          "T1": "T1",
+          "T2": "T2",
+          "T3": "T3",
+          "T4": "T4",
+          "T5": "T5"
+        };
+        const typeAppartement = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
 
-const intervalleTrouve = d.tarifsParSurface.find(tps => {
-  const min = Number(tps.surfaceMin);
-  const max = Number(tps.surfaceMax);
-  // 🔹 ajustement : accepter si overlap partiel
-  return surfaceMax >= min && surfaceMin <= max;
-});
-
-
-      console.log("Intervalle trouvé :", intervalleTrouve);
-
-      if (intervalleTrouve) {
-        tarifTrouve = intervalleTrouve.tarifs[secteur] ?? intervalleTrouve.tarifs.autre ?? 0;
-        console.log("Tarif trouvé pour maison =", tarifTrouve);
-      } else {
-        console.log("⚠️ Aucun intervalle trouvé → tarif=0");
+        const appart = pack.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+        if (appart) {
+          tarifTrouve = appart.tarifs?.[secteur] ?? appart.tarifs?.autre ?? 0;
+          console.log(`Appartement : type=${typeAppartement}, secteur='${secteur}', tarifTrouve=${tarifTrouve}`);
+        } else {
+          console.log(`⚠️ Appartement : aucun tarif trouvé pour type=${typeAppartement}, secteur='${secteur}'`);
+        }
       }
-    }
 
-    // 🏢 APPARTEMENT
-    else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
-
-      console.log("Mode appartement - tarifsParAppartement :", d.tarifsParAppartement);
-
-      const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
-
-      if (tarifAppart) {
-        console.log("Tarif appartement trouvé :", tarifAppart);
-        tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
-        console.log(`Tarif trouvé = ${tarifTrouve} (secteur=${secteur})`);
-      } else {
-        console.log(`⚠️ Aucun tarif trouvé pour type=${typeAppartement}`);
+      // 🚧 AUTRES BIENS → tarifsParSurface (valeur unique)
+      else if (data.bien !== "maison" && data.bien !== "appartement" && pack.tarifsParSurface?.length) {
+        let valeur = parseInt(data.surfaceMaison || data.surfaceAppartement || data.surface || 0, 10); // la valeur que l'utilisateur a envoyée
+        if (!isNaN(valeur)) {
+          const tpsTrouve = pack.tarifsParSurface.find(tps => valeur >= tps.surfaceMin && valeur <= tps.surfaceMax);
+          if (tpsTrouve) {
+            tarifTrouve = tpsTrouve.tarifs?.[secteur] ?? tpsTrouve.tarifs?.autre ?? 0;
+          }
+        }
       }
+
+      totalAvantRemise = Number(tarifTrouve) || 0;
     }
 
-     else if (data.bien !== "maison" && data.bien !== "appartement" && d.tarifsParSurface?.length) {
-      const valeur = parseInt(data.surfaceMaison || data.surfaceAppartement || data.surface || 0, 10);
-      if (!isNaN(valeur)) {
-        const tpsTrouve = d.tarifsParSurface.find(tps => valeur >= tps.surfaceMin && valeur <= tps.surfaceMax);
-        if (tpsTrouve) tarifTrouve = tpsTrouve.tarifs?.[secteur] ?? tpsTrouve.tarifs?.autre ?? 0;
+
+    // --- Diagnostics ---
+    // --- Diagnostics ---
+    else if (data.type === "diagnostic" && data.diagnosticsSelectionnes?.length) {
+
+      console.log("=== 🧪 MODE : DIAGNOSTICS À LA CARTE ===");
+      console.log("Diagnostics sélectionnés :", data.diagnosticsSelectionnes);
+
+      const diagnostics = await Diagnostic.find({ _id: { $in: data.diagnosticsSelectionnes } });
+
+      console.log("Diagnostics chargés depuis MongoDB :", diagnostics);
+
+      // 🔹 Normalisation type appartement
+      let typeAppartement = null;
+      if (data.bien === "appartement" && data.surfaceAppartement) {
+        const mappingAppartement = {
+          "moins 20m²": "<20m2",
+          "20-40m²": "20-40m2",
+          "T1": "T1",
+          "T2": "T2",
+          "T3": "T3",
+          "T4": "T4",
+          "T5": "T5"
+        };
+        typeAppartement = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
+        console.log("Type appartement normalisé :", typeAppartement);
       }
+
+      // 🔹 Normalisation secteur
+      console.log("Secteur brut :", secteur);
+
+      secteur = (secteur || "autre")
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim();
+
+      console.log("Secteur normalisé :", secteur);
+
+      totalAvantRemise = diagnostics.reduce((sum, d) => {
+        console.log("\n--- Diagnostic analysé :", d.nom, " ---");
+
+        let tarifTrouve = 0;
+
+        // 🏠 MAISON
+        if (data.bien === "maison" && d.tarifsParSurface?.length) {
+
+          console.log("Mode maison - tarifsParSurface :", d.tarifsParSurface);
+
+          let surfaceMin = 0, surfaceMax = 0;
+          let surface = data.surfaceMaison;
+
+          console.log("Surface maison envoyée (brut) :", surface);
+
+          // 🔧 Fix : enlever “m²”, espaces, caractères spéciaux
+          surface = surface.replace(/[^\d-]/g, "");
+          console.log("Surface maison nettoyée :", surface);
+
+          if (surface) {
+            if (surface.includes("-")) {
+              const match = surface.match(/(\d+)-(\d+)/);
+              surfaceMin = match ? parseInt(match[1], 10) : 0;
+              surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+            } else {
+              const valeur = parseInt(surface, 10);
+              surfaceMin = valeur;
+              surfaceMax = valeur;
+            }
+          }
+
+          console.log(`Surface min=${surfaceMin}, max=${surfaceMax}`);
+
+          const intervalleTrouve = d.tarifsParSurface.find(tps => {
+            const min = Number(tps.surfaceMin);
+            const max = Number(tps.surfaceMax);
+            // 🔹 ajustement : accepter si overlap partiel
+            return surfaceMax >= min && surfaceMin <= max;
+          });
+
+
+          console.log("Intervalle trouvé :", intervalleTrouve);
+
+          if (intervalleTrouve) {
+            tarifTrouve = intervalleTrouve.tarifs[secteur] ?? intervalleTrouve.tarifs.autre ?? 0;
+            console.log("Tarif trouvé pour maison =", tarifTrouve);
+          } else {
+            console.log("⚠️ Aucun intervalle trouvé → tarif=0");
+          }
+        }
+
+        // 🏢 APPARTEMENT
+        else if (data.bien === "appartement" && d.tarifsParAppartement?.length) {
+
+          console.log("Mode appartement - tarifsParAppartement :", d.tarifsParAppartement);
+
+          const tarifAppart = d.tarifsParAppartement.find(t => t.typeAppartement === typeAppartement);
+
+          if (tarifAppart) {
+            console.log("Tarif appartement trouvé :", tarifAppart);
+            tarifTrouve = tarifAppart.tarifs[secteur] ?? tarifAppart.tarifs.autre ?? 0;
+            console.log(`Tarif trouvé = ${tarifTrouve} (secteur=${secteur})`);
+          } else {
+            console.log(`⚠️ Aucun tarif trouvé pour type=${typeAppartement}`);
+          }
+        }
+
+        else if (data.bien !== "maison" && data.bien !== "appartement" && d.tarifsParSurface?.length) {
+          const valeur = parseInt(data.surfaceMaison || data.surfaceAppartement || data.surface || 0, 10);
+          if (!isNaN(valeur)) {
+            const tpsTrouve = d.tarifsParSurface.find(tps => valeur >= tps.surfaceMin && valeur <= tps.surfaceMax);
+            if (tpsTrouve) tarifTrouve = tpsTrouve.tarifs?.[secteur] ?? tpsTrouve.tarifs?.autre ?? 0;
+          }
+        }
+
+        // ❗ CAS : pas de tarifs (ERP, Termites, etc)
+        else {
+          console.log("⚠️ Aucun tableau de tarifs — on vérifie prixTTC/prixHT");
+
+          console.log("prixTTC :", d.prixTTC, "prixHT :", d.prixHT);
+
+          tarifTrouve = Number(d.prixTTC || d.prixHT || 0);
+
+          console.log("Tarif simple appliqué (prixTTC/prixHT) :", tarifTrouve);
+        }
+
+        console.log("Tarif retenu pour", d.nom, ":", tarifTrouve);
+
+        return sum + (Number(tarifTrouve) || 0);
+      }, 0);
+
+      console.log("\nTotal avant ajout frais déplacement =", totalAvantRemise);
+
+      // 🔹 Ajouter frais déplacement sauf ERP seul
+      const isERPSeul = diagnostics.length === 1 && diagnostics[0].nom.toLowerCase().includes("erp");
+      console.log("ERP seul ?", isERPSeul);
+
+      if (!isERPSeul) {
+        totalAvantRemise += 55;
+        console.log("Ajout frais déplacement : +55");
+      }
+
+      console.log("Total avant remise final =", totalAvantRemise);
     }
-
-    // ❗ CAS : pas de tarifs (ERP, Termites, etc)
-    else {
-      console.log("⚠️ Aucun tableau de tarifs — on vérifie prixTTC/prixHT");
-
-      console.log("prixTTC :", d.prixTTC, "prixHT :", d.prixHT);
-
-      tarifTrouve = Number(d.prixTTC || d.prixHT || 0);
-
-      console.log("Tarif simple appliqué (prixTTC/prixHT) :", tarifTrouve);
-    }
-
-    console.log("Tarif retenu pour", d.nom, ":", tarifTrouve);
-
-    return sum + (Number(tarifTrouve) || 0);
-  }, 0);
-
-  console.log("\nTotal avant ajout frais déplacement =", totalAvantRemise);
-
-  // 🔹 Ajouter frais déplacement sauf ERP seul
-  const isERPSeul = diagnostics.length === 1 && diagnostics[0].nom.toLowerCase().includes("erp");
-  console.log("ERP seul ?", isERPSeul);
-
-  if (!isERPSeul) {
-    totalAvantRemise += 55;
-    console.log("Ajout frais déplacement : +55");
-  }
-
-  console.log("Total avant remise final =", totalAvantRemise);
-}
 
 
 
@@ -941,26 +941,26 @@ const intervalleTrouve = d.tarifsParSurface.find(tps => {
       totalAvantRemise = Number(tarifsAudit[surfaceKey]) || 0;
     }
 
-let lignes = [];
-let totalLignes = 0;
+    let lignes = [];
+    let totalLignes = 0;
 
-if (Array.isArray(data.lignes) && data.lignes.length) {
-  lignes = data.lignes.map(l => {
-    const quantite = Number(l.quantite) || 1;
-    const tarifUnitaire = Number(l.prixHT * 1.2) || 0; // ou prixTTC si tu veux
-    const totalLigne = quantite * tarifUnitaire;
-    totalLignes += totalLigne;
+    if (Array.isArray(data.lignes) && data.lignes.length) {
+      lignes = data.lignes.map(l => {
+        const quantite = Number(l.quantite) || 1;
+        const tarifUnitaire = Number(l.prixHT * 1.2) || 0; // ou prixTTC si tu veux
+        const totalLigne = quantite * tarifUnitaire;
+        totalLignes += totalLigne;
 
-    return {
-      description: l.designation || "-", // <-- ici on remplace description par designation
-      quantite,
-      tarifUnitaire,
-      totalLigne
-    };
-  });
-}
+        return {
+          description: l.designation || "-", // <-- ici on remplace description par designation
+          quantite,
+          tarifUnitaire,
+          totalLigne
+        };
+      });
+    }
 
-totalAvantRemise += totalLignes;
+    totalAvantRemise += totalLignes;
 
 
     // --- Suppléments ---
@@ -976,209 +976,209 @@ totalAvantRemise += totalLignes;
       totalAvantRemise += totalSupplements;
     }
 
-// --- Diagnostic Gaz si applicable ---
-let tarifGaz = 0;
-if (data.installationGaz === true) {
-  const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
-  if (diagGaz) {
-    // ✅ Vérifier qu'il n'est pas déjà sélectionné
-    const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
-    if (!dejaSelectionne) {
-      if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-        const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-        const surfaceMin = match ? parseInt(match[1], 10) : 0;
-        const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-        for (let tps of diagGaz.tarifsParSurface) {
-          if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-            tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-            break;
+    // --- Diagnostic Gaz si applicable ---
+    let tarifGaz = 0;
+    if (data.installationGaz === true) {
+      const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
+      if (diagGaz) {
+        // ✅ Vérifier qu'il n'est pas déjà sélectionné
+        const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
+        if (!dejaSelectionne) {
+          if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
+            const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+            const surfaceMin = match ? parseInt(match[1], 10) : 0;
+            const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+            for (let tps of diagGaz.tarifsParSurface) {
+              if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+                tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+                break;
+              }
+            }
+          } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
+            // 🔹 Mapping type appartement comme plus haut
+            const mappingAppartement = {
+              "moins 20m²": "<20m2",
+              "20-40m²": "20-40m2",
+              "T1": "T1",
+              "T2": "T2",
+              "T3": "T3",
+              "T4": "T4",
+              "T5": "T5"
+            };
+            const typeAppart = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
+
+            const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+            if (tps) tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
           }
-        }
-      } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
-    // 🔹 Mapping type appartement comme plus haut
-    const mappingAppartement = {
-      "moins 20m²": "<20m2",
-      "20-40m²": "20-40m2",
-      "T1": "T1",
-      "T2": "T2",
-      "T3": "T3",
-      "T4": "T4",
-      "T5": "T5"
-    };
-    const typeAppart = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
-
-    const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
-    if (tps) tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-}
 
 
-      // Ajouter au total
-      totalAvantRemise += tarifGaz;
+          // Ajouter au total
+          totalAvantRemise += tarifGaz;
 
-      // Ajouter au tableau diagnosticsSelectionnes si nécessaire
-      data.diagnosticsSelectionnes.push(diagGaz._id.toString());
-    }
-  }
-}
-
-    // --- Diagnostic Copropriété si applicable ---
-let tarifCopro = 0;
-if (data.copropriete === true) {
-  const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // ou nom spécifique "copropriété"
-  if (diagCopro) {
-    if (data.bien === "maison" && diagCopro.tarifsParSurface?.length) {
-      const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-      const surfaceMin = match ? parseInt(match[1], 10) : 0;
-      const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-
-      for (let tps of diagCopro.tarifsParSurface) {
-        if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-          tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-          break;
+          // Ajouter au tableau diagnosticsSelectionnes si nécessaire
+          data.diagnosticsSelectionnes.push(diagGaz._id.toString());
         }
       }
-    } else if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
-      const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === data.surfaceAppartement);
-      if (tps) tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-    }
-  }
-  totalAvantRemise += tarifCopro;
-}
-
-
-// 💸 Calculs financiers
-let reductionPourcent = Number(data.reductionPourcent) || 0;
-let montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
-
-// 💰 Totaux avant application de la cagnotte
-const totalApresReduction = totalAvantRemise * (1 - reductionPourcent / 100);
-
-let totalFinal;
-
-// 🔹 Si Admin
-if (creePar.type === "Admin") {
-  // On prend exactement ce que le front envoie, pas de déduction supplémentaire
-  totalFinal = Math.max(totalApresReduction - montantCagnotteUtilisee, 0);
-  console.log("🔹 Créateur Admin : réduction et cagnotte appliquées :", totalFinal);
-} 
-// 🔹 Si Employé ou Agence
-else if (montantCagnotteUtilisee > 0) {
-  let cibleCagnotte = null;
-  let auteur = 'Système';
-
-  if (creePar.type === "Agence") {
-    cibleCagnotte = await Agence.findById(creePar.id);
-    auteur = cibleCagnotte?.nom_commercial || 'Agence';
-  } else if (creePar.type === "Employe") {
-    const employe = await Employe.findById(creePar.id);
-    auteur = req.user?.email || 'Employé';
-    if (employe.cagnotte !== undefined) {
-      cibleCagnotte = employe;
-    } else {
-      cibleCagnotte = await Agence.findById(agenceId);
-    }
-  }
-
-  if (!cibleCagnotte) {
-    return res.status(404).json({ message: "Cagnotte introuvable." });
-  }
-
-  const dejaEnAttente = (cibleCagnotte.historiqueCagnotte || cibleCagnotte.transactions_cagnotte)
-    .filter(m => m.type === 'en_attente' && m.description.includes(`devis (${data.type || 'non spécifié'})`))
-    .reduce((sum, m) => sum + m.montant, 0);
-
-  const montantRestant = montantCagnotteUtilisee - dejaEnAttente;
-
-  if (montantRestant > 0) {
-    if ((cibleCagnotte.cagnotte || 0) < montantRestant) {
-      return res.status(400).json({ message: "Cagnotte insuffisante." });
     }
 
-    cibleCagnotte.cagnotte -= montantRestant;
-    cibleCagnotte.cagnotteEnAttente = (cibleCagnotte.cagnotteEnAttente || 0) + montantRestant;
+    // --- Diagnostic Copropriété si applicable ---
+    let tarifCopro = 0;
+    if (data.copropriete === true) {
+      const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // ou nom spécifique "copropriété"
+      if (diagCopro) {
+        if (data.bien === "maison" && diagCopro.tarifsParSurface?.length) {
+          const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
+          const surfaceMin = match ? parseInt(match[1], 10) : 0;
+          const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
 
-    const mouvement = {
-      type: 'en_attente',
-      montant: montantRestant,
-      description: `Montant mis en attente pour le devis (${data.type || 'non spécifié'})`,
-      par: auteur,
-      date: new Date()
-    };
-
-    if (creePar.type === "Agence") {
-      cibleCagnotte.historiqueCagnotte.push(mouvement);
-    } else {
-      cibleCagnotte.transactions_cagnotte.push(mouvement);
+          for (let tps of diagCopro.tarifsParSurface) {
+            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
+              tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+              break;
+            }
+          }
+        } else if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
+          const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === data.surfaceAppartement);
+          if (tps) tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+        }
+      }
+      totalAvantRemise += tarifCopro;
     }
 
-    await cibleCagnotte.save();
-  }
 
-  // 🔹 Appliquer la cagnotte utilisée pour le total final
-  totalFinal = Math.max(totalApresReduction - montantCagnotteUtilisee, 0);
-}
+    // 💸 Calculs financiers
+    let reductionPourcent = Number(data.reductionPourcent) || 0;
+    let montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
 
-// 💰 Montant TTC final
-const montantTTC = totalFinal;
+    // 💰 Totaux avant application de la cagnotte
+    const totalApresReduction = totalAvantRemise * (1 - reductionPourcent / 100);
+
+    let totalFinal;
+
+    // 🔹 Si Admin
+    if (creePar.type === "Admin") {
+      // On prend exactement ce que le front envoie, pas de déduction supplémentaire
+      totalFinal = Math.max(totalApresReduction - montantCagnotteUtilisee, 0);
+      console.log("🔹 Créateur Admin : réduction et cagnotte appliquées :", totalFinal);
+    }
+    // 🔹 Si Employé ou Agence
+    else if (montantCagnotteUtilisee > 0) {
+      let cibleCagnotte = null;
+      let auteur = 'Système';
+
+      if (creePar.type === "Agence") {
+        cibleCagnotte = await Agence.findById(creePar.id);
+        auteur = cibleCagnotte?.nom_commercial || 'Agence';
+      } else if (creePar.type === "Employe") {
+        const employe = await Employe.findById(creePar.id);
+        auteur = req.user?.email || 'Employé';
+        if (employe.cagnotte !== undefined) {
+          cibleCagnotte = employe;
+        } else {
+          cibleCagnotte = await Agence.findById(agenceId);
+        }
+      }
+
+      if (!cibleCagnotte) {
+        return res.status(404).json({ message: "Cagnotte introuvable." });
+      }
+
+      const dejaEnAttente = (cibleCagnotte.historiqueCagnotte || cibleCagnotte.transactions_cagnotte)
+        .filter(m => m.type === 'en_attente' && m.description.includes(`devis (${data.type || 'non spécifié'})`))
+        .reduce((sum, m) => sum + m.montant, 0);
+
+      const montantRestant = montantCagnotteUtilisee - dejaEnAttente;
+
+      if (montantRestant > 0) {
+        if ((cibleCagnotte.cagnotte || 0) < montantRestant) {
+          return res.status(400).json({ message: "Cagnotte insuffisante." });
+        }
+
+        cibleCagnotte.cagnotte -= montantRestant;
+        cibleCagnotte.cagnotteEnAttente = (cibleCagnotte.cagnotteEnAttente || 0) + montantRestant;
+
+        const mouvement = {
+          type: 'en_attente',
+          montant: montantRestant,
+          description: `Montant mis en attente pour le devis (${data.type || 'non spécifié'})`,
+          par: auteur,
+          date: new Date()
+        };
+
+        if (creePar.type === "Agence") {
+          cibleCagnotte.historiqueCagnotte.push(mouvement);
+        } else {
+          cibleCagnotte.transactions_cagnotte.push(mouvement);
+        }
+
+        await cibleCagnotte.save();
+      }
+
+      // 🔹 Appliquer la cagnotte utilisée pour le total final
+      totalFinal = Math.max(totalApresReduction - montantCagnotteUtilisee, 0);
+    }
+
+    // 💰 Montant TTC final
+    const montantTTC = totalFinal;
 
 
     console.log("===== Totaux calculés =====", { totalAvantRemise, totalApresReduction, totalFinal, montantTTC });
 
     // 🆕 1. PLACE LE BLOC ICI
-let typeAffichage = "Diagnostics à la carte"; 
-if (data.type === "pack_complet" && data.pack) {
-    const packInfo = await Pack.findById(data.pack); 
-    typeAffichage = `PACK : ${packInfo?.nom?.toUpperCase() || "COMPLET"}`;
-} else if (data.type === "diagnostic") {
-    typeAffichage = "DIAGNOSTICS";
-} else if (data.type === "audit") {
-    typeAffichage = "AUDIT ÉNERGÉTIQUE";
-}
+    let typeAffichage = "Diagnostics à la carte";
+    if (data.type === "pack_complet" && data.pack) {
+      const packInfo = await Pack.findById(data.pack);
+      typeAffichage = `PACK : ${packInfo?.nom?.toUpperCase() || "COMPLET"}`;
+    } else if (data.type === "diagnostic") {
+      typeAffichage = "DIAGNOSTICS";
+    } else if (data.type === "audit") {
+      typeAffichage = "AUDIT ÉNERGÉTIQUE";
+    }
 
-const shareAgencyId = data.shareAgency && data.shareAgency !== "" ? data.shareAgency : null;
+    const shareAgencyId = data.shareAgency && data.shareAgency !== "" ? data.shareAgency : null;
 
-console.log("==== Client avant création devis ====", client);
+    console.log("==== Client avant création devis ====", client);
 
 
     // 🧾 Création du devis
     const devis = new Devis({
       agenceId,
-      shareAgency : shareAgencyId,
+      shareAgency: shareAgencyId,
       creePar,
- client: {
-    nom: data.client.nom,
-    prenom: data.client.prenom,
-    email: client.email,
-    tel: client.telephone,
-    adresse: client.adresse,
-    ville: client.ville,
-    codePostal: client.codePostal,
-    pays: client.pays,
-    societe: client.societe,
-    siret: client.siret,
-    remarques: client.remarques,
-  },
+      client: {
+        nom: data.client.nom,
+        prenom: data.client.prenom,
+        email: client.email,
+        tel: client.telephone,
+        adresse: client.adresse,
+        ville: client.ville,
+        codePostal: client.codePostal,
+        pays: client.pays,
+        societe: client.societe,
+        siret: client.siret,
+        remarques: client.remarques,
+      },
 
-  // 🆕 Ajouter les champs locataire
-  locataire: data.locataire || null,
-  contactLocataire: data.contactLocataire || false,
-  clefEnAgence: data.clefEnAgence || false,
+      // 🆕 Ajouter les champs locataire
+      locataire: data.locataire || null,
+      contactLocataire: data.contactLocataire || false,
+      clefEnAgence: data.clefEnAgence || false,
 
       type: data.type,
       bien: data.bien,
       transaction: data.transaction,
       adresseBien: data.adresseBien,
       surfaceMaison: data.surfaceMaison,
-      typeSurfaceMaison : data.typeSurfaceMaison,
-  ...(data.bien === "appartement" ? { surfaceAppartement: data.surfaceAppartement } : {}),
+      typeSurfaceMaison: data.typeSurfaceMaison,
+      ...(data.bien === "appartement" ? { surfaceAppartement: data.surfaceAppartement } : {}),
       anneeConstruction: data.anneeConstruction,
       numeroFiscalBien: data.numeroFiscalBien || null,
       pack: data.pack || null,
       diagnosticsSelectionnes: data.diagnosticsSelectionnes || [],
       supplementsSelectionnes,
       chauffageGaz: data.installationGaz === true, // ✅ true/false
-       copropriete: data.copropriete === true,  // ✅ nouveau champ
-  tarifCopropriete: tarifCopro,
+      copropriete: data.copropriete === true,  // ✅ nouveau champ
+      tarifCopropriete: tarifCopro,
       numeroAdeme: data.numeroAdeme || null,
       totalAvantRemise,
       reductionPourcent,
@@ -1202,171 +1202,171 @@ console.log("==== Client avant création devis ====", client);
       await client.save();
     }
 
-// ✅ Si le payeur est l’agence
-// ✅ Si le payeur est l’agence
-if (data.payer === "agence") {
+    // ✅ Si le payeur est l’agence
+    // ✅ Si le payeur est l’agence
+    if (data.payer === "agence") {
 
-  const ordre = new OrdreMission({
-    devisId: devis._id,
-    agenceId: devis.agenceId,
-    numero: `OM-${Date.now()}`,
-    clientId: client._id,
-    description: `Ordre de mission pour le devis ${devis.numero}`,
-    statut: "Commande",
-     creePar
-  });
-
-  if (req.file) {
-    ordre.fichiersClient.push({
-      nom: req.file.originalname,
-      url: req.file.path,
-      public_id: req.file.filename || req.file.public_id,
-      dateDepot: new Date(),
-    });
-  }
-
-  await ordre.save();
-
-  // ✅ Emails
-const agence = await Agence.findById(devis.agenceId);
-const agenceEmail = agence?.emails_contact?.[0]?.email; // null si agence ou email inexistant
-const dimotecEmail = "dimotec34@gmail.com";
-// 1. On prépare les variables communes (sans le lien pour l'instant)
-const baseVariables = {
-  nomClient: `${devis.client.prenom} ${devis.client.nom}`,
-  numero: ordre.numero,
-  devisNumero: devis.numero,
-  nomAgence: agence?.nom_commercial || "",
-  dateCreation: new Date().toLocaleDateString("fr-FR"),
-  description: ordre.description,
-  statut: ordre.statut,
-};
-
-// ✅ Envoi mail à l'AGENCE (Lien vers agence.votre-devis...)
-if (agenceEmail) {
-  await sendEmail({
-    to: agenceEmail,
-    subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
-    template: "OrdreMission.html",
-    variables: {
-      ...baseVariables,
-      lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Agence
-    }
-  });
-
-  // ⏱️ Attente 2 secondes avant email suivant
-  await sleep(2000);
-}
-
-// ✅ Envoi mail DIMOTEC (Lien vers admin.votre-devis...)
-await sendEmail({
-  to: dimotecEmail,
-  subject: `[ADMIN] Nouvel Ordre de Mission - ${ordre.numero}`,
-  template: "OrdreMission.html",
-  variables: {
-    ...baseVariables,
-    lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Admin
-  }
-});
-
-
-
-  return res.status(201).json({
-    message: "✅ Devis créé, accepté automatiquement et ordre envoyé (payeur agence).",
-    devis,
-  });
-}
-
-
-
-
-// 💌 Envoi de l'e-mail si le payeur est le client
-// 💌 Envoi de l'e-mail si le payeur est le client
-if (data.payer === "client") {
-  const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
-
-  try {
-    console.log("📤 Tentative d'envoi e-mail au client :", client.email);
-
-    // 1. Mail au Client
-    await sendEmail({
-      to: client.email,
-      subject: `Votre devis ${devis.numero} est prêt`,
-      template: "devis.html",
-      variables: {
-        nomClient: `${client.prenom} ${client.nom}`,
-        lienDevis,
-        "[Adresse email]": req.agence?.email || "support@votre-devis-diagnostics.fr",
-        "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
-      },
-    });
-
-    console.log("✅ Email envoyé avec succès au client :", client.email);
-
-    // ✅ Mise à jour du statut : Succès
-    devis.emailNonDelivre = false;
-    devis.statut = "Envoyé";
-    await devis.save();
-
-    // ⏱️ Courte attente avant la suite pour ménager Hostinger
-    await sleep(2000);
-
-    // --- Notification à l'agence ---
-    const agence = await Agence.findById(devis.agenceId);
-    const agenceEmail = agence?.emails_contact?.[0]?.email;
-
-    if (agenceEmail) {
-      console.log("📤 Envoi copie à l'agence :", agenceEmail);
-      await sendEmail({
-        to: agenceEmail,
-        subject: `Nouveau devis créé - ${devis.numero} - ${client.prenom} ${client.nom}`,
-        template: "notification_agence_devis.html",
-        variables: {
-          nomClient: `${client.prenom} ${client.nom}`,
-          typeDevis: typeAffichage,
-          numero: devis.numero,
-          montant: devis.montantTTC,
-          lienDevis: "https://agence.votre-devis-diagnostics.fr/billing"
-        },
+      const ordre = new OrdreMission({
+        devisId: devis._id,
+        agenceId: devis.agenceId,
+        numero: `OM-${Date.now()}`,
+        clientId: client._id,
+        description: `Ordre de mission pour le devis ${devis.numero}`,
+        statut: "Commande",
+        creePar
       });
-      console.log("✅ Notification envoyée à l'agence");
-    }
 
-  } catch (err) {
-    console.error(`❌ Erreur SMTP (Mail non envoyé) pour ${client.email}:`, err.message);
+      if (req.file) {
+        ordre.fichiersClient.push({
+          nom: req.file.originalname,
+          url: req.file.path,
+          public_id: req.file.filename || req.file.public_id,
+          dateDepot: new Date(),
+        });
+      }
 
-    // ❗ On marque l'erreur en BDD, mais on ne bloque pas la réponse au front
-    devis.emailNonDelivre = true;
-    devis.emailClientErrone = client.email;
-    devis.statut = "Email_Errone";
-    await devis.save();
+      await ordre.save();
 
-    // 🔔 Tentative d'alerte silencieuse (optionnelle)
-    try {
+      // ✅ Emails
+      const agence = await Agence.findById(devis.agenceId);
+      const agenceEmail = agence?.emails_contact?.[0]?.email; // null si agence ou email inexistant
       const dimotecEmail = "dimotec34@gmail.com";
+      // 1. On prépare les variables communes (sans le lien pour l'instant)
+      const baseVariables = {
+        nomClient: `${devis.client.prenom} ${devis.client.nom}`,
+        numero: ordre.numero,
+        devisNumero: devis.numero,
+        nomAgence: agence?.nom_commercial || "",
+        dateCreation: new Date().toLocaleDateString("fr-FR"),
+        description: ordre.description,
+        statut: ordre.statut,
+      };
+
+      // ✅ Envoi mail à l'AGENCE (Lien vers agence.votre-devis...)
+      if (agenceEmail) {
+        await sendEmail({
+          to: agenceEmail,
+          subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
+          template: "OrdreMission.html",
+          variables: {
+            ...baseVariables,
+            lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Agence
+          }
+        });
+
+        // ⏱️ Attente 2 secondes avant email suivant
+        await sleep(2000);
+      }
+
+      // ✅ Envoi mail DIMOTEC (Lien vers admin.votre-devis...)
       await sendEmail({
         to: dimotecEmail,
-        subject: `⚠️ Échec envoi devis ${devis.numero}`,
-        template: "alerteEmailClient.html",
+        subject: `[ADMIN] Nouvel Ordre de Mission - ${ordre.numero}`,
+        template: "OrdreMission.html",
         variables: {
-          clientNom: `${client.prenom} ${client.nom}`,
-          emailClient: client.email,
-          devisNumero: devis.numero,
-          error: err.message
-        },
+          ...baseVariables,
+          lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Admin
+        }
       });
-    } catch (silentErr) {
-      console.error("Impossible d'envoyer l'alerte d'échec SMTP.");
-    }
-  }
-}
 
-// ✅ RÉPONSE FINALE : Toujours renvoyée au front-end si on arrive ici
-return res.status(201).json({
-  message: "✅ Devis créé avec succès.",
-  note: "Le devis est enregistré en base de données.",
-  devis,
-});
+
+
+      return res.status(201).json({
+        message: "✅ Devis créé, accepté automatiquement et ordre envoyé (payeur agence).",
+        devis,
+      });
+    }
+
+
+
+
+    // 💌 Envoi de l'e-mail si le payeur est le client
+    // 💌 Envoi de l'e-mail si le payeur est le client
+    if (data.payer === "client") {
+      const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
+
+      try {
+        console.log("📤 Tentative d'envoi e-mail au client :", client.email);
+
+        // 1. Mail au Client
+        await sendEmail({
+          to: client.email,
+          subject: `Votre devis ${devis.numero} est prêt`,
+          template: "devis.html",
+          variables: {
+            nomClient: `${client.prenom} ${client.nom}`,
+            lienDevis,
+            "[Adresse email]": req.agence?.email || "support@votre-devis-diagnostics.fr",
+            "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
+          },
+        });
+
+        console.log("✅ Email envoyé avec succès au client :", client.email);
+
+        // ✅ Mise à jour du statut : Succès
+        devis.emailNonDelivre = false;
+        devis.statut = "Envoyé";
+        await devis.save();
+
+        // ⏱️ Courte attente avant la suite pour ménager Hostinger
+        await sleep(2000);
+
+        // --- Notification à l'agence ---
+        const agence = await Agence.findById(devis.agenceId);
+        const agenceEmail = agence?.emails_contact?.[0]?.email;
+
+        if (agenceEmail) {
+          console.log("📤 Envoi copie à l'agence :", agenceEmail);
+          await sendEmail({
+            to: agenceEmail,
+            subject: `Nouveau devis créé - ${devis.numero} - ${client.prenom} ${client.nom}`,
+            template: "notification_agence_devis.html",
+            variables: {
+              nomClient: `${client.prenom} ${client.nom}`,
+              typeDevis: typeAffichage,
+              numero: devis.numero,
+              montant: devis.montantTTC,
+              lienDevis: "https://agence.votre-devis-diagnostics.fr/billing"
+            },
+          });
+          console.log("✅ Notification envoyée à l'agence");
+        }
+
+      } catch (err) {
+        console.error(`❌ Erreur SMTP (Mail non envoyé) pour ${client.email}:`, err.message);
+
+        // ❗ On marque l'erreur en BDD, mais on ne bloque pas la réponse au front
+        devis.emailNonDelivre = true;
+        devis.emailClientErrone = client.email;
+        devis.statut = "Email_Errone";
+        await devis.save();
+
+        // 🔔 Tentative d'alerte silencieuse (optionnelle)
+        try {
+          const dimotecEmail = "dimotec34@gmail.com";
+          await sendEmail({
+            to: dimotecEmail,
+            subject: `⚠️ Échec envoi devis ${devis.numero}`,
+            template: "alerteEmailClient.html",
+            variables: {
+              clientNom: `${client.prenom} ${client.nom}`,
+              emailClient: client.email,
+              devisNumero: devis.numero,
+              error: err.message
+            },
+          });
+        } catch (silentErr) {
+          console.error("Impossible d'envoyer l'alerte d'échec SMTP.");
+        }
+      }
+    }
+
+    // ✅ RÉPONSE FINALE : Toujours renvoyée au front-end si on arrive ici
+    return res.status(201).json({
+      message: "✅ Devis créé avec succès.",
+      note: "Le devis est enregistré en base de données.",
+      devis,
+    });
 
 
 
@@ -1446,7 +1446,7 @@ exports.accepterDevisViaLien = async (req, res) => {
     if (numeroFiscalBien) devis.numeroFiscalBien = numeroFiscalBien;
     devis.cgvAccepted = true;
     devis.rgpdAccepted = true;
-    
+
     await devis.save();
 
     return res.status(200).json({ message: "Données enregistrées, génération du PDF en cours..." });
@@ -1514,7 +1514,7 @@ exports.uploadPdfDevis = async (req, res) => {
         if (cible) {
           auteur = cible.email || 'Employé';
           const montantARetirer = Math.min(cible.cagnotteEnAttente || 0, devis.montantCagnotteUtilisee);
-          
+
           if (montantARetirer > 0) {
             cible.cagnotteEnAttente -= montantARetirer;
             cible.transactions_cagnotte.push({
@@ -1547,8 +1547,8 @@ exports.uploadPdfDevis = async (req, res) => {
       }
     }
 
-// 6️⃣ PRÉPARATION ET ENVOI DES EMAILS
-    
+    // 6️⃣ PRÉPARATION ET ENVOI DES EMAILS
+
     // On définit les variables communes
     const variablesEmailBase = {
       nomClient: `${devis.client.prenom} ${devis.client.nom}`,
@@ -1595,9 +1595,9 @@ exports.uploadPdfDevis = async (req, res) => {
 
   } catch (err) {
     console.error("❌ Erreur critique dans uploadPdfDevis :", err);
-    return res.status(500).json({ 
+    return res.status(500).json({
       message: "Erreur lors de la finalisation de l'acceptation via PDF.",
-      error: err.message 
+      error: err.message
     });
   }
 };
@@ -1639,7 +1639,7 @@ exports.uploadSignature = async (req, res) => {
   }
 };
 
- 
+
 
 // 🔹 Accéder aux devis via clé
 // 🔹 Accéder aux devis via clé
@@ -1799,7 +1799,7 @@ exports.ouvrirDevisViaLien = async (req, res) => {
     if (!["ouvert", "Accepté", "Refusé"].includes(devis.statut)) {
       devis.statut = "ouvert";
       devis.dateOuverture = new Date();
-      await devis.save(); 
+      await devis.save();
     }
 
     return res.status(200).json({
@@ -1878,7 +1878,7 @@ exports.refuserDevisViaLien = async (req, res) => {
     const { reason } = req.body; // 🔹 récupérer la raison depuis le frontend
 
     const devis = await Devis.findOne({ _id: devisId, accesClientKey: key });
-    if (!devis) 
+    if (!devis)
       return res.status(404).json({ message: "Devis introuvable ou clé invalide." });
 
     devis.statut = "Refusé";
@@ -1917,11 +1917,11 @@ exports.noDocumentsDevis = async (req, res) => {
 
     // 2. 🛡️ DESTRUCTION DE L'ACCÈS
     // On vide la clé ET on expire la date pour une clôture immédiate et définitive
-    devis.accesClientKey = undefined; 
-    devis.accesClientExpire = new Date(); 
-    
+    devis.accesClientKey = undefined;
+    devis.accesClientExpire = new Date();
+
     devis.note = (devis.note || "") + `\n[Système] Le client a validé l'absence de documents le ${new Date().toLocaleString("fr-FR")}. Clé d'accès supprimée. Accès fermé.`;
-    
+
     await devis.save();
     console.log(`🔒 Accès révoqué pour le devis ${devis.numero}. Clé supprimée.`);
 
@@ -1933,7 +1933,7 @@ exports.noDocumentsDevis = async (req, res) => {
       numeroDevis: devis.numero,
       messageClient: messageClient || "Le client indique qu'aucun document n'est disponible.",
       // Ici, on utilise l'ID pour l'admin car la clé client n'existe plus
-      lienDevis: `https://votre-plateforme-admin.fr/devis/${devis._id}`, 
+      lienDevis: `https://votre-plateforme-admin.fr/devis/${devis._id}`,
       date: new Date().toLocaleString("fr-FR"),
     };
 
@@ -1968,14 +1968,14 @@ exports.noDocumentsDevis = async (req, res) => {
 exports.updateDevisInfos = async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      client, 
-      locataire, 
-      contactLocataire, 
-      clefEnAgence, 
-      adresseBien, 
-      numeroFiscalBien, 
-      note, 
+    const {
+      client,
+      locataire,
+      contactLocataire,
+      clefEnAgence,
+      adresseBien,
+      numeroFiscalBien,
+      note,
       statut,
       // Nouveaux champs financiers
       totalAvantRemise,
@@ -2297,7 +2297,7 @@ exports.notifyNewAgency = async (req, res) => {
     <div class="content">
       <h2>Bonjour ${agencyName},</h2>
 
-      <p>Nous avons le plaisir de vous informer qu'un devis a été réalisé en votre nom sur notre plateforme DIMOTEC.</p>
+      <p>Nous avons le plaisir de vous informer qu'un devis de diagnostic a été réalisé pour votre client.</p>
 
       <div class="devis-info">
         <strong>📋 Détails du devis :</strong>
@@ -2312,17 +2312,45 @@ exports.notifyNewAgency = async (req, res) => {
 
       <div class="benefits">
         <h3>Pourquoi nous rejoindre ?</h3>
-        <ul>
-          <li>Gestion centralisée de vos devis et interventions</li>
-          <li>Suivi en temps réel de vos projets</li>
-          <li>Communication facilitée avec vos clients</li>
-          <li>Outils de reporting et statistiques</li>
-          <li>Support technique dédié</li>
-        </ul>
+       <div class="container-promo">
+  
+  <div class="features-grid">
+    <div class="feature-card">
+      <div class="icon-box icon-green">
+        <i class="fas fa-bolt"></i>
       </div>
+      <h4>Instantanéité</h4>
+      <p>Afin de faciliter votre quotidien, vous réalisez et envoyez vos devis de diagnostic en <strong>instantané</strong>.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="icon-box icon-blue">
+        <i class="fas fa-file-signature"></i>
+      </div>
+      <h4>Fluidité</h4>
+      <p>Votre technicien n'a plus besoin de vous relancer pour demander des documents ou informations complémentaires.</p>
+    </div>
+
+    <div class="feature-card">
+      <div class="icon-box icon-orange">
+        <i class="fas fa-eye"></i>
+      </div>
+      <h4>Suivi 360°</h4>
+      <p>Vous êtes informé en <strong>temps réel</strong> de l'avancement, des relances et jusqu'au règlement final.</p>
+    </div>
+  </div>
+
+  <div class="transition-banner">
+    <p>
+      <i class="fas fa-cloud"></i>
+      Toutes vos demandes et dossiers sont centralisés sur votre plateforme dédiée.
+    </p>
+  </div>
+
+
 
       <center>
-        <a href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
+        <a style="color: white"  href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
           Créer mon compte gratuitement
         </a>
       </center>
