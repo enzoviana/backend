@@ -1661,8 +1661,15 @@ exports.getDevisViaLien = async (req, res) => {
       })
       .populate("diagnosticsSelectionnes")
       .populate("supplementsSelectionnes")
+      // ✅ Populate de l'agence propriétaire
       .populate({
         path: "agenceId",
+        model: "Agence",
+        select: "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut reduction"
+      })
+      // ✅ Populate de l'agence de partage
+      .populate({
+        path: "shareAgency",
         model: "Agence",
         select: "nom_commercial nom_responsable adresse telephone_fixe emails_contact siret activite logo alerte_secteur statut reduction"
       });
@@ -1671,7 +1678,11 @@ exports.getDevisViaLien = async (req, res) => {
       return res.status(404).json({ message: "Lien invalide ou expiré." });
     }
 
-    const secteur = (devis.agenceId?.alerte_secteur || devis.secteur || "autre")
+    // ✅ Détermination de l'agence à utiliser (Priorité agenceId, sinon shareAgency)
+    const agenceActive = devis.agenceId || devis.shareAgency;
+
+    // ✅ Utilisation de l'alerte_secteur de l'agence active pour le calcul des tarifs
+    const secteur = (agenceActive?.alerte_secteur || devis.secteur || "autre")
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
@@ -1708,11 +1719,9 @@ exports.getDevisViaLien = async (req, res) => {
         tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
 
       } else if (item.tarifsParSurface?.length) {
-        // ✅ Autres types (terrain, local…) : rechercher dans tarifsParSurface
         const tranche = item.tarifsParSurface.find(t => surface >= t.surfaceMin && surface <= t.surfaceMax);
         tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
       } else {
-        // Cas fallback : utiliser prixTTC ou prixHT
         tarifTTC = Number(item.prixTTC || item.prixHT || 0);
       }
 
@@ -1773,6 +1782,9 @@ exports.getDevisViaLien = async (req, res) => {
     devisObj.diagnosticsSelectionnes = diagnostics;
     devisObj.supplementsSelectionnes = supplements;
     devisObj.pack = pack;
+    
+    // ✅ On injecte l'agence active dans l'objet pour le Front-end
+    devisObj.agenceActive = agenceActive;
 
     return res.status(200).json({
       message: "✅ Devis récupéré",
