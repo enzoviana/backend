@@ -663,6 +663,7 @@ exports.createDevis = async (req, res) => {
     // 🔎 Préparer les données client
     const clientPayload = {
       ...data.client,
+      email: data.client.email ? data.client.email.trim() : "",
       telephone: data.client.tel || data.client.telephone || "",
       agences: [agenceId],
     };
@@ -1384,11 +1385,14 @@ exports.corrigerEmailDevis = async (req, res) => {
     return res.status(400).json({ message: "Devis et nouvel email requis." });
   }
 
+  // Nettoyer l'email (supprimer espaces avant/après)
+  const emailCleaned = nouvelEmail.trim();
+
   const devis = await Devis.findById(devisId);
   if (!devis) return res.status(404).json({ message: "Devis introuvable." });
 
   // Mettre à jour email dans le devis
-  devis.client.email = nouvelEmail;
+  devis.client.email = emailCleaned;
   devis.emailNonDelivre = false;
   devis.statut = "Envoyé";
 
@@ -1400,7 +1404,7 @@ exports.corrigerEmailDevis = async (req, res) => {
   });
 
   if (client) {
-    client.email = nouvelEmail;
+    client.email = emailCleaned;
     await client.save();
   }
 
@@ -1408,7 +1412,7 @@ exports.corrigerEmailDevis = async (req, res) => {
 
   try {
     await sendEmail({
-      to: nouvelEmail,
+      to: emailCleaned,
       subject: `Votre devis ${devis.numero} est prêt`,
       template: "devis.html",
       variables: {
@@ -2044,7 +2048,7 @@ exports.updateDevisInfos = async (req, res) => {
     if (client) {
       if (client.nom) devis.client.nom = client.nom;
       if (client.prenom) devis.client.prenom = client.prenom;
-      if (client.email) devis.client.email = client.email;
+      if (client.email) devis.client.email = client.email.trim();
       if (client.tel !== undefined) devis.client.tel = client.tel;
     }
 
@@ -2674,5 +2678,41 @@ exports.verifierBouncesDevis = async (req, res) => {
   } catch (error) {
     console.error("❌ Erreur vérification bounces:", error);
     res.status(500).json({ message: "Erreur lors de la vérification des bounces" });
+  }
+};
+
+/**
+ * 📝 Mettre à jour le numéro fiscal d'un bien dans un devis
+ * Route : PUT /api/client/devis/:devisId/numero-fiscal
+ */
+exports.updateNumeroFiscal = async (req, res) => {
+  try {
+    const { devisId } = req.params;
+    const { numeroFiscalBien } = req.body;
+
+    if (!numeroFiscalBien) {
+      return res.status(400).json({ message: "Le numéro fiscal est requis." });
+    }
+
+    // Rechercher le devis
+    const devis = await Devis.findById(devisId);
+    if (!devis) {
+      return res.status(404).json({ message: "Devis introuvable." });
+    }
+
+    // Mettre à jour le numéro fiscal
+    devis.numeroFiscalBien = numeroFiscalBien;
+    await devis.save();
+
+    console.log(`✅ Numéro fiscal mis à jour pour le devis ${devis.numero}: ${numeroFiscalBien}`);
+
+    res.status(200).json({
+      message: "Numéro fiscal enregistré avec succès.",
+      devis
+    });
+
+  } catch (error) {
+    console.error("❌ Erreur mise à jour numéro fiscal:", error);
+    res.status(500).json({ message: "Erreur lors de l'enregistrement du numéro fiscal." });
   }
 };

@@ -33,6 +33,9 @@ router.post("/devis/:devisId/signature", devisController.uploadSignature);
 // 🔹 Nouvelle route : aucun document à transmettre
 router.post('/no-documents', devisController.noDocumentsDevis)
 
+// 🔹 Mettre à jour le numéro fiscal du bien
+router.put("/devis/:devisId/numero-fiscal", devisController.updateNumeroFiscal)
+
 // Rappel devis
 router.post("/:id/rappel", authMiddleware, devisController.envoyerRappelDevis);
 

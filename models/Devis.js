@@ -115,6 +115,9 @@ surfaceMaison: {
   /* 📝 Note libre sur le devis (nouveau champ) */
   note: { type: String, default: "" },
 
+  /* 📋 Informations complémentaires (visibles sur le PDF) */
+  informationsComplementaires: { type: String, default: "" },
+
   /* 🔧 Références */
   pack: {
     type: mongoose.Schema.Types.ObjectId,

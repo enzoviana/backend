@@ -15,6 +15,7 @@ const Supplement = require("../models/Supplement");
 const sendEmail = require('../utils/sendEmails');
 const Employe = require('../models/Employe');
 const Devis = require('../models/Devis')
+const OrdreMission = require('../models/OrdreMission');
 /**
  * REGISTER ADMIN
  */
@@ -22,8 +23,11 @@ exports.register = async (req, res) => {
   try {
     const { nom, prenom, email, telephone, mot_de_passe, entreprise } = req.body;
 
+    // Nettoyer l'email (supprimer espaces avant/après)
+    const emailCleaned = email ? email.trim() : "";
+
     // Vérifier si admin existe déjà
-    const existingAdmin = await Admin.findOne({ email });
+    const existingAdmin = await Admin.findOne({ email: emailCleaned });
     if (existingAdmin) return res.status(400).json({ message: 'Email déjà utilisé.' });
 
     // Hash du mot de passe
@@ -32,7 +36,7 @@ exports.register = async (req, res) => {
     const newAdmin = new Admin({
       nom,
       prenom,
-      email,
+      email: emailCleaned,
       telephone,
       entreprise,
       mot_de_passe: hashedPassword
@@ -53,7 +57,10 @@ exports.login = async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
 
-    const admin = await Admin.findOne({ email });
+    // Nettoyer l'email (supprimer espaces avant/après)
+    const emailCleaned = email ? email.trim() : "";
+
+    const admin = await Admin.findOne({ email: emailCleaned });
     if (!admin) return res.status(400).json({ message: 'Email ou mot de passe incorrect.' });
 
     const isMatch = await bcrypt.compare(mot_de_passe, admin.mot_de_passe);
@@ -289,8 +296,11 @@ exports.createAgence = async (req, res) => {
   try {
     const { nom, representant, email, telephone } = req.body;
 
+    // Nettoyer l'email (supprimer espaces avant/après)
+    const emailCleaned = email ? email.trim() : "";
+
     // Vérifier si une agence avec cet email existe déjà
-    const existingAgence = await Agence.findOne({ email });
+    const existingAgence = await Agence.findOne({ email: emailCleaned });
     if (existingAgence) return res.status(400).json({ message: 'Une agence avec cet email existe déjà.' });
 
     // Générer un mot de passe aléatoire pour l'admin
@@ -300,12 +310,12 @@ exports.createAgence = async (req, res) => {
     const newAgence = new Agence({
       nom,
       representant,
-      email,
+      email: emailCleaned,
       telephone,
       admin: {
         nom: representant,
         prenom: 'Admin',
-        email,
+        email: emailCleaned,
         mot_de_passe: randomPassword
       },
       clients: [],
@@ -523,7 +533,52 @@ exports.updateAgence = async (req, res) => {
   }
 };
 
+/**
+ * SUPPRIMER UNE AGENCE
+ */
+exports.deleteAgence = async (req, res) => {
+  try {
+    const { id } = req.params;
 
+    // Vérifier que l'agence existe
+    const agence = await Agence.findById(id);
+    if (!agence) {
+      return res.status(404).json({ message: "Agence introuvable" });
+    }
+
+    // Vérifier s'il y a des ordres de mission liés à cette agence
+    const ordresMission = await OrdreMission.countDocuments({ agenceId: id });
+    if (ordresMission > 0) {
+      return res.status(400).json({
+        message: `Impossible de supprimer cette agence. ${ordresMission} ordre(s) de mission ${ordresMission > 1 ? 'sont liés' : 'est lié'} à cette agence.`,
+        type: "ordres_mission",
+        count: ordresMission
+      });
+    }
+
+    // Vérifier s'il y a des devis liés à cette agence
+    const devis = await Devis.countDocuments({ agenceId: id });
+    if (devis > 0) {
+      return res.status(400).json({
+        message: `Impossible de supprimer cette agence. ${devis} devis ${devis > 1 ? 'sont liés' : 'est lié'} à cette agence.`,
+        type: "devis",
+        count: devis
+      });
+    }
+
+    // Supprimer l'agence si aucune dépendance n'existe
+    await Agence.findByIdAndDelete(id);
+
+    res.status(200).json({
+      message: "Agence supprimée avec succès",
+      agenceId: id
+    });
+
+  } catch (error) {
+    console.error("Erreur lors de la suppression de l'agence :", error);
+    res.status(500).json({ message: "Erreur serveur lors de la suppression de l'agence." });
+  }
+};
 
 
 /**

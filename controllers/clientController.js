@@ -104,6 +104,11 @@ exports.updateClient = async (req, res) => {
       return res.status(404).json({ message: "Client introuvable." });
     }
 
+    // 🧹 Nettoyer l'email si présent (supprimer espaces avant/après)
+    if (data.email) {
+      data.email = data.email.trim();
+    }
+
     // 📌 S'il y a un email envoyé → vérifier les doublons
     if (data.email) {
       const duplicate = await Client.findOne({

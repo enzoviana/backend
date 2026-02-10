@@ -47,8 +47,7 @@ router.get('/agences', authMiddleware, adminController.getAllAgences);
 router.get('/classement-agences', authMiddleware, adminController.getClassementAgences);
 
 router.put("/agences/:id", authMiddleware, adminController.updateAgence);
-
-
+router.delete("/agences/:id", authMiddleware, adminController.deleteAgence);
 
 // ---------------------- CONFIGURATION ----------------------
 // Diagnostics

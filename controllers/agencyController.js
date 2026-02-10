@@ -28,6 +28,9 @@ exports.login = async (req, res) => {
   try {
     const { email, mot_de_passe } = req.body;
 
+    // Nettoyer l'email (supprimer espaces avant/après)
+    const emailCleaned = email ? email.trim() : "";
+
     let user = null;
     let type = null;
 
@@ -36,8 +39,8 @@ exports.login = async (req, res) => {
      */
     const agence = await Agence.findOne({
       $or: [
-        { 'admin.email': email },
-        { 'emails_contact.email': email }
+        { 'admin.email': emailCleaned },
+        { 'emails_contact.email': emailCleaned }
       ]
     });
 
@@ -51,7 +54,7 @@ exports.login = async (req, res) => {
      */
     let employe = null;
     if (!user) {
-      employe = await Employe.findOne({ email });
+      employe = await Employe.findOne({ email: emailCleaned });
       if (employe) {
         user = employe;
         type = 'employe';
@@ -303,7 +306,8 @@ exports.register = async (req, res) => {
       return res.status(400).json({ message: "Au moins un email de contact doit être fourni." });
     }
 
-    const email_connexion = emailsArray[0].email;
+    // Nettoyer l'email de connexion (supprimer espaces avant/après)
+    const email_connexion = emailsArray[0].email ? emailsArray[0].email.trim() : "";
 
     // Vérifie si un compte existe déjà
     const existingAdmin = await Agence.findOne({ 'admin.email': email_connexion });
@@ -1473,8 +1477,11 @@ exports.addEmploye = async (req, res) => {
       return res.status(400).json({ message: "Nom, prénom et email sont obligatoires." });
     }
 
+    // Nettoyer l'email (supprimer espaces avant/après)
+    const emailCleaned = email ? email.trim() : "";
+
     // Vérifie si email déjà utilisé
-    const existing = await Employe.findOne({ email });
+    const existing = await Employe.findOne({ email: emailCleaned });
     if (existing) return res.status(400).json({ message: "Un employé avec cet email existe déjà." });
 
     // Génération automatique du mot de passe si non fourni
@@ -1484,7 +1491,7 @@ exports.addEmploye = async (req, res) => {
       agence: agenceId,
       nom,
       prenom,
-      email,
+      email: emailCleaned,
       mot_de_passe: password,
       telephone_portable
     });
@@ -1495,13 +1502,13 @@ exports.addEmploye = async (req, res) => {
     const loginUrl = `https://agence.votre-devis-diagnostics.fr/login`; // lien vers la page de connexion
 
     await sendEmail({
-      to: email,
+      to: emailCleaned,
       subject: "Bienvenue dans votre espace Dimotec 👋",
       template: "WelcomeEmploye.html", // ton template HTML pour l'employé
       variables: {
         nom,
         prenom,
-        email,
+        email: emailCleaned,
         motDePasse: password,
         loginUrl
       }

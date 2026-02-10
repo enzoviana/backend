@@ -205,7 +205,7 @@ exports.updateMissionInfos = async (req, res) => {
     if (client) {
       devis.client.nom = client.nom || devis.client.nom;
       devis.client.prenom = client.prenom || devis.client.prenom;
-      devis.client.email = client.email || devis.client.email;
+      devis.client.email = client.email ? client.email.trim() : devis.client.email;
       devis.client.tel = client.telephone || devis.client.tel;
       devis.client.adresse = client.adresse || devis.client.adresse;
       devis.client.ville = client.ville || devis.client.ville;
