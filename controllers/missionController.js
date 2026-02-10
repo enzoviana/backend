@@ -190,10 +190,11 @@ exports.updateMissionInfos = async (req, res) => {
             nom: client.nom,
             prenom: client.prenom,
             email: client.email,
-            telephone: client.tel,
+            telephone: client.telephone,
             adresse: client.adresse,
             ville: client.ville,
-            codePostal: client.codePostal
+            codePostal: client.codePostal,
+            pays: client.pays
           }
         },
         { new: true }
@@ -205,10 +206,11 @@ exports.updateMissionInfos = async (req, res) => {
       devis.client.nom = client.nom || devis.client.nom;
       devis.client.prenom = client.prenom || devis.client.prenom;
       devis.client.email = client.email || devis.client.email;
-      devis.client.tel = client.tel || devis.client.tel;
+      devis.client.tel = client.telephone || devis.client.tel;
       devis.client.adresse = client.adresse || devis.client.adresse;
       devis.client.ville = client.ville || devis.client.ville;
       devis.client.codePostal = client.codePostal || devis.client.codePostal;
+      devis.client.pays = client.pays || devis.client.pays;
     }
 
     // --- 3) Mise à jour des infos du BIEN ---
