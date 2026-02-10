@@ -452,7 +452,7 @@ exports.uploadFileByClientKey = [
       // On vide la clé ET on expire la date pour une double sécurité
       devis.accesClientKey = undefined; 
       devis.accesClientExpire = new Date();
-      devis.note = (devis.note || "") + `\n[Système] ${uploadedFiles.length} documents déposés le ${new Date().toLocaleString("fr-FR")}. Clé d'accès supprimée.`;
+      devis.note = (devis.note || "") + `\n[Système] ${uploadedFiles.length} documents déposés le ${new Date().toLocaleString("fr-FR")}.`;
       
       await devis.save();
       console.log("🔒 Clé d'accès supprimée de la base de données.");

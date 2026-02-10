@@ -1164,7 +1164,7 @@ exports.createDevis = async (req, res) => {
       locataire: data.locataire || null,
       contactLocataire: data.contactLocataire || false,
       clefEnAgence: data.clefEnAgence || false,
-
+      informationsComplementaires: data.informationsComplementaires || "",
       type: data.type,
       bien: data.bien,
       transaction: data.transaction,
@@ -1936,7 +1936,7 @@ exports.noDocumentsDevis = async (req, res) => {
     devis.accesClientKey = undefined;
     devis.accesClientExpire = new Date();
 
-    devis.note = (devis.note || "") + `\n[Système] Le client a validé l'absence de documents le ${new Date().toLocaleString("fr-FR")}. Clé d'accès supprimée. Accès fermé.`;
+    devis.note = (devis.note || "") + `\n[Système] Le client a déclaré ne posséder aucun document le ${new Date().toLocaleString("fr-FR")}.`;
 
     await devis.save();
     console.log(`🔒 Accès révoqué pour le devis ${devis.numero}. Clé supprimée.`);
@@ -1992,6 +1992,7 @@ exports.updateDevisInfos = async (req, res) => {
       adresseBien,
       numeroFiscalBien,
       note,
+      informationsComplementaires,
       statut,
       // Nouveaux champs financiers
       totalAvantRemise,
@@ -2087,6 +2088,11 @@ exports.updateDevisInfos = async (req, res) => {
     // Note
     if (note !== undefined) {
       devis.note = note;
+    }
+
+    // Informations complémentaires
+    if (informationsComplementaires !== undefined) {
+      devis.informationsComplementaires = informationsComplementaires;
     }
 
     // 💾 Sauvegarde globale
