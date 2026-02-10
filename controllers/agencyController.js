@@ -515,6 +515,7 @@ exports.updateInfosAgence = async (req, res) => {
     const allowedFields = [
       "nom_commercial",
       "nom_responsable",
+      "prenom_responsable",
       "adresse",
       "alerte_secteur",
       "siret",
@@ -522,9 +523,14 @@ exports.updateInfosAgence = async (req, res) => {
       "activite",
       "domaine_intervention",
       "emails_contact",
+      "email_contact",
+      "numeroTVA",
+      "logo",
+      "photoProfil",
       "ca_estime",
       "reduction",
-      "type_cagnotte" // ✅ Autorisé à la mise à jour
+      "type_cagnotte", // ✅ Autorisé à la mise à jour
+      "partage_devis" // ✅ Nouveau champ pour partager les devis entre collaborateurs
     ];
 
     const updates = {};
@@ -918,18 +924,7 @@ exports.filterPacks = async (req, res) => {
     let surfaceMaxDemande = 0;
     let typeAppartement = null;
 
-    if (typeBienNorm === "maison" || typeBienNorm === "terrain" || typeBienNorm === "mur" || typeBienNorm === "autre") {
-      if (surface.includes("-")) {
-        const match = surface.match(/(\d+)-(\d+)/);
-        surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
-        surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
-      } else {
-        const valeur = parseInt(surface, 10);
-        surfaceMinDemande = valeur;
-        surfaceMaxDemande = valeur;
-      }
-      console.log(`🏠 Surface : surfaceMin=${surfaceMinDemande}, surfaceMax=${surfaceMaxDemande}`);
-    } else if (typeBienNorm === "appartement") {
+    if (typeBienNorm === "appartement") {
       const mappingAppartement = {
         "moins 20m²": "<20m2",
         "20-40m²": "20-40m2",
@@ -941,6 +936,18 @@ exports.filterPacks = async (req, res) => {
       };
       typeAppartement = mappingAppartement[surface.toLowerCase()] || surface;
       console.log(`🏢 Appartement : typeAppartement=${typeAppartement}`);
+    } else {
+      // Pour tous les autres types de biens (maison, local commercial, terrain, mur, autre, etc.)
+      if (surface.includes("-")) {
+        const match = surface.match(/(\d+)-(\d+)/);
+        surfaceMinDemande = match ? parseInt(match[1], 10) : 0;
+        surfaceMaxDemande = match ? parseInt(match[2], 10) : surfaceMinDemande;
+      } else {
+        const valeur = parseInt(surface, 10);
+        surfaceMinDemande = valeur;
+        surfaceMaxDemande = valeur;
+      }
+      console.log(`🏠 ${typeBien} - Surface : surfaceMin=${surfaceMinDemande}, surfaceMax=${surfaceMaxDemande}`);
     }
 
     // --- Récupération des packs ---

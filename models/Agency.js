@@ -95,6 +95,11 @@ historiqueCagnotte: {
     default: 'partagee',
     required: true
   },
+  partage_devis: {
+    type: Boolean,
+    default: true,
+    required: false
+  },
   reduction: { type: Number, default: 0, min: 0, max: 100 }
 
 }, { timestamps: true });

@@ -187,14 +187,25 @@ exports.getDevis = async (req, res) => {
       // 🏢 Agence → uniquement ses ordres de mission
       query = { agenceId: req.agence._id };
     } else if (req.role === "employe") {
-      // 👨‍💻 Employé → uniquement les OM où il est creePar ou dans partageAvec
+      // 👨‍💻 Employé → vérifier si partage_devis est activé
       const empId = req.user._id.toString();
+      const agenceId = req.user.agence;
 
-      query = {
-        $or: [
-          { "creePar.type": "Employe", "creePar.id": empId },
-        ]
-      };
+      // Récupérer l'agence pour vérifier le paramètre partage_devis
+      const Agence = require("../models/Agency");
+      const agence = await Agence.findById(agenceId);
+
+      if (agence?.partage_devis === true) {
+        // Si partage activé → voir tous les devis de l'agence
+        query = { agenceId: agenceId };
+      } else {
+        // Si partage désactivé → uniquement les devis créés par l'employé
+        query = {
+          $or: [
+            { "creePar.type": "Employe", "creePar.id": empId },
+          ]
+        };
+      }
     } else {
       return res.status(401).json({ message: "Utilisateur non authentifié." });
     }
@@ -1936,7 +1947,7 @@ exports.noDocumentsDevis = async (req, res) => {
     devis.accesClientKey = undefined;
     devis.accesClientExpire = new Date();
 
-    devis.note = (devis.note || "") + `\n[Système] Le client a déclaré ne posséder aucun document le ${new Date().toLocaleString("fr-FR")}.`;
+    devis.note = (devis.note || "") + `\n[Système] Le client a déclaré ne posséder aucune facture pour le bien le ${new Date().toLocaleString("fr-FR")}.`;
 
     await devis.save();
     console.log(`🔒 Accès révoqué pour le devis ${devis.numero}. Clé supprimée.`);
