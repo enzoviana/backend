@@ -218,7 +218,7 @@ exports.getDevis = async (req, res) => {
       return {
         _id: d._id,
         numero: d.numero || `DV-${d._id.slice(-4)}`,
-        nomAgence: d.agenceId?.nom_commercial || 'DIMOTEC',
+        nomAgence: d.agenceId?.nom_commercial || ' ',
         pack: d.pack || null,
         diagnosticsSelectionnes: d.diagnosticsSelectionnes || [],
         montantTTC: d.montantTTC || 0,
@@ -343,7 +343,7 @@ exports.envoyerRappelDevis = async (req, res) => {
     console.log("📨 Envoi de l'e-mail en cours...");
     await sendEmail({
       to: devis.client.email,
-      subject: `Rappel concernant votre devis ${devis.numero}`,
+      subject: `Rappel concernant Votre devis`,
       template: "rappel.html",
       variables: {
         nomClient: `${devis.client.prenom} ${devis.client.nom}`,
@@ -596,7 +596,7 @@ exports.envoyerRappelsAutomatiques = async () => {
 
       await sendEmail({
         to: devis.client.email,
-        subject: `Rappel concernant votre devis ${devis.numero}`,
+        subject: `Rappel concernant Votre devis`,
         template: "rappel.html",
         variables: {
           nomClient: `${devis.client.prenom} ${devis.client.nom}`,
@@ -1292,7 +1292,7 @@ exports.createDevis = async (req, res) => {
         // 1. Mail au Client
         await sendEmail({
           to: client.email,
-          subject: `Votre devis ${devis.numero} est prêt`,
+          subject: `Votre devis est prêt`,
           template: "devis.html",
           variables: {
             nomClient: `${client.prenom} ${client.nom}`,
@@ -1413,7 +1413,7 @@ exports.corrigerEmailDevis = async (req, res) => {
   try {
     await sendEmail({
       to: emailCleaned,
-      subject: `Votre devis ${devis.numero} est prêt`,
+      subject: `Votre devis est prêt`,
       template: "devis.html",
       variables: {
         nomClient: `${devis.client.prenom} ${devis.client.nom}`,
@@ -1558,7 +1558,7 @@ exports.uploadPdfDevis = async (req, res) => {
       nomClient: `${devis.client.prenom} ${devis.client.nom}`,
       numero: ordre.numero,
       devisNumero: devis.numero,
-      nomAgence: agence?.nom_commercial || "Dimotec",
+      nomAgence: agence?.nom_commercial || " ",
       dateCreation: new Date().toLocaleDateString("fr-FR"),
       description: ordre.description,
       statut: ordre.statut,
@@ -2187,7 +2187,7 @@ exports.notifyNewAgency = async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Invitation DIMOTEC</title>
+  <title>Invitation Votre Devis Diagnostics</title>
   <style>
     body {
       font-family: 'Segoe UI', Arial, sans-serif;
@@ -2279,7 +2279,7 @@ exports.notifyNewAgency = async (req, res) => {
   <div class="container">
     <div class="header">
       <h1 style="margin:0; font-size: 24px;">🎉 Nouveau Devis Disponible</h1>
-      <p style="margin:10px 0 0; opacity: 0.9;">Propulsé par la plateforme DIMOTEC</p>
+      <p style="margin:10px 0 0; opacity: 0.9;">Propulsé par la plateforme Votre Devis Diagnostics</p>
     </div>
 
     <div class="content">
@@ -2326,9 +2326,9 @@ exports.notifyNewAgency = async (req, res) => {
     </div>
 
     <div class="footer">
-      <p><strong>DIMOTEC</strong> - La solution professionnelle pour vos diagnostics</p>
+      <p><strong>Votre Devis Diagnostics</strong> - La solution professionnelle pour vos diagnostics</p>
       <p>Besoin d'aide ? <a href="mailto:support@votre-devis-diagnostics.fr" style="color: #ed891a;">Contactez le support</a></p>
-      <p>© ${new Date().getFullYear()} DIMOTEC</p>
+      <p>© ${new Date().getFullYear()} Votre Devis Diagnostics</p>
     </div>
   </div>
 </body>
@@ -2338,7 +2338,7 @@ exports.notifyNewAgency = async (req, res) => {
     // Envoyer l'email
     await sendEmail({
       to: agencyEmail,
-      subject: `🎉 Invitation DIMOTEC - Un devis a été créé pour ${agencyName}`,
+      subject: `🎉 Invitation Votre Devis Diagnostics - Un devis a été créé pour ${agencyName}`,
       html: emailHtml
     });
 
@@ -2382,7 +2382,7 @@ exports.notifyExistingAgency = async (req, res) => {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Nouveau Devis DIMOTEC</title>
+  <title>Nouveau Devis Votre Devis Diagnostics</title>
   <style>
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
@@ -2511,7 +2511,7 @@ exports.notifyExistingAgency = async (req, res) => {
     <div class="content">
       <h2>Bonjour ${agence.nom_commercial},</h2>
 
-      <p>Nous vous informons qu'un nouveau devis a été créé en votre nom sur la plateforme DIMOTEC.</p>
+      <p>Nous vous informons qu'un nouveau devis a été créé en votre nom sur la plateforme Votre Devis Diagnostics.</p>
 
       <div class="devis-card">
         <h3>📄 Informations du devis</h3>
@@ -2556,14 +2556,14 @@ exports.notifyExistingAgency = async (req, res) => {
 
     <div class="footer">
       <p>
-        <strong>DIMOTEC</strong><br>
+        <strong>Votre Devis Diagnostics</strong><br>
         Plateforme de gestion de diagnostics immobiliers
       </p>
       <p style="margin-top: 15px;">
         Besoin d'aide ? <a href="mailto:support@votre-devis-diagnostics.fr">support@votre-devis-diagnostics.fr</a>
       </p>
       <p style="margin-top: 10px; color: #94a3b8;">
-        © ${new Date().getFullYear()} DIMOTEC - Tous droits réservés
+        © ${new Date().getFullYear()} Votre Devis Diagnostics - Tous droits réservés
       </p>
     </div>
   </div>
