@@ -507,6 +507,43 @@ exports.updateLogoAgence = async (req, res) => {
 // ✅ Mise à jour complète des infos de l'agence
 exports.updateInfosAgence = async (req, res) => {
   try {
+    // --- 👤 SI EMPLOYÉ : mettre à jour les données de l'employé ---
+    if (req.role === "employe") {
+      const employeId = req.user?._id;
+      if (!employeId) {
+        return res.status(400).json({ message: "Aucun identifiant d'employé fourni." });
+      }
+
+      const employe = await Employe.findById(employeId);
+      if (!employe) {
+        return res.status(404).json({ message: "Employé introuvable." });
+      }
+
+      const allowedFieldsEmploye = ["nom", "prenom", "email", "telephone_portable", "photo_profil"];
+      for (const field of allowedFieldsEmploye) {
+        if (req.body[field] !== undefined) {
+          employe[field] = req.body[field];
+        }
+      }
+
+      if (req.body.mot_de_passe) {
+        employe.mot_de_passe = req.body.mot_de_passe;
+      }
+
+      await employe.save();
+
+      const result = employe.toObject();
+      delete result.mot_de_passe;
+      delete result.__v;
+
+      return res.status(200).json({
+        message: "✅ Informations de l'employé mises à jour avec succès",
+        type: "employe",
+        employe: result
+      });
+    }
+
+    // --- 🏢 SI AGENCE ---
     const agenceId = req.agence?._id || req.user?.agenceId || req.params.id;
     if (!agenceId) {
       return res.status(400).json({ message: "Aucun identifiant d'agence fourni." });
@@ -606,11 +643,12 @@ exports.updateInfosAgence = async (req, res) => {
     }
 
     res.status(200).json({
-      message: "✅ Informations mises à jour avec succès",
+      message: "✅ Informations de l'agence mises à jour avec succès",
+      type: "agence",
       agence: updatedAgence,
     });
   } catch (error) {
-    console.error("❌ Erreur lors de la mise à jour des infos agence :", error);
+    console.error("❌ Erreur lors de la mise à jour des infos agence/employé :", error);
     res.status(500).json({
       message: "Erreur serveur lors de la mise à jour des informations.",
       error: error.message,

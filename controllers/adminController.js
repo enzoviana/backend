@@ -123,7 +123,7 @@ exports.verifyToken = async (req, res) => {
  */
 exports.getAdminDetails = async (req, res) => {
   try {
-    const adminId = req.admin.id;
+    const adminId = req.user?.id || req.admin?.id;
 
     // Récupère l'admin et populate l'agence si c'est un ObjectId
     let admin = await Admin.findById(adminId)
@@ -140,11 +140,11 @@ exports.getAdminDetails = async (req, res) => {
       : null;
 
     // Récupère configuration, diagnostics, packs et suppléments
-    const configuration = await Configuration.findOne({ adminId }).lean();
-    const diagnostics = await Diagnostic.find({ adminId }).lean();
-    const packs = await Pack.find({ adminId }).lean();
-    const supplements = await Supplement.find({ adminId }).lean();
-    const clients = await Client.find({ adminId }).lean();
+    const configuration = await Configuration.findOne({ adminId: adminId }).lean();
+    const diagnostics = await Diagnostic.find({ adminId: adminId }).lean();
+    const packs = await Pack.find({ adminId: adminId }).lean();
+    const supplements = await Supplement.find({ adminId: adminId }).lean();
+    const clients = await Client.find({ adminId: adminId }).lean();
 
     res.json({
       admin: {
