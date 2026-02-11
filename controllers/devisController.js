@@ -989,62 +989,50 @@ exports.createDevis = async (req, res) => {
     }
 
 // --- Diagnostic Gaz si applicable ---
-    let tarifGaz = 0;
-    if (data.installationGaz === true) {
-      const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
-      if (diagGaz) {
-        // ✅ Vérifier qu'il n'est pas déjà sélectionné
-        const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
-        if (!dejaSelectionne) {
-          
-          // --- LOG DE DEBUG ---
-          console.log("🔥 Analyse Tarif Gaz pour secteur :", secteur);
+// --- Diagnostic Gaz si applicable ---
+let tarifGaz = 0;
+if (data.installationGaz === true) {
+  // 🔍 FIX: On cherche le Gaz qui correspond au BIEN et à la TRANSACTION
+  const diagGaz = await Diagnostic.findOne({ 
+    nom: /gaz/i,
+    typeBien: data.bien,            // 'maison' ou 'appartement'
+    typeOperation: data.transaction // 'vente' ou 'location'
+  });
 
-          if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-            // 🔧 FIX: Extraire la surface proprement
-            const surfaceStr = (data.surfaceMaison || "0").toString(); // Force string pour éviter crash
-            const surface = parseInt(surfaceStr.replace(/\D/g, ''), 10) || 0; // Garde que les chiffres
+  if (diagGaz) {
+    const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
+    if (!dejaSelectionne) {
+      
+      if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
+        const surfaceStr = (data.surfaceMaison || "0").toString();
+        const surface = parseInt(surfaceStr.replace(/\D/g, ''), 10) || 0;
 
-            // Trouver la tranche
-            const tranche = diagGaz.tarifsParSurface.find(
-              t => surface >= t.surfaceMin && surface <= t.surfaceMax
-            );
-            
-            if (tranche) {
-              // 🛡️ SÉCURITÉ : Force la conversion en Nombre
-              const prixBrut = tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0;
-              tarifGaz = Number(prixBrut); 
-              
-              console.log(`💰 Tarif Gaz Maison trouvé : ${tarifGaz}€ (Brut DB: ${prixBrut})`);
-            }
-          } 
-          else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
-            const mappingAppartement = {
-              "moins 20m²": "<20m2",
-              "20-40m²": "20-40m2",
-              "T1": "T1", "T2": "T2", "T3": "T3", "T4": "T4", "T5": "T5"
-            };
-            const typeAppart = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
-
-            const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
-            
-            if (tps) {
-                 // 🛡️ SÉCURITÉ : Force la conversion en Nombre
-                 const prixBrut = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-                 tarifGaz = Number(prixBrut);
-                 
-                 console.log(`💰 Tarif Gaz Appart trouvé : ${tarifGaz}€ (Brut DB: ${prixBrut})`);
-            }
-          }
-
-          // Ajouter au total (S'assurer que totalAvantRemise est un nombre avant)
-          totalAvantRemise = Number(totalAvantRemise) + tarifGaz;
-
-          // Ajouter au tableau diagnosticsSelectionnes si nécessaire
-          data.diagnosticsSelectionnes.push(diagGaz._id.toString());
+        const tranche = diagGaz.tarifsParSurface.find(
+          t => surface >= t.surfaceMin && surface <= t.surfaceMax
+        );
+        if (tranche) {
+          tarifGaz = Number(tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0);
+        }
+      } 
+      else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
+        const mappingAppartement = {
+          "moins 20m²": "<20m2", "20-40m²": "20-40m2",
+          "T1": "T1", "T2": "T2", "T3": "T3", "T4": "T4", "T5": "T5"
+        };
+        const typeAppart = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
+        const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+        if (tps) {
+          tarifGaz = Number(tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0);
         }
       }
+
+      totalAvantRemise = Number(totalAvantRemise) + tarifGaz;
+      data.diagnosticsSelectionnes.push(diagGaz._id.toString());
     }
+  } else {
+    console.warn(`⚠️ Aucun diagnostic GAZ trouvé pour ${data.bien} / ${data.transaction}`);
+  }
+}
 
     // --- Diagnostic Copropriété si applicable ---
     let tarifCopro = 0;
