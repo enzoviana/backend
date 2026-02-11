@@ -997,14 +997,16 @@ exports.createDevis = async (req, res) => {
         const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
         if (!dejaSelectionne) {
           if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-            const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-            const surfaceMin = match ? parseInt(match[1], 10) : 0;
-            const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-            for (let tps of diagGaz.tarifsParSurface) {
-              if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-                tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-                break;
-              }
+            // 🔧 FIX: Extraire la surface comme un nombre simple (ex: "250" ou "250 m²")
+            const surfaceStr = data.surfaceMaison || "0";
+            const surface = parseInt(surfaceStr.split(" ")[0], 10) || 0;
+
+            // Trouver la tranche tarifaire qui contient cette surface
+            const tranche = diagGaz.tarifsParSurface.find(
+              t => surface >= t.surfaceMin && surface <= t.surfaceMax
+            );
+            if (tranche) {
+              tarifGaz = tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0;
             }
           } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
             // 🔹 Mapping type appartement comme plus haut
@@ -1039,15 +1041,16 @@ exports.createDevis = async (req, res) => {
       const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // ou nom spécifique "copropriété"
       if (diagCopro) {
         if (data.bien === "maison" && diagCopro.tarifsParSurface?.length) {
-          const match = data.surfaceMaison.match(/(\d+)\s*-\s*(\d+)/);
-          const surfaceMin = match ? parseInt(match[1], 10) : 0;
-          const surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+          // 🔧 FIX: Extraire la surface comme un nombre simple (ex: "250" ou "250 m²")
+          const surfaceStr = data.surfaceMaison || "0";
+          const surface = parseInt(surfaceStr.split(" ")[0], 10) || 0;
 
-          for (let tps of diagCopro.tarifsParSurface) {
-            if (!(surfaceMax < tps.surfaceMin || surfaceMin > tps.surfaceMax)) {
-              tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
-              break;
-            }
+          // Trouver la tranche tarifaire qui contient cette surface
+          const tranche = diagCopro.tarifsParSurface.find(
+            t => surface >= t.surfaceMin && surface <= t.surfaceMax
+          );
+          if (tranche) {
+            tarifCopro = tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0;
           }
         } else if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
           const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === data.surfaceAppartement);
@@ -1487,7 +1490,7 @@ exports.uploadPdfDevis = async (req, res) => {
     const pdfUrl = req.file.path; // URL récupérée depuis Cloudinary via multer-storage-cloudinary
 
     // 2️⃣ Récupération du devis et des relations nécessaires
-    const devis = await Devis.findById(devisId);
+    const devis = await Devis.findById(devisId).populate('diagnosticsSelectionnes');
     if (!devis) {
       return res.status(404).json({ message: "Devis introuvable." });
     }
