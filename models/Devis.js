@@ -180,6 +180,10 @@ surfaceMaison: {
   type: Boolean,
   default: false,
 },
+  tarifGaz: {
+  type: Number,
+  default: 0,
+},
 
 emailNonDelivre: { type: Boolean, default: false },
 emailClientErrone: { type: String, default: null },

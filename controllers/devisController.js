@@ -1192,6 +1192,7 @@ exports.createDevis = async (req, res) => {
       diagnosticsSelectionnes: data.diagnosticsSelectionnes || [],
       supplementsSelectionnes,
       chauffageGaz: data.installationGaz === true, // ✅ true/false
+      tarifGaz: tarifGaz, // ✅ Stocker le tarif Gaz pour éviter les recalculs
       copropriete: data.copropriete === true,  // ✅ nouveau champ
       tarifCopropriete: tarifCopro,
       numeroAdeme: data.numeroAdeme || null,
@@ -1759,8 +1760,9 @@ exports.getDevisViaLien = async (req, res) => {
     if (devis.chauffageGaz) {
       const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
       if (diagGaz) {
-        const prixHT = calculerTarif(diagGaz);
-        const prixTTC = +(prixHT * 1.2).toFixed(2);
+        // ✅ Utiliser le tarif stocké dans le devis au lieu de le recalculer
+        const prixTTC = Number(devis.tarifGaz || 0);
+        const prixHT = +(prixTTC / 1.2).toFixed(2);
         diagnostics.push({ nom: diagGaz.nom, prixHT, prixTTC });
       }
     }
