@@ -959,7 +959,7 @@ exports.createDevis = async (req, res) => {
     if (Array.isArray(data.lignes) && data.lignes.length) {
       lignes = data.lignes.map(l => {
         const quantite = Number(l.quantite) || 1;
-        const tarifUnitaire = Number(l.prixHT * 1.2) || 0; // ou prixTTC si tu veux
+        const tarifUnitaire = Number((l.prixHT * 1.2).toFixed(2)) || 0; // ou prixTTC si tu veux
         const totalLigne = quantite * tarifUnitaire;
         totalLignes += totalLigne;
 
