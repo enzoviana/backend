@@ -988,7 +988,7 @@ exports.createDevis = async (req, res) => {
       totalAvantRemise += totalSupplements;
     }
 
-    // --- Diagnostic Gaz si applicable ---
+// --- Diagnostic Gaz si applicable ---
     let tarifGaz = 0;
     if (data.installationGaz === true) {
       const diagGaz = await Diagnostic.findOne({ nom: /gaz/i });
@@ -996,38 +996,49 @@ exports.createDevis = async (req, res) => {
         // ✅ Vérifier qu'il n'est pas déjà sélectionné
         const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagGaz._id.toString());
         if (!dejaSelectionne) {
-          if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-            // 🔧 FIX: Extraire la surface comme un nombre simple (ex: "250" ou "250 m²")
-            const surfaceStr = data.surfaceMaison || "0";
-            const surface = parseInt(surfaceStr.split(" ")[0], 10) || 0;
+          
+          // --- LOG DE DEBUG ---
+          console.log("🔥 Analyse Tarif Gaz pour secteur :", secteur);
 
-            // Trouver la tranche tarifaire qui contient cette surface
+          if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
+            // 🔧 FIX: Extraire la surface proprement
+            const surfaceStr = (data.surfaceMaison || "0").toString(); // Force string pour éviter crash
+            const surface = parseInt(surfaceStr.replace(/\D/g, ''), 10) || 0; // Garde que les chiffres
+
+            // Trouver la tranche
             const tranche = diagGaz.tarifsParSurface.find(
               t => surface >= t.surfaceMin && surface <= t.surfaceMax
             );
+            
             if (tranche) {
-              tarifGaz = tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0;
+              // 🛡️ SÉCURITÉ : Force la conversion en Nombre
+              const prixBrut = tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0;
+              tarifGaz = Number(prixBrut); 
+              
+              console.log(`💰 Tarif Gaz Maison trouvé : ${tarifGaz}€ (Brut DB: ${prixBrut})`);
             }
-          } else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
-            // 🔹 Mapping type appartement comme plus haut
+          } 
+          else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
             const mappingAppartement = {
               "moins 20m²": "<20m2",
               "20-40m²": "20-40m2",
-              "T1": "T1",
-              "T2": "T2",
-              "T3": "T3",
-              "T4": "T4",
-              "T5": "T5"
+              "T1": "T1", "T2": "T2", "T3": "T3", "T4": "T4", "T5": "T5"
             };
             const typeAppart = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
 
             const tps = diagGaz.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
-            if (tps) tarifGaz = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+            
+            if (tps) {
+                 // 🛡️ SÉCURITÉ : Force la conversion en Nombre
+                 const prixBrut = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+                 tarifGaz = Number(prixBrut);
+                 
+                 console.log(`💰 Tarif Gaz Appart trouvé : ${tarifGaz}€ (Brut DB: ${prixBrut})`);
+            }
           }
 
-
-          // Ajouter au total
-          totalAvantRemise += tarifGaz;
+          // Ajouter au total (S'assurer que totalAvantRemise est un nombre avant)
+          totalAvantRemise = Number(totalAvantRemise) + tarifGaz;
 
           // Ajouter au tableau diagnosticsSelectionnes si nécessaire
           data.diagnosticsSelectionnes.push(diagGaz._id.toString());
@@ -1063,8 +1074,9 @@ exports.createDevis = async (req, res) => {
 
     // 💸 Calculs financiers
     let reductionPourcent = Number(data.reductionPourcent) || 0;
-    let montantCagnotteUtilisee = Number(data.montantCagnotteUtilisee) || 0;
-
+let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean') 
+    ? 0 
+    : (Number(data.montantCagnotteUtilisee) || 0);
     // 💰 Totaux avant application de la cagnotte
     const totalApresReduction = totalAvantRemise * (1 - reductionPourcent / 100);
 
