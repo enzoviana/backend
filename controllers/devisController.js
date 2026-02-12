@@ -1481,27 +1481,42 @@ exports.accepterDevisViaLien = async (req, res) => {
 // 🔹 Upload PDF d'un devis vers Cloudinary
 exports.uploadPdfDevis = async (req, res) => {
   try {
+    console.log("📥 [UPLOAD-PDF] Réception requête pour devisId:", req.params.devisId);
     const { devisId } = req.params;
 
     // 1️⃣ Vérification de la présence du fichier
     if (!req.file) {
+      console.error("❌ [UPLOAD-PDF] Aucun fichier reçu dans req.file");
       return res.status(400).json({ message: "Aucun fichier PDF reçu." });
     }
 
+    console.log("✅ [UPLOAD-PDF] Fichier reçu:", {
+      filename: req.file.filename,
+      size: `${(req.file.size / 1024 / 1024).toFixed(2)} MB`,
+      mimetype: req.file.mimetype
+    });
+
     const pdfUrl = req.file.path; // URL récupérée depuis Cloudinary via multer-storage-cloudinary
+    console.log("☁️ [UPLOAD-PDF] URL Cloudinary:", pdfUrl);
 
     // 2️⃣ Récupération du devis et des relations nécessaires
     const devis = await Devis.findById(devisId).populate('diagnosticsSelectionnes');
     if (!devis) {
+      console.error("❌ [UPLOAD-PDF] Devis introuvable:", devisId);
       return res.status(404).json({ message: "Devis introuvable." });
     }
 
+    console.log("📋 [UPLOAD-PDF] Devis trouvé:", devis.numero);
+
     // 3️⃣ MISE À JOUR CRITIQUE : Passage au statut "Accepté" et enregistrement du PDF
+    console.log("💾 [UPLOAD-PDF] Mise à jour du statut vers 'Accepté'...");
     devis.statut = "Accepté";
     devis.pdfUrl = pdfUrl;
     await devis.save();
+    console.log("✅ [UPLOAD-PDF] Devis sauvegardé avec succès");
 
     // 4️⃣ LOGIQUE MÉTIER : Création de l'Ordre de Mission
+    console.log("📝 [UPLOAD-PDF] Création de l'Ordre de Mission...");
     let clientId = devis.clientId;
     if (!clientId && devis.client?.email) {
       const client = await Client.findOne({ email: devis.client.email });
@@ -1518,6 +1533,7 @@ exports.uploadPdfDevis = async (req, res) => {
       creePar: devis.creePar,
     });
     await ordre.save();
+    console.log("✅ [UPLOAD-PDF] Ordre de mission créé:", ordre.numero);
 
     // 5️⃣ GESTION DE LA CAGNOTTE
     const agence = await Agence.findById(devis.agenceId);
@@ -1567,6 +1583,7 @@ exports.uploadPdfDevis = async (req, res) => {
     }
 
     // 6️⃣ PRÉPARATION ET ENVOI DES EMAILS
+    console.log("📧 [UPLOAD-PDF] Envoi des emails de notification...");
 
     // On définit les variables communes
     const variablesEmailBase = {
@@ -1582,6 +1599,7 @@ exports.uploadPdfDevis = async (req, res) => {
     // Email à l'agence (Lien spécifique Agency)
     const agenceEmail = agence?.emails_contact?.[0]?.email;
     if (agenceEmail) {
+      console.log(`📨 [UPLOAD-PDF] Envoi email à l'agence: ${agenceEmail}`);
       await sendEmail({
         to: agenceEmail,
         subject: `Nouvel Ordre de Mission - ${ordre.numero}`,
@@ -1591,9 +1609,11 @@ exports.uploadPdfDevis = async (req, res) => {
           lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission`
         }
       });
+      console.log("✅ [UPLOAD-PDF] Email agence envoyé");
     }
 
     // Email de copie à Dimotec (Lien spécifique Admin)
+    console.log("📨 [UPLOAD-PDF] Envoi email à Dimotec...");
     await sendEmail({
       to: "dimotec34@gmail.com",
       subject: `[COPIE] Nouvel Ordre de Mission - ${ordre.numero}`,
@@ -1603,20 +1623,46 @@ exports.uploadPdfDevis = async (req, res) => {
         lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
       }
     });
+    console.log("✅ [UPLOAD-PDF] Email Dimotec envoyé");
 
     // 7️⃣ RÉPONSE FINALE
+    console.log("🎉 [UPLOAD-PDF] Processus terminé avec succès!");
     return res.status(200).json({
+      success: true,
       message: "PDF uploadé et devis accepté avec succès.",
       pdfUrl,
-      devis,
-      ordre
+      devisNumero: devis.numero,
+      ordreNumero: ordre.numero,
+      devis: {
+        _id: devis._id,
+        numero: devis.numero,
+        statut: devis.statut,
+        pdfUrl: devis.pdfUrl
+      },
+      ordre: {
+        _id: ordre._id,
+        numero: ordre.numero,
+        statut: ordre.statut
+      }
     });
 
   } catch (err) {
-    console.error("❌ Erreur critique dans uploadPdfDevis :", err);
+    console.error("❌ [UPLOAD-PDF] Erreur critique:", err);
+    console.error("❌ [UPLOAD-PDF] Stack trace:", err.stack);
+
+    // Log détaillé pour debugging
+    console.error("❌ [UPLOAD-PDF] Détails:", {
+      devisId: req.params.devisId,
+      hasFile: !!req.file,
+      fileName: req.file?.filename,
+      errorMessage: err.message
+    });
+
     return res.status(500).json({
+      success: false,
       message: "Erreur lors de la finalisation de l'acceptation via PDF.",
-      error: err.message
+      error: err.message,
+      details: process.env.NODE_ENV === 'development' ? err.stack : undefined
     });
   }
 };

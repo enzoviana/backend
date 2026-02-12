@@ -244,6 +244,20 @@ accesClientExpire: {
     type: String,
     default: null, // sera rempli après upload sur Cloudinary
   },
+
+  /* ✍️ Signature du client */
+  signatureUrl: {
+    type: String,
+    default: null, // URL de l'image de signature sur Cloudinary
+  },
+  signatureVille: {
+    type: String,
+    default: null, // Ville de signature
+  },
+  signatureDate: {
+    type: Date,
+    default: null, // Date de signature
+  },
 });
 
 /* 🧮 Génération automatique du numéro de devis */
