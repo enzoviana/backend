@@ -37,9 +37,34 @@ creePar: {
     {
       nom: String,
       url: String,
-      public_id: String,   
+      public_id: String,
       dateDepot: { type: Date, default: Date.now },
     }
-  ]
+  ],
+
+  // Diagnostiqueur assigné
+  diagnostiqueur: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Diagnostiqueur',
+    default: null
+  },
+
+  // Statut d'acceptation de la mission par le diagnostiqueur
+  statutAcceptation: {
+    type: String,
+    enum: ['en_attente', 'accepte', 'refuse', 'termine'],
+    default: 'en_attente'
+  },
+
+  dateAcceptation: { type: Date, default: null },
+  dateRefus: { type: Date, default: null },
+  raisonRefus: { type: String, default: null },
+
+  // Notation par le client
+  noteClient: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'NotationDiagnostiqueur',
+    default: null
+  }
 });
 module.exports = mongoose.model('OrdreMission', OrdreMissionSchema);

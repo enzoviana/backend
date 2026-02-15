@@ -140,12 +140,23 @@ surfaceMaison: {
     ref: "Agence",
     required: false,
   },
+  diagnostiqueurAssigne: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Diagnostiqueur",
+    default: null,
+  },
   consentementFile: { type: Boolean, default: false },
 
 
   shareAgency : {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Agence",
+    required: false,
+  },
+
+  // 🆕 Nom de l'agence de partage (pour les nouvelles agences qui n'existent pas encore)
+  shareAgencyName: {
+    type: String,
     required: false,
   },
 

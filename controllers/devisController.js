@@ -1152,6 +1152,9 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
 
     const shareAgencyId = data.shareAgency && data.shareAgency !== "" ? data.shareAgency : null;
 
+    // 🆕 Récupérer le nom de la nouvelle agence si applicable
+    const shareAgencyName = data.newAgencyShare?.nom || null;
+
     console.log("==== Client avant création devis ====", client);
 
 
@@ -1159,6 +1162,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
     const devis = new Devis({
       agenceId,
       shareAgency: shareAgencyId,
+      shareAgencyName,
       creePar,
       client: {
         nom: data.client.nom,

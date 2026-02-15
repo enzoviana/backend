@@ -5,7 +5,8 @@ const authMiddleware = require('../middlewares/authMiddleware'); // JWT
 const clientController = require("../controllers/clientController");
 const missionController = require("../controllers/missionController");
 const agencyController = require('../controllers/agencyController');
-const devisController = require('../controllers/devisController')
+const devisController = require('../controllers/devisController');
+const adminDiagnostiqueurController = require('../controllers/adminDiagnostiqueurController');
 const upload = require('../middlewares/upload');
 
 // Diagnostics
@@ -110,5 +111,28 @@ router.post(
   devisController.createDevis
 );
 router.get("/devis/download/:devisId", authMiddleware, devisController.downloadDevis);
+
+// ---------------------- DIAGNOSTIQUEURS ----------------------
+
+// Liste et recherche
+router.get('/diagnostiqueurs', authMiddleware, adminDiagnostiqueurController.getAllDiagnostiqueurs);
+router.get('/diagnostiqueurs/stats/global', authMiddleware, adminDiagnostiqueurController.getStatistiquesGlobales);
+router.get('/diagnostiqueurs/:id', authMiddleware, adminDiagnostiqueurController.getDiagnostiqueurById);
+
+// Gestion
+router.put('/diagnostiqueurs/:id/valider', authMiddleware, adminDiagnostiqueurController.validerDiagnostiqueur);
+router.put('/diagnostiqueurs/:id/bloquer', authMiddleware, adminDiagnostiqueurController.bloquerDiagnostiqueur);
+router.put('/diagnostiqueurs/:id/statut', authMiddleware, adminDiagnostiqueurController.changerStatutDiagnostiqueur);
+router.delete('/diagnostiqueurs/:id', authMiddleware, adminDiagnostiqueurController.deleteDiagnostiqueur);
+
+// Certifications et éligibilité
+router.get('/diagnostiqueurs/:id/certifications', authMiddleware, adminDiagnostiqueurController.getCertificationsDiagnostiqueur);
+router.post('/diagnostiqueurs/:id/eligibilite', authMiddleware, adminDiagnostiqueurController.verifierEligibilite);
+
+// ---------------------- DOMAINES D'ACTIVITÉ ----------------------
+
+router.get('/domaines', authMiddleware, adminDiagnostiqueurController.getAllDomaines);
+router.post('/domaines', authMiddleware, adminDiagnostiqueurController.createDomaine);
+router.put('/domaines/:id', authMiddleware, adminDiagnostiqueurController.updateDomaine);
 
 module.exports = router;

@@ -1,11 +1,12 @@
 const express = require('express');
 const router = express.Router();
 const agencyController = require('../controllers/agencyController');
-const devisController = require('../controllers/devisController')
+const devisController = require('../controllers/devisController');
 const adminController = require('../controllers/adminController');
 const clientController = require("../controllers/clientController");
 const missionController = require("../controllers/missionController");
-const dashboardController = require("../controllers/agencyDashboard")
+const dashboardController = require("../controllers/agencyDashboard");
+const agencyDiagnostiqueurController = require('../controllers/agencyDiagnostiqueurController');
 const agencyAuth = require('../middlewares/agencyAuth');
 const upload = require('../middlewares/upload');
 
@@ -123,5 +124,22 @@ router.post(
   agencyAuth,
   agencyController.sendParrainageEmail
 );
+
+// ---------------------- DIAGNOSTIQUEURS ----------------------
+
+// Liste et détails
+router.get('/diagnostiqueurs', agencyAuth, agencyDiagnostiqueurController.getDiagnostiqueurs);
+router.get('/diagnostiqueurs/:id', agencyAuth, agencyDiagnostiqueurController.getDiagnostiqueurDetail);
+
+// Définir diagnostiqueur par défaut
+router.put('/me/diagnostiqueur-defaut', agencyAuth, agencyDiagnostiqueurController.setDiagnostiqueurParDefaut);
+
+// Notations
+router.post('/notations', agencyAuth, agencyDiagnostiqueurController.createNotation);
+router.get('/notations/:diagnostiqueurId', agencyAuth, agencyDiagnostiqueurController.getNotationsDiagnostiqueur);
+
+// Renouvellements gratuits
+router.post('/renouvellements-gratuits', agencyAuth, agencyDiagnostiqueurController.demanderRenouvellementGratuit);
+router.get('/renouvellements-gratuits', agencyAuth, agencyDiagnostiqueurController.getRenouvellements);
 
 module.exports = router;

@@ -100,7 +100,19 @@ historiqueCagnotte: {
     default: true,
     required: false
   },
-  reduction: { type: Number, default: 0, min: 0, max: 100 }
+  reduction: { type: Number, default: 0, min: 0, max: 100 },
+
+  // Diagnostiqueur
+  diagnostiqueurParDefaut: {
+    type: Schema.Types.ObjectId,
+    ref: 'Diagnostiqueur',
+    default: null
+  },
+  diagnostiqueursUtilises: [{
+    diagnostiqueur: { type: Schema.Types.ObjectId, ref: 'Diagnostiqueur' },
+    nombreCommandes: { type: Number, default: 0 },
+    derniereCommande: { type: Date }
+  }]
 
 }, { timestamps: true });
 

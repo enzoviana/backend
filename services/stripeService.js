@@ -1,0 +1,340 @@
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const Diagnostiqueur = require('../models/Diagnostiqueur');
+const AbonnementDiagnostiqueur = require('../models/AbonnementDiagnostiqueur');
+
+/**
+ * Configuration des plans
+ */
+const PLANS = {
+  STANDARD: {
+    priceId: null, // Gratuit
+    montant: 0
+  },
+  PRO: {
+    priceId: process.env.STRIPE_PRICE_PRO, // ID du prix dans Stripe
+    montant: 2900 // 29€ en centimes
+  }
+};
+
+/**
+ * Crée un customer Stripe pour un diagnostiqueur
+ */
+async function creerCustomer(diagnostiqueur) {
+  try {
+    const customer = await stripe.customers.create({
+      email: diagnostiqueur.admin.email,
+      name: diagnostiqueur.nom_entreprise,
+      metadata: {
+        diagnostiqueurId: diagnostiqueur._id.toString(),
+        siret: diagnostiqueur.siret
+      }
+    });
+
+    // Mettre à jour le diagnostiqueur avec l'ID Stripe
+    diagnostiqueur.stripeCustomerId = customer.id;
+    await diagnostiqueur.save();
+
+    return customer;
+
+  } catch (error) {
+    console.error('Erreur creerCustomer:', error);
+    throw error;
+  }
+}
+
+/**
+ * Crée une session Checkout pour upgrade PRO
+ */
+async function creerCheckoutSession(diagnostiqueurId, returnUrl, cancelUrl) {
+  try {
+    const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+    if (!diagnostiqueur) {
+      throw new Error('Diagnostiqueur non trouvé');
+    }
+
+    // Créer customer Stripe s'il n'existe pas
+    if (!diagnostiqueur.stripeCustomerId) {
+      await creerCustomer(diagnostiqueur);
+    }
+
+    // Créer session Checkout
+    const session = await stripe.checkout.sessions.create({
+      customer: diagnostiqueur.stripeCustomerId,
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [
+        {
+          price: PLANS.PRO.priceId,
+          quantity: 1
+        }
+      ],
+      success_url: `${returnUrl}?session_id={CHECKOUT_SESSION_ID}&success=true`,
+      cancel_url: `${cancelUrl}?canceled=true`,
+      metadata: {
+        diagnostiqueurId: diagnostiqueurId.toString()
+      }
+    });
+
+    return session;
+
+  } catch (error) {
+    console.error('Erreur creerCheckoutSession:', error);
+    throw error;
+  }
+}
+
+/**
+ * Crée une session Portal pour gérer l'abonnement
+ */
+async function creerPortalSession(diagnostiqueurId, returnUrl) {
+  try {
+    const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+    if (!diagnostiqueur || !diagnostiqueur.stripeCustomerId) {
+      throw new Error('Customer Stripe non trouvé');
+    }
+
+    const session = await stripe.billingPortal.sessions.create({
+      customer: diagnostiqueur.stripeCustomerId,
+      return_url: returnUrl
+    });
+
+    return session;
+
+  } catch (error) {
+    console.error('Erreur creerPortalSession:', error);
+    throw error;
+  }
+}
+
+/**
+ * Gère l'événement checkout.session.completed
+ */
+async function handleCheckoutCompleted(session) {
+  try {
+    const diagnostiqueurId = session.metadata.diagnostiqueurId;
+    const subscriptionId = session.subscription;
+
+    // Récupérer l'abonnement Stripe
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId);
+
+    // Mettre à jour le diagnostiqueur
+    const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+    if (!diagnostiqueur) {
+      throw new Error('Diagnostiqueur non trouvé');
+    }
+
+    diagnostiqueur.typeAbonnement = 'PRO';
+    diagnostiqueur.stripeSubscriptionId = subscriptionId;
+    diagnostiqueur.stripeSubscriptionStatus = subscription.status;
+    await diagnostiqueur.save();
+
+    // Créer ou mettre à jour l'abonnement
+    let abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueurId });
+
+    if (!abonnement) {
+      abonnement = new AbonnementDiagnostiqueur({
+        diagnostiqueur: diagnostiqueurId,
+        type: 'PRO',
+        stripeSubscriptionId: subscriptionId,
+        stripePriceId: PLANS.PRO.priceId,
+        statut: subscription.status,
+        dateDebut: new Date(subscription.current_period_start * 1000),
+        prochainePeriode: new Date(subscription.current_period_end * 1000)
+      });
+    } else {
+      abonnement.type = 'PRO';
+      abonnement.stripeSubscriptionId = subscriptionId;
+      abonnement.stripePriceId = PLANS.PRO.priceId;
+      abonnement.statut = subscription.status;
+      abonnement.dateDebut = new Date(subscription.current_period_start * 1000);
+      abonnement.prochainePeriode = new Date(subscription.current_period_end * 1000);
+    }
+
+    // Ajouter à l'historique
+    abonnement.historique.push({
+      action: 'upgrade',
+      ancienType: 'STANDARD',
+      nouveauType: 'PRO',
+      date: new Date(),
+      par: 'diagnostiqueur'
+    });
+
+    await abonnement.save();
+
+    console.log(`✅ Abonnement PRO activé pour diagnostiqueur ${diagnostiqueurId}`);
+
+  } catch (error) {
+    console.error('Erreur handleCheckoutCompleted:', error);
+    throw error;
+  }
+}
+
+/**
+ * Gère l'événement customer.subscription.updated
+ */
+async function handleSubscriptionUpdated(subscription) {
+  try {
+    // Trouver le diagnostiqueur par subscriptionId
+    const diagnostiqueur = await Diagnostiqueur.findOne({ stripeSubscriptionId: subscription.id });
+
+    if (!diagnostiqueur) {
+      console.warn(`Diagnostiqueur non trouvé pour subscription ${subscription.id}`);
+      return;
+    }
+
+    // Mettre à jour le statut
+    diagnostiqueur.stripeSubscriptionStatus = subscription.status;
+
+    // Si annulé ou expiré, downgrade vers STANDARD
+    if (subscription.status === 'canceled' || subscription.status === 'incomplete_expired') {
+      diagnostiqueur.typeAbonnement = 'STANDARD';
+      diagnostiqueur.stripeSubscriptionId = null;
+    }
+
+    await diagnostiqueur.save();
+
+    // Mettre à jour l'abonnement
+    const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueur._id });
+
+    if (abonnement) {
+      abonnement.statut = subscription.status;
+      abonnement.prochainePeriode = new Date(subscription.current_period_end * 1000);
+
+      if (subscription.status === 'canceled') {
+        abonnement.type = 'STANDARD';
+        abonnement.dateFin = new Date();
+
+        abonnement.historique.push({
+          action: 'downgrade',
+          ancienType: 'PRO',
+          nouveauType: 'STANDARD',
+          date: new Date(),
+          par: 'système',
+          raison: 'Abonnement annulé'
+        });
+      }
+
+      await abonnement.save();
+    }
+
+    console.log(`✅ Abonnement mis à jour pour diagnostiqueur ${diagnostiqueur._id}, statut: ${subscription.status}`);
+
+  } catch (error) {
+    console.error('Erreur handleSubscriptionUpdated:', error);
+    throw error;
+  }
+}
+
+/**
+ * Gère l'événement invoice.payment_succeeded
+ */
+async function handleInvoicePaymentSucceeded(invoice) {
+  try {
+    const subscriptionId = invoice.subscription;
+
+    if (!subscriptionId) {
+      return;
+    }
+
+    // Trouver le diagnostiqueur
+    const diagnostiqueur = await Diagnostiqueur.findOne({ stripeSubscriptionId: subscriptionId });
+
+    if (!diagnostiqueur) {
+      console.warn(`Diagnostiqueur non trouvé pour subscription ${subscriptionId}`);
+      return;
+    }
+
+    // Ajouter la facture à l'abonnement
+    const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueur._id });
+
+    if (abonnement) {
+      const factureData = {
+        stripeInvoiceId: invoice.id,
+        montant: invoice.amount_paid,
+        statut: invoice.status,
+        dateFacture: new Date(invoice.created * 1000),
+        pdfUrl: invoice.invoice_pdf
+      };
+
+      abonnement.factures.push(factureData);
+      await abonnement.save();
+
+      console.log(`✅ Facture ajoutée pour diagnostiqueur ${diagnostiqueur._id}`);
+    }
+
+  } catch (error) {
+    console.error('Erreur handleInvoicePaymentSucceeded:', error);
+    throw error;
+  }
+}
+
+/**
+ * Annule un abonnement (à la fin de la période)
+ */
+async function annulerAbonnement(diagnostiqueurId) {
+  try {
+    const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+
+    if (!diagnostiqueur || !diagnostiqueur.stripeSubscriptionId) {
+      throw new Error('Abonnement non trouvé');
+    }
+
+    // Annuler à la fin de la période
+    await stripe.subscriptions.update(diagnostiqueur.stripeSubscriptionId, {
+      cancel_at_period_end: true
+    });
+
+    // Mettre à jour l'abonnement
+    const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueurId });
+
+    if (abonnement) {
+      abonnement.historique.push({
+        action: 'annulation',
+        ancienType: 'PRO',
+        nouveauType: 'STANDARD',
+        date: new Date(),
+        par: 'diagnostiqueur',
+        raison: 'Annulation volontaire'
+      });
+
+      await abonnement.save();
+    }
+
+    console.log(`✅ Abonnement annulé pour diagnostiqueur ${diagnostiqueurId}`);
+
+  } catch (error) {
+    console.error('Erreur annulerAbonnement:', error);
+    throw error;
+  }
+}
+
+/**
+ * Récupère les factures d'un diagnostiqueur
+ */
+async function getFactures(diagnostiqueurId) {
+  try {
+    const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueurId });
+
+    if (!abonnement) {
+      return [];
+    }
+
+    return abonnement.factures;
+
+  } catch (error) {
+    console.error('Erreur getFactures:', error);
+    throw error;
+  }
+}
+
+module.exports = {
+  PLANS,
+  creerCustomer,
+  creerCheckoutSession,
+  creerPortalSession,
+  handleCheckoutCompleted,
+  handleSubscriptionUpdated,
+  handleInvoicePaymentSucceeded,
+  annulerAbonnement,
+  getFactures
+};
