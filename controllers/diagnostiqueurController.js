@@ -253,7 +253,7 @@ exports.updateMe = async (req, res) => {
     const diagnostiqueur = req.diagnostiqueur;
 
     // Champs autorisés à la mise à jour
-    const allowedUpdates = ['nom_entreprise', 'adresse', 'email_entreprise', 'secteursIntervention'];
+    const allowedUpdates = ['nom_entreprise', 'adresse', 'email_entreprise', 'secteursIntervention', 'description'];
 
     allowedUpdates.forEach(field => {
       if (updates[field] !== undefined) {
@@ -540,7 +540,8 @@ exports.addCertification = async (req, res) => {
       organisme,
       dateObtention,
       dateExpiration,
-      mentionSpeciale
+      mentionSpeciale,
+      notes
     } = req.body;
 
     const diagnostiqueur = req.diagnostiqueur;
@@ -571,6 +572,7 @@ exports.addCertification = async (req, res) => {
       dateObtention: new Date(dateObtention),
       dateExpiration: new Date(dateExpiration),
       mentionSpeciale: mentionSpeciale || null,
+      notes: notes || '',
       document: {
         nom: req.file.originalname,
         url: result.secure_url,

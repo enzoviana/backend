@@ -67,6 +67,7 @@ const DiagnostiqueurSchema = new Schema({
   adresse: { type: String, required: true },
   email_entreprise: { type: String, required: true },
   logo: { type: String, default: null },
+  description: { type: String, default: null },
 
   // Admin de l'entreprise (sous-document)
   admin: { type: AdminDiagnostiqueurSchema, required: true },
