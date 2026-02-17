@@ -183,7 +183,12 @@ exports.getDevis = async (req, res) => {
     if (req.user.role === "admin") {
       query = {};
     } else if (req.role === "agence") {
-      query = { agenceId: req.agence._id };
+      query = {
+        $or: [
+          { agenceId: req.agence._id },       // Devis dont l'agence est propriétaire
+          { shareAgency: req.agence._id }     // Devis partagés avec l'agence
+        ]
+      };
     } else if (req.role === "employe") {
       const empId = req.user._id.toString();
       const agenceId = req.user.agence;
@@ -214,6 +219,10 @@ exports.getDevis = async (req, res) => {
       .populate("diagnosticsSelectionnes")
       .populate({
         path: "agenceId",
+        select: "nom_commercial"
+      })
+      .populate({
+        path: "shareAgency",
         select: "nom_commercial"
       })
       .sort({ dateCreation: -1 })
