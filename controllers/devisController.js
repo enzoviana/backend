@@ -1989,17 +1989,28 @@ exports.noDocumentsDevis = async (req, res) => {
     const oldKey = devis.accesClientKey;
 
     // 2. 🛡️ DESTRUCTION DE L'ACCÈS
-    // On vide la clé ET on expire la date pour une clôture immédiate et définitive
+    // On utilise updateOne avec $unset pour supprimer totalement la clé de la base
+    // Cela évite les erreurs de "duplicate key" sur la valeur null
+    const nouvelleNote = (devis.note || "") + `\n[Système] Le client a déclaré ne posséder aucune facture pour le bien le ${new Date().toLocaleString("fr-FR")}.`;
+
+    await Devis.updateOne(
+      { _id: devisId },
+      { 
+        $unset: { accesClientKey: "" }, // Supprime le champ pour l'index unique
+        $set: { 
+          accesClientExpire: new Date(), // Expire l'accès
+          note: nouvelleNote 
+        }
+      }
+    );
+
+    // On met à jour l'objet local 'devis' pour la suite du script (emails, etc.)
     devis.accesClientKey = undefined;
-    devis.accesClientExpire = new Date();
+    devis.note = nouvelleNote;
 
-    devis.note = (devis.note || "") + `\n[Système] Le client a déclaré ne posséder aucune facture pour le bien le ${new Date().toLocaleString("fr-FR")}.`;
-
-    await devis.save();
-    console.log(`🔒 Accès révoqué pour le devis ${devis.numero}. Clé supprimée.`);
+    console.log(`🔒 Accès révoqué pour le devis ${devis.numero}. Clé supprimée de la base.`);
 
     const clientNom = `${devis.client?.prenom || ""} ${devis.client?.nom || ""}`.trim();
-
     // 3. Préparer les variables pour l'email
     const emailVariables = {
       nomClient: clientNom,

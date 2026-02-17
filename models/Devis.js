@@ -244,11 +244,12 @@ faitA: {
 },
 
   /* 🔐 Accès client */
-  accesClientKey: {
-    type: String,
-    unique: true,
-    default: () => crypto.randomBytes(16).toString("hex"),
-  },
+accesClientKey: {
+  type: String,
+  unique: true,
+  sparse: true, // 💡 INDISPENSABLE : autorise plusieurs valeurs null/absentes
+  default: () => crypto.randomBytes(16).toString("hex"),
+},
 accesClientExpire: {
   type: Date,
   default: () => new Date(Date.now() + 60 * 24 * 60 * 60 * 1000), // 60 jours
