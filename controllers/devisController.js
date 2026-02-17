@@ -181,28 +181,26 @@ exports.getDevis = async (req, res) => {
 
     // --- Définition de la query selon le rôle ---
     if (req.user.role === "admin") {
-      // 🧑‍💼 Admin → tous les devis
       query = {};
     } else if (req.role === "agence") {
-      // 🏢 Agence → uniquement ses ordres de mission
       query = { agenceId: req.agence._id };
     } else if (req.role === "employe") {
-      // 👨‍💻 Employé → vérifier si partage_devis est activé
       const empId = req.user._id.toString();
       const agenceId = req.user.agence;
 
-      // Récupérer l'agence pour vérifier le paramètre partage_devis
       const Agence = require("../models/Agency");
       const agence = await Agence.findById(agenceId);
 
       if (agence?.partage_devis === true) {
-        // Si partage activé → voir tous les devis de l'agence
+        // Voir tous les devis de l'agence
         query = { agenceId: agenceId };
       } else {
-        // Si partage désactivé → uniquement les devis créés par l'employé
+        // Voir ses propres devis OU ceux partagés avec lui via shareAgency
         query = {
+          agenceId: agenceId, // On reste dans le périmètre de l'agence
           $or: [
             { "creePar.type": "Employe", "creePar.id": empId },
+            { shareAgency: empId } // <--- Ajout : si l'ID est dans shareAgency
           ]
         };
       }
@@ -221,42 +219,29 @@ exports.getDevis = async (req, res) => {
       .sort({ dateCreation: -1 })
       .lean();
 
-
-    // --- Ajout du statut de l'ordre de mission pour chaque devis ---
+    // --- Ajout du statut de l'ordre de mission ---
     const devisWithOrdre = await Promise.all(devis.map(async (d) => {
-      const ordre = await OrdreMission.findOne({ devisId: d._id }).select('statut');
+      const ordre = await OrdreMission.findOne({ devisId: d._id }).select('statut').lean();
 
       return {
         _id: d._id,
-        numero: d.numero || `DV-${d._id.slice(-4)}`,
+        numero: d.numero || `DV-${d._id.toString().slice(-4)}`,
         nomAgence: d.agenceId?.nom_commercial || ' ',
         pack: d.pack || null,
         diagnosticsSelectionnes: d.diagnosticsSelectionnes || [],
         montantTTC: d.montantTTC || 0,
         totalApresReduction: d.totalApresReduction || 0,
         statut: d.statut || 'Envoyé',
-        locataire: d.locataire ? {
-          nom: d.locataire.nom || "",
-          prenom: d.locataire.prenom || "",
-          tel: d.locataire.tel || ""
-        } : null,
+        locataire: d.locataire || null,
         contactLocataire: d.contactLocataire || false,
         clefEnAgence: d.clefEnAgence || false,
-
-        adresseBien: d.adresseBien ? {
-          adresse: d.adresseBien.adresse || "",
-          codePostal: d.adresseBien.codePostal || "",
-          ville: d.adresseBien.ville || "",
-          etage: d.adresseBien.etage || "",
-          complement: d.adresseBien.complement || "",
-          parcelle: d.adresseBien.parcelle || null
-        } : null,
+        adresseBien: d.adresseBien || null,
         note: d.note || null,
         numeroFiscalBien: d.numeroFiscalBien || null,
         client: d.client || null,
         dateCreation: d.dateCreation || d.createdAt || new Date(),
         accesClientKey: d.accesClientKey || null,
-        ordreMissionStatut: ordre?.statut || "Aucune", // ← jamais null
+        ordreMissionStatut: ordre?.statut || "Aucune",
         derniereRelance: d.derniereRelance || null,
         pdfUrl: d.pdfUrl || null
       };
