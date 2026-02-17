@@ -209,6 +209,11 @@ emailClientErrone: { type: String, default: null },
     default: 0,
   },
 
+  fraisDeplacementAppliques: { // 🆕 Nouveau champ pour savoir si les frais de déplacement sont appliqués
+    type: Boolean,
+    default: false,
+  },
+
     // ✅ Créateur du devis : soit employé, soit agence
 creePar: {
     id: { type: mongoose.Schema.Types.ObjectId, required: true },

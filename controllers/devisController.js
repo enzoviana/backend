@@ -920,13 +920,12 @@ exports.createDevis = async (req, res) => {
 
       console.log("\nTotal avant ajout frais déplacement =", totalAvantRemise);
 
-      // 🔹 Ajouter frais déplacement sauf ERP seul
-      const isERPSeul = diagnostics.length === 1 && diagnostics[0].nom.toLowerCase().includes("erp");
-      console.log("ERP seul ?", isERPSeul);
-
-      if (!isERPSeul) {
+      // 🔹 Ajouter frais déplacement selon le choix de l'admin
+      if (data.fraisDeplacementAppliques === true) {
         totalAvantRemise += 55;
-        console.log("Ajout frais déplacement : +55");
+        console.log("Ajout frais déplacement : +55 (selon choix admin)");
+      } else {
+        console.log("Pas de frais de déplacement (décoché par admin)");
       }
 
       console.log("Total avant remise final =", totalAvantRemise);
@@ -1199,6 +1198,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       tarifGaz: tarifGaz, // ✅ Stocker le tarif Gaz pour éviter les recalculs
       copropriete: data.copropriete === true,  // ✅ nouveau champ
       tarifCopropriete: tarifCopro,
+      fraisDeplacementAppliques: data.fraisDeplacementAppliques === true, // 🆕 Frais de déplacement
       numeroAdeme: data.numeroAdeme || null,
       totalAvantRemise,
       reductionPourcent,
