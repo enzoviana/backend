@@ -918,17 +918,7 @@ exports.createDevis = async (req, res) => {
         return sum + (Number(tarifTrouve) || 0);
       }, 0);
 
-      console.log("\nTotal avant ajout frais déplacement =", totalAvantRemise);
-
-      // 🔹 Ajouter frais déplacement selon le choix de l'admin
-      if (data.fraisDeplacementAppliques === true) {
-        totalAvantRemise += 55;
-        console.log("Ajout frais déplacement : +55 (selon choix admin)");
-      } else {
-        console.log("Pas de frais de déplacement (décoché par admin)");
-      }
-
-      console.log("Total avant remise final =", totalAvantRemise);
+      console.log("\nTotal avant remise (diagnostics uniquement) =", totalAvantRemise);
     }
 
 
@@ -1058,6 +1048,13 @@ if (data.installationGaz === true) {
       totalAvantRemise += tarifCopro;
     }
 
+    // 🚚 Frais de déplacement (appliqué selon le choix de l'admin, pour tous les types)
+    if (data.fraisDeplacementAppliques === true) {
+      totalAvantRemise += 55;
+      console.log("✅ Frais de déplacement appliqués (+55€)");
+    } else {
+      console.log("❌ Frais de déplacement non appliqués");
+    }
 
     // 💸 Calculs financiers
     let reductionPourcent = Number(data.reductionPourcent) || 0;
