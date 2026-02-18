@@ -12,50 +12,45 @@ const Admin = require('../models/Admin');
 exports.getDiagnostiqueurs = async (req, res) => {
   try {
     const { secteur, noteMin } = req.query;
-
     const parsedNoteMin = noteMin ? parseFloat(noteMin) : null;
 
-    // =========================
-    // 1️⃣ CONSTRUCTION DU QUERY POUR DIAGNOSTIQUEUR
-    // =========================
     const query = { statut: 'actif' };
+    if (secteur) query.secteursIntervention = secteur;
+    if (parsedNoteMin !== null) query.noteGlobale = { $gte: parsedNoteMin };
 
-    if (secteur) {
-      query.secteursIntervention = secteur;
-    }
-
-    if (parsedNoteMin !== null) {
-      query.noteGlobale = { $gte: parsedNoteMin };
-    }
-
-    // =========================
-    // 2️⃣ RÉCUPÉRATION DES DIAGNOSTIQUEURS CLASSIQUES
-    // =========================
+    // 1️⃣ RÉCUPÉRATION DES DIAGNOSTIQUEURS CLASSIQUES
+    // Ajout de 'adresse email telephone' dans le select
     const diagnostiqueurs = await Diagnostiqueur.find(query)
-      .select('nom_entreprise siret logo noteGlobale nombreEvaluations secteursIntervention typeAbonnement')
+      .select('nom_entreprise siret logo noteGlobale nombreEvaluations secteursIntervention typeAbonnement adresse email telephone')
       .sort({ noteGlobale: -1 })
       .limit(50)
-      .lean(); // 🔥 Important pour performance
-
-    // =========================
-    // 3️⃣ RÉCUPÉRATION DES ADMINS ACTIFS
-    // =========================
-    const admins = await Admin.find({ isActive: true })
-      .select('entreprise')
       .lean();
 
-    // =========================
-    // 4️⃣ NORMALISATION DES ADMINS
-    // =========================
+    // 2️⃣ RÉCUPÉRATION DES ADMINS
+    // On doit sélectionner 'entreprise', 'email' et 'telephone' (celui du profil admin)
+    const admins = await Admin.find({ isActive: true })
+      .select('entreprise email telephone')
+      .lean();
+
+    // 3️⃣ NORMALISATION DES ADMINS
     const adminsAsDiagnostiqueurs = admins
       .map(admin => {
-        const entreprise = admin.entreprise || {};
+        const ent = admin.entreprise || {};
+        
+        // Construction de l'adresse formatée pour correspondre au modèle Diagnostiqueur
+        const adresseComplete = ent.adresse 
+          ? `${ent.adresse.rue || ''} ${ent.adresse.codePostal || ''} ${ent.adresse.ville || ''}`.trim()
+          : "Adresse non renseignée";
 
         return {
           _id: admin._id,
-          nom_entreprise: entreprise.name || "Diagnostic Master (Admin)",
-          siret: entreprise.siret || null,
-          logo: entreprise.logo || null,
+          nom_entreprise: ent.name || "Diagnostic Master (Admin)",
+          siret: ent.siret || null,
+          logo: ent.logo || null,
+          // On priorise le téléphone de l'entreprise, sinon celui de l'admin
+          telephone: ent.telephone || admin.telephone || "Non renseigné",
+          email_entreprise: admin.email, // L'admin utilise son mail de compte
+          adresse: adresseComplete,
           noteGlobale: 5,
           nombreEvaluations: 0,
           secteursIntervention: ['Var', 'Hérault', 'Autre'],
@@ -64,34 +59,17 @@ exports.getDiagnostiqueurs = async (req, res) => {
         };
       })
       .filter(admin => {
-        // 🔎 Filtre noteMin appliqué aussi aux admins
-        if (parsedNoteMin !== null && admin.noteGlobale < parsedNoteMin) {
-          return false;
-        }
-
-        // 🔎 Filtre secteur si présent
-        if (secteur && !admin.secteursIntervention.includes(secteur)) {
-          return false;
-        }
-
+        if (parsedNoteMin !== null && admin.noteGlobale < parsedNoteMin) return false;
+        if (secteur && !admin.secteursIntervention.includes(secteur)) return false;
         return true;
       });
 
-    // =========================
-    // 5️⃣ COMBINAISON FINALE
-    // =========================
-    const listeFinale = [
-      ...adminsAsDiagnostiqueurs,
-      ...diagnostiqueurs
-    ];
-
+    const listeFinale = [...adminsAsDiagnostiqueurs, ...diagnostiqueurs];
     res.json({ diagnostiqueurs: listeFinale });
 
   } catch (error) {
     console.error('Erreur getDiagnostiqueurs:', error);
-    res.status(500).json({
-      message: 'Erreur lors de la récupération des diagnostiqueurs.'
-    });
+    res.status(500).json({ message: 'Erreur lors de la récupération des diagnostiqueurs.' });
   }
 };
 
