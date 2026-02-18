@@ -5,34 +5,56 @@ const RenouvelementGratuit = require('../models/RenouvelementGratuit');
 const OrdreMission = require('../models/OrdreMission');
 const Devis = require('../models/Devis');
 const notationService = require('../services/notationService');
-
+const Admin = require('../models/Admin');
 /**
  * Liste des diagnostiqueurs disponibles pour sélection
  */
 exports.getDiagnostiqueurs = async (req, res) => {
   try {
     const { secteur, noteMin } = req.query;
-
     const query = { statut: 'actif' };
 
-    if (secteur) {
-      query.secteursIntervention = secteur;
-    }
+    if (secteur) query.secteursIntervention = secteur;
+    if (noteMin) query.noteGlobale = { $gte: parseFloat(noteMin) };
 
-    if (noteMin) {
-      query.noteGlobale = { $gte: parseFloat(noteMin) };
-    }
-
+    // 1. Récupérer les diagnostiqueurs classiques
     const diagnostiqueurs = await Diagnostiqueur.find(query)
       .select('nom_entreprise siret logo noteGlobale nombreEvaluations secteursIntervention typeAbonnement')
       .sort({ noteGlobale: -1 })
       .limit(50);
 
-    res.json({ diagnostiqueurs });
+    // 2. Récupérer l'Admin pour l'inclure comme diagnostiqueur
+    // On vérifie si l'admin correspond aux filtres (optionnel selon ta logique)
+    const adminAccount = await Admin.findOne({ isActive: true });
+    
+    let listeFinale = [...diagnostiqueurs];
+
+    if (adminAccount) {
+      // On "mappe" l'objet Admin pour qu'il ait la même structure que les autres
+      const adminAsDiag = {
+        _id: adminAccount._id,
+        nom_entreprise: adminAccount.entreprise.name || "Diagnostic Master (Admin)",
+        siret: adminAccount.entreprise.siret,
+        logo: adminAccount.entreprise.logo,
+        noteGlobale: 5, // L'admin a souvent la note max par défaut
+        nombreEvaluations: 0,
+        secteursIntervention: ['Var', 'Hérault', 'Autre'], // L'admin couvre tout en général
+        typeAbonnement: 'PRO', // L'admin est considéré comme PRO
+        isAdminAccount: true // Flag pour le frontend si besoin
+      };
+
+      // Si noteMin est demandé, on vérifie que l'admin passe le filtre
+      if (!noteMin || adminAsDiag.noteGlobale >= parseFloat(noteMin)) {
+        // On l'ajoute au début de la liste (prioritaire)
+        listeFinale.unshift(adminAsDiag);
+      }
+    }
+
+    res.json({ diagnostiqueurs: listeFinale });
 
   } catch (error) {
     console.error('Erreur getDiagnostiqueurs:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération des diagnostiqueurs.' });
+    res.status(500).json({ message: 'Erreur lors de la récupération.' });
   }
 };
 
