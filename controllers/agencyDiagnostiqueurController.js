@@ -12,51 +12,89 @@ const Admin = require('../models/Admin');
 exports.getDiagnostiqueurs = async (req, res) => {
   try {
     const { secteur, noteMin } = req.query;
+
+    const parsedNoteMin = noteMin ? parseFloat(noteMin) : null;
+
+    // =========================
+    // 1️⃣ CONSTRUCTION DU QUERY POUR DIAGNOSTIQUEUR
+    // =========================
     const query = { statut: 'actif' };
 
-    if (secteur) query.secteursIntervention = secteur;
-    if (noteMin) query.noteGlobale = { $gte: parseFloat(noteMin) };
+    if (secteur) {
+      query.secteursIntervention = secteur;
+    }
 
-    // 1. Récupérer les diagnostiqueurs classiques
+    if (parsedNoteMin !== null) {
+      query.noteGlobale = { $gte: parsedNoteMin };
+    }
+
+    // =========================
+    // 2️⃣ RÉCUPÉRATION DES DIAGNOSTIQUEURS CLASSIQUES
+    // =========================
     const diagnostiqueurs = await Diagnostiqueur.find(query)
       .select('nom_entreprise siret logo noteGlobale nombreEvaluations secteursIntervention typeAbonnement')
       .sort({ noteGlobale: -1 })
-      .limit(50);
+      .limit(50)
+      .lean(); // 🔥 Important pour performance
 
-    // 2. Récupérer l'Admin pour l'inclure comme diagnostiqueur
-    // On vérifie si l'admin correspond aux filtres (optionnel selon ta logique)
-    const adminAccount = await Admin.findOne({ isActive: true });
-    
-    let listeFinale = [...diagnostiqueurs];
+    // =========================
+    // 3️⃣ RÉCUPÉRATION DES ADMINS ACTIFS
+    // =========================
+    const admins = await Admin.find({ isActive: true })
+      .select('entreprise')
+      .lean();
 
-    if (adminAccount) {
-      // On "mappe" l'objet Admin pour qu'il ait la même structure que les autres
-      const adminAsDiag = {
-        _id: adminAccount._id,
-        nom_entreprise: adminAccount.entreprise.name || "Diagnostic Master (Admin)",
-        siret: adminAccount.entreprise.siret,
-        logo: adminAccount.entreprise.logo,
-        noteGlobale: 5, // L'admin a souvent la note max par défaut
-        nombreEvaluations: 0,
-        secteursIntervention: ['Var', 'Hérault', 'Autre'], // L'admin couvre tout en général
-        typeAbonnement: 'PRO', // L'admin est considéré comme PRO
-        isAdminAccount: true // Flag pour le frontend si besoin
-      };
+    // =========================
+    // 4️⃣ NORMALISATION DES ADMINS
+    // =========================
+    const adminsAsDiagnostiqueurs = admins
+      .map(admin => {
+        const entreprise = admin.entreprise || {};
 
-      // Si noteMin est demandé, on vérifie que l'admin passe le filtre
-      if (!noteMin || adminAsDiag.noteGlobale >= parseFloat(noteMin)) {
-        // On l'ajoute au début de la liste (prioritaire)
-        listeFinale.unshift(adminAsDiag);
-      }
-    }
+        return {
+          _id: admin._id,
+          nom_entreprise: entreprise.name || "Diagnostic Master (Admin)",
+          siret: entreprise.siret || null,
+          logo: entreprise.logo || null,
+          noteGlobale: 5,
+          nombreEvaluations: 0,
+          secteursIntervention: ['Var', 'Hérault', 'Autre'],
+          typeAbonnement: 'PRO',
+          isAdminAccount: true
+        };
+      })
+      .filter(admin => {
+        // 🔎 Filtre noteMin appliqué aussi aux admins
+        if (parsedNoteMin !== null && admin.noteGlobale < parsedNoteMin) {
+          return false;
+        }
+
+        // 🔎 Filtre secteur si présent
+        if (secteur && !admin.secteursIntervention.includes(secteur)) {
+          return false;
+        }
+
+        return true;
+      });
+
+    // =========================
+    // 5️⃣ COMBINAISON FINALE
+    // =========================
+    const listeFinale = [
+      ...adminsAsDiagnostiqueurs,
+      ...diagnostiqueurs
+    ];
 
     res.json({ diagnostiqueurs: listeFinale });
 
   } catch (error) {
     console.error('Erreur getDiagnostiqueurs:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération.' });
+    res.status(500).json({
+      message: 'Erreur lors de la récupération des diagnostiqueurs.'
+    });
   }
 };
+
 
 /**
  * Détails d'un diagnostiqueur
