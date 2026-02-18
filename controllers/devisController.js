@@ -1172,15 +1172,15 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
     console.log("==== Client avant création devis ====", client);
 
 
-    // 🧾 Création du devis
+    // 🧾 Création du devis avec les données du client récupéré/créé
     const devis = new Devis({
       agenceId,
       shareAgency: shareAgencyId,
       shareAgencyName,
       creePar,
       client: {
-        nom: data.client.nom,
-        prenom: data.client.prenom,
+        nom: client.nom,
+        prenom: client.prenom,
         email: client.email,
         tel: client.telephone,
         adresse: client.adresse,
@@ -1232,9 +1232,26 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
 
     await devis.save();
 
+    // ✅ Ajouter le devis au client
     if (!client.devis.includes(devis._id)) {
       client.devis.push(devis._id);
       await client.save();
+    }
+
+    // ✅ Ajouter le client et le devis à l'agence si applicable
+    if (agenceId) {
+      const agence = await Agence.findById(agenceId);
+      if (agence) {
+        // Ajouter le client à l'agence s'il n'y est pas déjà
+        if (!agence.clients.includes(client._id)) {
+          agence.clients.push(client._id);
+        }
+        // Ajouter le devis à l'agence s'il n'y est pas déjà
+        if (!agence.devis.includes(devis._id)) {
+          agence.devis.push(devis._id);
+        }
+        await agence.save();
+      }
     }
 
     // ✅ Si le payeur est l’agence
