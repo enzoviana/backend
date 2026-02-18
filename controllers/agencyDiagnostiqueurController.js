@@ -19,16 +19,17 @@ exports.getDiagnostiqueurs = async (req, res) => {
     if (parsedNoteMin !== null) query.noteGlobale = { $gte: parsedNoteMin };
 
     // 1️⃣ RÉCUPÉRATION DES DIAGNOSTIQUEURS CLASSIQUES
-    // Ajout de 'adresse email telephone' dans le select
     const diagnostiqueurs = await Diagnostiqueur.find(query)
       .select('nom_entreprise siret logo noteGlobale nombreEvaluations secteursIntervention typeAbonnement adresse email telephone')
       .sort({ noteGlobale: -1 })
       .limit(50)
       .lean();
 
-    // 2️⃣ RÉCUPÉRATION DES ADMINS
-    // On doit sélectionner 'entreprise', 'email' et 'telephone' (celui du profil admin)
-    const admins = await Admin.find({ isActive: true })
+    // 2️⃣ RÉCUPÉRATION DES ADMINS (En excluant ton email spécifique)
+    const admins = await Admin.find({ 
+      isActive: true,
+      email: { $ne: "enzo.pereirapro@gmail.com" } // 🔥 Exclut Enzo de la liste
+    })
       .select('entreprise email telephone')
       .lean();
 
@@ -37,7 +38,6 @@ exports.getDiagnostiqueurs = async (req, res) => {
       .map(admin => {
         const ent = admin.entreprise || {};
         
-        // Construction de l'adresse formatée pour correspondre au modèle Diagnostiqueur
         const adresseComplete = ent.adresse 
           ? `${ent.adresse.rue || ''} ${ent.adresse.codePostal || ''} ${ent.adresse.ville || ''}`.trim()
           : "Adresse non renseignée";
@@ -47,9 +47,8 @@ exports.getDiagnostiqueurs = async (req, res) => {
           nom_entreprise: ent.name || "Diagnostic Master (Admin)",
           siret: ent.siret || null,
           logo: ent.logo || null,
-          // On priorise le téléphone de l'entreprise, sinon celui de l'admin
           telephone: ent.telephone || admin.telephone || "Non renseigné",
-          email_entreprise: admin.email, // L'admin utilise son mail de compte
+          email_entreprise: admin.email,
           adresse: adresseComplete,
           noteGlobale: 5,
           nombreEvaluations: 0,
