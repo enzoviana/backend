@@ -665,31 +665,55 @@ exports.createDevis = async (req, res) => {
       creePar = { id: agenceId, type: "Agence" };
     }
 
-    // 🔎 Préparer les données client
-    const clientPayload = {
-      ...data.client,
-      email: data.client.email ? data.client.email.trim() : "",
-      telephone: data.client.tel || data.client.telephone || "",
-      agences: [agenceId],
-    };
+    // 🔎 Gestion du client (existant ou nouveau)
+    let client;
 
-    delete clientPayload.tel;
+    // Si le client a un _id, c'est un client existant
+    if (data.client._id) {
+      console.log('✅ Client existant sélectionné:', data.client._id);
 
-    // 🏠 Si aucune adresse client fournie → utiliser l'adresse du bien
-    if (!clientPayload.adresse && data.adresseBien?.adresse) {
-      clientPayload.adresse = data.adresseBien.adresse;
-    }
-    if (!clientPayload.ville && data.adresseBien?.ville) {
-      clientPayload.ville = data.adresseBien.ville;
-    }
-    if (!clientPayload.codePostal && data.adresseBien?.codePostal) {
-      clientPayload.codePostal = data.adresseBien.codePostal;
-    }
+      // Vérifier que le client existe et appartient à l'agence
+      client = await Client.findById(data.client._id);
 
-    // 🔎 Recherche ou création du client
-    // 🔎 Création systématique du client
-    const client = new Client(clientPayload);
-    await client.save();
+      if (!client) {
+        return res.status(404).json({ message: "Client introuvable." });
+      }
+
+      // Ajouter l'agence au client s'il ne l'a pas déjà
+      if (agenceId && !client.agences.includes(agenceId)) {
+        client.agences.push(agenceId);
+        await client.save();
+        console.log('✅ Agence ajoutée au client existant');
+      }
+    } else {
+      // Nouveau client : créer
+      console.log('🆕 Création d\'un nouveau client');
+
+      const clientPayload = {
+        ...data.client,
+        email: data.client.email ? data.client.email.trim() : "",
+        telephone: data.client.tel || data.client.telephone || "",
+        agences: agenceId ? [agenceId] : [],
+      };
+
+      delete clientPayload.tel;
+      delete clientPayload._id; // Supprimer _id s'il est null/undefined
+
+      // 🏠 Si aucune adresse client fournie → utiliser l'adresse du bien
+      if (!clientPayload.adresse && data.adresseBien?.adresse) {
+        clientPayload.adresse = data.adresseBien.adresse;
+      }
+      if (!clientPayload.ville && data.adresseBien?.ville) {
+        clientPayload.ville = data.adresseBien.ville;
+      }
+      if (!clientPayload.codePostal && data.adresseBien?.codePostal) {
+        clientPayload.codePostal = data.adresseBien.codePostal;
+      }
+
+      client = new Client(clientPayload);
+      await client.save();
+      console.log('✅ Nouveau client créé:', client._id);
+    }
 
 
     let secteur;
