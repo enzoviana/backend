@@ -1067,6 +1067,39 @@ if (data.installationGaz === true) {
     }
 
     // 🚚 Frais de déplacement (appliqué selon le choix de l'admin, pour tous les types)
+
+    // 🆕 Si fraisDeplacementAppliques n'est pas défini, le définir automatiquement
+    if (data.fraisDeplacementAppliques === undefined || data.fraisDeplacementAppliques === null) {
+      // Déterminer si c'est un pack ou des diagnostics à la carte
+      const estPack = data.type === "pack_complet" || data.pack;
+      const estDiagnostic = data.type === "diagnostic";
+
+      // Vérifier si c'est uniquement ERP
+      let uniquementERP = false;
+      if (estDiagnostic && data.diagnosticsSelectionnes?.length > 0) {
+        // Récupérer les diagnostics pour vérifier leurs noms
+        const diagnosticsIds = data.diagnosticsSelectionnes;
+        const diagnosticsRecuperes = await Diagnostic.find({ _id: { $in: diagnosticsIds } });
+
+        // Vérifier si c'est uniquement ERP
+        uniquementERP =
+          diagnosticsRecuperes.length === 1 &&
+          diagnosticsRecuperes[0].nom.toLowerCase().includes('erp');
+      }
+
+      // Logique automatique :
+      // - Si pack → false
+      // - Si diagnostic à la carte avec au moins 1 diagnostic (et pas uniquement ERP) → true
+      // - Sinon → false
+      if (!estPack && estDiagnostic && data.diagnosticsSelectionnes?.length > 0 && !uniquementERP) {
+        data.fraisDeplacementAppliques = true;
+        console.log("🆕 Frais de déplacement automatiquement définis à TRUE (diagnostic à la carte)");
+      } else {
+        data.fraisDeplacementAppliques = false;
+        console.log("🆕 Frais de déplacement automatiquement définis à FALSE (pack ou ERP seul)");
+      }
+    }
+
     if (data.fraisDeplacementAppliques === true) {
       totalAvantRemise += 55;
       console.log("✅ Frais de déplacement appliqués (+55€)");
