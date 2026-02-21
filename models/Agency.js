@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { Schema } = mongoose;
 
 
-// 🔹 Sous-schema pour l’historique de la cagnotte
+// 🔹 Sous-schema pour l'historique de la cagnotte
 const CagnotteHistoriqueSchema = new Schema({
   type: {
     type: String,
@@ -13,6 +13,22 @@ const CagnotteHistoriqueSchema = new Schema({
   montant: { type: Number, required: true },
   description: { type: String, default: '' },
   par: { type: String, default: 'système' }, // ex: 'admin', 'client', 'système'
+  date: { type: Date, default: Date.now }
+}, { _id: false });
+
+// 🔹 Sous-schema pour l'historique des crédits IA
+const CreditsHistoriqueSchema = new Schema({
+  type: {
+    type: String,
+    enum: ['achat', 'utilisation', 'ajustement', 'cadeau'],
+    required: true
+  },
+  nombreCredits: { type: Number, required: true }, // Positif pour ajout, négatif pour utilisation
+  description: { type: String, default: '' },
+  packAchete: { type: Schema.Types.ObjectId, ref: 'CreditPack', default: null },
+  stripePaymentId: { type: String, default: null }, // ID du paiement Stripe
+  devisGenere: { type: Schema.Types.ObjectId, ref: 'Devis', default: null }, // Si utilisation pour un devis
+  par: { type: String, default: 'système' },
   date: { type: Date, default: Date.now }
 }, { _id: false });
 
@@ -102,6 +118,18 @@ historiqueCagnotte: {
   },
   reduction: { type: Number, default: 0, min: 0, max: 100 },
 
+  // 🤖 Crédits IA pour la génération de devis
+  creditsIA: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  historiqueCreditsIA: {
+    type: [CreditsHistoriqueSchema],
+    default: []
+  },
+
   // Diagnostiqueur
   diagnostiqueurParDefaut: {
     type: Schema.Types.ObjectId,
@@ -134,14 +162,14 @@ AgenceSchema.virtual('tauxAcceptation').get(function () {
 });
 
 
-// 🔹 Méthode d’ajout mouvement cagnotte
+// 🔹 Méthode d'ajout mouvement cagnotte
 AgenceSchema.methods.ajouterMouvementCagnotte = async function({ type, montant, description, par }) {
   try {
     if (!montant || isNaN(montant)) throw new Error("Montant invalide");
 
     // 🔹 Arrondi à l'entier le plus proche
     montant = Math.round(montant);
-    
+
     this.historiqueCagnotte.push({
       type,
       montant,
@@ -163,6 +191,53 @@ AgenceSchema.methods.ajouterMouvementCagnotte = async function({ type, montant, 
     console.error("Erreur ajouterMouvementCagnotte:", error);
     throw error;
   }
+};
+
+// 🔹 Méthode pour gérer les crédits IA
+AgenceSchema.methods.ajouterCreditsIA = async function({
+  type,
+  nombreCredits,
+  description,
+  packAchete = null,
+  stripePaymentId = null,
+  devisGenere = null,
+  par = 'système'
+}) {
+  try {
+    if (!nombreCredits || isNaN(nombreCredits)) {
+      throw new Error("Nombre de crédits invalide");
+    }
+
+    // Ajouter à l'historique
+    this.historiqueCreditsIA.push({
+      type,
+      nombreCredits,
+      description,
+      packAchete,
+      stripePaymentId,
+      devisGenere,
+      par,
+      date: new Date()
+    });
+
+    // Mettre à jour le solde selon le type
+    if (type === 'achat' || type === 'cadeau' || type === 'ajustement') {
+      this.creditsIA += Math.abs(nombreCredits);
+    } else if (type === 'utilisation') {
+      this.creditsIA = Math.max(0, this.creditsIA - Math.abs(nombreCredits));
+    }
+
+    await this.save();
+    return this;
+  } catch (error) {
+    console.error("Erreur ajouterCreditsIA:", error);
+    throw error;
+  }
+};
+
+// 🔹 Méthode pour vérifier si l'agence a assez de crédits
+AgenceSchema.methods.aAssezDeCredits = function(nombreRequis = 1) {
+  return this.creditsIA >= nombreRequis;
 };
 
 

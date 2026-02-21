@@ -7,6 +7,7 @@ const missionController = require("../controllers/missionController");
 const agencyController = require('../controllers/agencyController');
 const devisController = require('../controllers/devisController');
 const adminDiagnostiqueurController = require('../controllers/adminDiagnostiqueurController');
+const creditsController = require('../controllers/creditsController');
 const upload = require('../middlewares/upload');
 
 // Diagnostics
@@ -111,6 +112,12 @@ router.post(
   devisController.createDevis
 );
 router.get("/devis/download/:devisId", authMiddleware, devisController.downloadDevis);
+
+// ---------------------- CRÉDITS IA ----------------------
+router.get('/credits/packs', authMiddleware, creditsController.getPacks);
+router.get('/credits/balance', authMiddleware, creditsController.getBalance);
+router.post('/credits/checkout', authMiddleware, creditsController.createCheckoutSession);
+router.post('/credits/add-manually', authMiddleware, creditsController.addCreditsManually);
 
 // ---------------------- DIAGNOSTIQUEURS ----------------------
 

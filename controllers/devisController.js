@@ -383,6 +383,34 @@ exports.generateDevisAI = async (req, res) => {
   try {
     console.log("📌 Requête reçue pour génération de devis AI");
 
+    // 🤖 Vérifier les crédits IA disponibles
+    const agenceId = req.agence?._id;
+    if (!agenceId) {
+      return res.status(401).json({
+        success: false,
+        message: "Agence non authentifiée"
+      });
+    }
+
+    const Agency = require('../models/Agency');
+    const agence = await Agency.findById(agenceId);
+
+    if (!agence) {
+      return res.status(404).json({
+        success: false,
+        message: "Agence introuvable"
+      });
+    }
+
+    // Vérifier si l'agence a au moins 1 crédit
+    if (!agence.aAssezDeCredits(1)) {
+      return res.status(403).json({
+        success: false,
+        message: "Crédits IA insuffisants. Veuillez acheter un pack de crédits dans les paramètres.",
+        creditsRestants: agence.creditsIA || 0
+      });
+    }
+
     const data = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body.data || req.body;
     console.log("📄 Données reçues :", data);
 
@@ -560,6 +588,23 @@ Propose un devis recommandé en listant :
       })) : [],
       supplements: []
     };
+
+    // 🤖 Déduire 1 crédit après génération réussie
+    try {
+      await agence.ajouterCreditsIA({
+        type: 'utilisation',
+        nombreCredits: 1,
+        description: 'Génération de devis par IA',
+        par: agence.admin?.email || 'système'
+      });
+      console.log(`✅ 1 crédit IA déduit. Reste: ${agence.creditsIA} crédits`);
+    } catch (creditError) {
+      console.error('Erreur déduction crédit:', creditError);
+      // On continue quand même, car le devis a été généré
+    }
+
+    // Ajouter le nombre de crédits restants dans la réponse
+    responseJSON.creditsRestants = agence.creditsIA;
 
     return res.status(200).json(responseJSON);
 

@@ -1,6 +1,7 @@
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Diagnostiqueur = require('../models/Diagnostiqueur');
 const AbonnementDiagnostiqueur = require('../models/AbonnementDiagnostiqueur');
+const creditsController = require('../controllers/creditsController');
 
 /**
  * Configuration des plans
@@ -111,6 +112,14 @@ async function creerPortalSession(diagnostiqueurId, returnUrl) {
  */
 async function handleCheckoutCompleted(session) {
   try {
+    // Vérifier si c'est un achat de pack de crédits
+    if (session.metadata && session.metadata.type === 'credit_pack_purchase') {
+      console.log('📦 Traitement achat pack de crédits');
+      await creditsController.handlePaymentSuccess(session);
+      return;
+    }
+
+    // Sinon, c'est un abonnement diagnostiqueur
     const diagnostiqueurId = session.metadata.diagnostiqueurId;
     const subscriptionId = session.subscription;
 
