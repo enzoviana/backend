@@ -155,8 +155,8 @@ exports.createCheckoutSession = async (req, res) => {
           nombreCredits: pack.nombreCredits.toString(),
           type: 'credit_pack_purchase_admin'
         },
-        success_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080/settings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-        cancel_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080/settings?payment=cancelled`,
+        success_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?payment=cancelled`,
       });
 
       return res.status(200).json({
@@ -209,8 +209,8 @@ exports.createCheckoutSession = async (req, res) => {
         nombreCredits: pack.nombreCredits.toString(),
         type: 'credit_pack_purchase'
       },
-      success_url: `${process.env.FRONTEND_URL || 'http://localhost:8080/settings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:8080/settings?payment=cancelled`,
+      success_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?payment=cancelled`,
     });
 
     return res.status(200).json({
