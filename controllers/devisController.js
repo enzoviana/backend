@@ -572,15 +572,16 @@ exports.generateDevisAI = async (req, res) => {
 
     let supplements = await Supplement.find({ typeBien: bien.bien });
 
-    // Si des suppléments spécifiques sont demandés, les sélectionner
+    // Mapper tous les suppléments avec la propriété selected
+    supplements = supplements.map(s => ({
+      ...s.toObject(),
+      selected: supplementsSpecifiques.length > 0 && supplementsSpecifiques.some(nom =>
+        s.nom.toLowerCase().includes(nom.toLowerCase()) ||
+        nom.toLowerCase().includes(s.nom.toLowerCase())
+      )
+    }));
+
     if (supplementsSpecifiques.length > 0) {
-      supplements = supplements.map(s => ({
-        ...s.toObject(),
-        selected: supplementsSpecifiques.some(nom =>
-          s.nom.toLowerCase().includes(nom.toLowerCase()) ||
-          nom.toLowerCase().includes(s.nom.toLowerCase())
-        )
-      }));
       console.log("🏗️ Suppléments sélectionnés:", supplements.filter(s => s.selected).map(s => s.nom));
     }
 
@@ -628,47 +629,73 @@ exports.generateDevisAI = async (req, res) => {
         gaz: installationGaz,
         copropriete: copropriete
       },
-      packs: productMode === "pack" ? packs.map((p, index) => ({
-        _id: p._id,
-        id: p._id,
-        nom: p.nom,
-        tarifs: p.tarifs || {},
-        tarifsParAppartement: p.tarifsParAppartement || [],
-        tarif: bien.bien === "appartement" && p.tarifsParAppartement
-          ? p.tarifsParAppartement.find(t => t.typeAppartement === bien.surfaceAppartement)?.tarifs || p.tarifs
-          : p.tarifs,
-        diagnostics: p.diagnostics || [],
-        selected: index === 0
-      })) : [],
-      diagnostics: productMode === "diagnostic" ? diagnosticsFiltres.map(d => ({
-        _id: d._id,
-        id: d._id,
-        nom: d.nom,
-        prix: d.prix,
-        tarifs: d.tarifs || {},
-        selected: true
-      })) : [],
+      packs: productMode === "pack" ? packs.map((p, index) => {
+        let tarif = {};
+
+        if (bien.bien === "appartement" && p.tarifsParAppartement && bien.surfaceAppartement) {
+          const tranche = p.tarifsParAppartement.find(t =>
+            t.typeAppartement === bien.surfaceAppartement
+          );
+          tarif = tranche?.tarifs || p.tarifs || {};
+        } else {
+          tarif = p.tarifs || {};
+        }
+
+        return {
+          _id: p._id,
+          id: p._id,
+          nom: p.nom,
+          tarifs: p.tarifs || {},
+          tarifsParAppartement: p.tarifsParAppartement || [],
+          tarif: tarif,
+          diagnostics: p.diagnostics || [],
+          selected: index === 0
+        };
+      }) : [],
+      diagnostics: productMode === "diagnostic" ? diagnosticsFiltres.map(d => {
+        // Calculer le prix selon le type de bien et la surface
+        let prix = 0;
+        let tarifsObj = {};
+
+        if (bien.bien === "maison" && d.tarifsParSurface) {
+          const surface = parseInt(bien.surfaceMaison) || 0;
+          const tranche = d.tarifsParSurface.find(t =>
+            surface >= t.surfaceMin && surface <= t.surfaceMax
+          );
+          if (tranche) {
+            tarifsObj = tranche.tarifs || {};
+            // Utiliser le tarif par défaut (autre)
+            prix = tranche.tarifs?.autre || tranche.tarifs?.herault || tranche.tarifs?.var || 0;
+          }
+        } else if (bien.bien === "appartement" && d.tarifsParAppartement) {
+          const tranche = d.tarifsParAppartement.find(t =>
+            t.typeAppartement === bien.surfaceAppartement
+          );
+          if (tranche) {
+            tarifsObj = tranche.tarifs || {};
+            prix = tranche.tarifs?.autre || tranche.tarifs?.herault || tranche.tarifs?.var || 0;
+          }
+        }
+
+        return {
+          _id: d._id,
+          id: d._id,
+          nom: d.nom,
+          prix: prix,
+          tarifsParSurface: d.tarifsParSurface || [],
+          tarifsParAppartement: d.tarifsParAppartement || [],
+          tarifs: tarifsObj,
+          selected: true
+        };
+      }) : [],
       supplements: Array.isArray(supplements) && supplements.length > 0
-        ? supplements.map(s => {
-            // Si le supplément a déjà une propriété selected (de la requête), la garder
-            if (typeof s.selected !== 'undefined') {
-              return {
-                _id: s._id,
-                id: s._id,
-                nom: s.nom,
-                tarifs: s.tarifs || {},
-                selected: s.selected
-              };
-            }
-            // Sinon, créer la structure
-            return {
-              _id: s._id,
-              id: s._id,
-              nom: s.nom,
-              tarifs: s.tarifs || {},
-              selected: false
-            };
-          })
+        ? supplements.map(s => ({
+            _id: s._id,
+            id: s._id,
+            nom: s.nom,
+            tarifs: s.tarifs || {},
+            selected: s.selected || false
+          }))
         : []
     };
 
