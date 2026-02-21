@@ -127,6 +127,7 @@ router.get('/google/auth/callback', googleCalendarController.handleCallback); //
 router.get('/google/status', authMiddleware, googleCalendarController.getStatus);
 router.post('/google/disconnect', authMiddleware, googleCalendarController.disconnect);
 router.post('/google/calendar/event', authMiddleware, googleCalendarController.createEvent);
+router.post('/google/checkout', authMiddleware, googleCalendarController.createGoogleCalendarCheckoutSession);
 
 // ---------------------- CONTRAT DE TRANSFERT ----------------------
 router.get('/contrat/status', authMiddleware, contratController.getStatus);

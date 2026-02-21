@@ -1,5 +1,6 @@
 const { google } = require('googleapis');
 const Admin = require('../models/Admin');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 /**
  * Configuration OAuth2
@@ -152,13 +153,22 @@ exports.getStatus = async (req, res) => {
       });
     }
 
+    const hasAccess = admin.aAccesGoogleCalendar();
+    const optionAchetee = admin.optionsAchetees?.googleCalendar?.actif || false;
+    const packEvolution = admin.contratMaintenance?.actif && admin.contratMaintenance?.type === 'evolution';
+
     return res.status(200).json({
       success: true,
       isConnected: admin.googleCalendar?.isConnected || false,
       email: admin.googleCalendar?.email || null,
       connectedAt: admin.googleCalendar?.connectedAt || null,
       lastSync: admin.googleCalendar?.lastSync || null,
-      hasAccess: admin.aAccesGoogleCalendar()
+      hasAccess,
+      optionAchetee,
+      packEvolution,
+      dateAchat: admin.optionsAchetees?.googleCalendar?.dateAchat || null,
+      prixPaye: admin.optionsAchetees?.googleCalendar?.prixPaye || null,
+      prixOption: parseInt(process.env.GOOGLE_CALENDAR_OPTION_PRICE || 9900, 10) / 100 // En euros
     });
   } catch (err) {
     console.error('Erreur getStatus:', err);
@@ -318,6 +328,120 @@ exports.createEvent = async (req, res) => {
       success: false,
       message: err.message || 'Erreur lors de la création de l\'événement'
     });
+  }
+};
+
+/**
+ * 💳 Créer une session de paiement Stripe pour l'option Google Calendar
+ */
+exports.createGoogleCalendarCheckoutSession = async (req, res) => {
+  try {
+    const adminId = req.user?.id;
+
+    if (!adminId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Admin non authentifié'
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin introuvable'
+      });
+    }
+
+    // Vérifier si l'admin a déjà l'option active
+    if (admin.aAccesGoogleCalendar()) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous avez déjà accès à Google Calendar'
+      });
+    }
+
+    // Prix de l'option Google Calendar (99€)
+    const PRIX_GOOGLE_CALENDAR = process.env.GOOGLE_CALENDAR_OPTION_PRICE || 9900; // en centimes
+
+    // Créer la session Stripe
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      mode: 'payment',
+      customer_email: admin.email,
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: 'Option Google Calendar',
+              description: 'Synchronisation automatique de vos ordres de mission avec Google Calendar',
+            },
+            unit_amount: parseInt(PRIX_GOOGLE_CALENDAR, 10),
+          },
+          quantity: 1,
+        },
+      ],
+      metadata: {
+        adminId: adminId.toString(),
+        type: 'google_calendar_option_admin',
+        prixPaye: PRIX_GOOGLE_CALENDAR.toString()
+      },
+      success_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_payment=success&session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_payment=cancelled`,
+    });
+
+    return res.status(200).json({
+      success: true,
+      sessionId: session.id,
+      url: session.url
+    });
+  } catch (err) {
+    console.error('Erreur createGoogleCalendarCheckoutSession:', err);
+    return res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la création de la session de paiement'
+    });
+  }
+};
+
+/**
+ * ✅ Gérer le succès du paiement Google Calendar (appelé par le webhook Stripe)
+ */
+exports.handleGoogleCalendarPaymentSuccess = async (session) => {
+  try {
+    console.log('📅 Traitement achat option Google Calendar:', session.id);
+
+    const { adminId, prixPaye } = session.metadata;
+
+    if (!adminId) {
+      console.error('adminId manquant dans les métadonnées');
+      return;
+    }
+
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      console.error('Admin introuvable:', adminId);
+      return;
+    }
+
+    // Activer l'option Google Calendar (illimité)
+    admin.optionsAchetees = admin.optionsAchetees || {};
+    admin.optionsAchetees.googleCalendar = {
+      actif: true,
+      dateAchat: new Date(),
+      dateExpiration: null, // null = illimité
+      prixPaye: parseInt(prixPaye, 10) / 100 // Convertir centimes en euros
+    };
+
+    await admin.save();
+
+    console.log(`✅ Option Google Calendar activée pour l'admin ${admin.email}`);
+  } catch (err) {
+    console.error('Erreur handleGoogleCalendarPaymentSuccess:', err);
+    throw err;
   }
 };
 

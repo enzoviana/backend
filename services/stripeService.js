@@ -2,6 +2,7 @@ const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const Diagnostiqueur = require('../models/Diagnostiqueur');
 const AbonnementDiagnostiqueur = require('../models/AbonnementDiagnostiqueur');
 const creditsController = require('../controllers/creditsController');
+const googleCalendarController = require('../controllers/googleCalendarController');
 
 /**
  * Configuration des plans
@@ -116,6 +117,13 @@ async function handleCheckoutCompleted(session) {
     if (session.metadata && (session.metadata.type === 'credit_pack_purchase' || session.metadata.type === 'credit_pack_purchase_admin')) {
       console.log('📦 Traitement achat pack de crédits');
       await creditsController.handlePaymentSuccess(session);
+      return;
+    }
+
+    // Vérifier si c'est un achat de l'option Google Calendar
+    if (session.metadata && session.metadata.type === 'google_calendar_option_admin') {
+      console.log('📅 Traitement achat option Google Calendar');
+      await googleCalendarController.handleGoogleCalendarPaymentSuccess(session);
       return;
     }
 
