@@ -426,13 +426,12 @@ exports.generateDevisAI = async (req, res) => {
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // 4. Pré-récupération des suppléments disponibles pour guider l'IA
-    const supplementsMaison = await Supplement.find({ typeBien: "maison" });
-    const supplementsAppartement = await Supplement.find({ typeBien: "appartement" });
-    const tousSupplements = [...supplementsMaison, ...supplementsAppartement];
+    // 4. Pré-récupération de TOUS les suppléments disponibles pour guider l'IA
+    const tousSupplements = await Supplement.find({}); // Récupérer TOUS les suppléments, peu importe le typeBien
     const nomsSupplementsUniques = [...new Set(tousSupplements.map(s => s.nom))];
 
-    console.log("🗄️ Suppléments disponibles en base:", nomsSupplementsUniques);
+    console.log("🗄️ TOUS les suppléments disponibles en base:", nomsSupplementsUniques);
+    console.log("🔍 Détail des suppléments:", tousSupplements.map(s => ({ nom: s.nom, typeBien: s.typeBien })));
 
     // 5. APPEL UNIQUE OPENAI : Extraction Client + Analyse Technique
     let installationGaz = data.installationGaz || false;
@@ -664,11 +663,12 @@ exports.generateDevisAI = async (req, res) => {
       }
     }
 
-    let supplements = await Supplement.find({ typeBien: bien.bien });
+    // Récupérer TOUS les suppléments disponibles (pas seulement pour le typeBien actuel)
+    // Car certains suppléments comme Cave, Garage peuvent être communs à plusieurs types
+    let supplements = await Supplement.find({});
 
-    // Mapper tous les suppléments avec la propriété selected
     console.log("📋 Suppléments demandés par IA:", supplementsSpecifiques);
-    console.log("🗄️ Suppléments disponibles en base:", supplements.map(s => s.nom));
+    console.log("🗄️ TOUS les suppléments en base pour matching:", supplements.map(s => `${s.nom} (${s.typeBien})`));
 
     supplements = supplements.map(s => {
       const nomSupplementBase = s.nom.toLowerCase().trim();
@@ -842,6 +842,13 @@ exports.generateDevisAI = async (req, res) => {
     } catch (e) { console.error("Erreur crédit:", e); }
 
     responseJSON.creditsRestants = userEntity.creditsIA;
+
+    // LOG FINAL : Vérifier ce qui est envoyé au frontend
+    console.log("📤 ========== RÉPONSE ENVOYÉE AU FRONTEND ==========");
+    console.log("📦 Suppléments envoyés:", responseJSON.supplements?.map(s => ({ nom: s.nom, selected: s.selected })));
+    console.log("📦 Diagnostics envoyés:", responseJSON.diagnostics?.map(d => ({ nom: d.nom, selected: d.selected })));
+    console.log("📤 =================================================");
+
     return res.status(200).json(responseJSON);
 
   } catch (error) {
