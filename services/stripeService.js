@@ -112,8 +112,8 @@ async function creerPortalSession(diagnostiqueurId, returnUrl) {
  */
 async function handleCheckoutCompleted(session) {
   try {
-    // Vérifier si c'est un achat de pack de crédits
-    if (session.metadata && session.metadata.type === 'credit_pack_purchase') {
+    // Vérifier si c'est un achat de pack de crédits (Admin ou Agence)
+    if (session.metadata && (session.metadata.type === 'credit_pack_purchase' || session.metadata.type === 'credit_pack_purchase_admin')) {
       console.log('📦 Traitement achat pack de crédits');
       await creditsController.handlePaymentSuccess(session);
       return;

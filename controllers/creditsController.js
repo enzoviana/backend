@@ -1,5 +1,6 @@
 const CreditPack = require('../models/CreditPack');
 const Agency = require('../models/Agency');
+const Admin = require('../models/Admin');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 
 /**
@@ -23,16 +24,44 @@ exports.getPacks = async (req, res) => {
 };
 
 /**
- * 💰 Obtenir le solde de crédits de l'agence
+ * 💰 Obtenir le solde de crédits (Admin ou Agence)
  */
 exports.getBalance = async (req, res) => {
   try {
+    const userId = req.user?.id;
+
+    if (!userId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Utilisateur non authentifié'
+      });
+    }
+
+    // 🔹 Vérifier si c'est un Admin
+    const admin = await Admin.findById(userId)
+      .select('creditsIA historiqueCreditsIA')
+      .lean();
+
+    if (admin) {
+      // C'est un Admin de la plateforme
+      const historique = (admin.historiqueCreditsIA || [])
+        .sort((a, b) => new Date(b.date) - new Date(a.date))
+        .slice(0, 20);
+
+      return res.status(200).json({
+        success: true,
+        creditsIA: admin.creditsIA || 0,
+        historique
+      });
+    }
+
+    // 🔹 Sinon, vérifier si c'est une Agence
     const agencyId = req.agence?._id;
 
     if (!agencyId) {
       return res.status(401).json({
         success: false,
-        message: 'Agence non authentifiée'
+        message: 'Utilisateur non trouvé'
       });
     }
 
@@ -67,17 +96,17 @@ exports.getBalance = async (req, res) => {
 };
 
 /**
- * 🛒 Créer une session de paiement Stripe pour acheter un pack
+ * 🛒 Créer une session de paiement Stripe pour acheter un pack (Admin ou Agence)
  */
 exports.createCheckoutSession = async (req, res) => {
   try {
-    const agencyId = req.agence?._id;
+    const userId = req.user?.id;
     const { packId } = req.body;
 
-    if (!agencyId) {
+    if (!userId) {
       return res.status(401).json({
         success: false,
-        message: 'Agence non authentifiée'
+        message: 'Utilisateur non authentifié'
       });
     }
 
@@ -98,6 +127,55 @@ exports.createCheckoutSession = async (req, res) => {
       });
     }
 
+    // 🔹 Vérifier si c'est un Admin
+    const admin = await Admin.findById(userId);
+
+    if (admin) {
+      // C'est un Admin de la plateforme
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        mode: 'payment',
+        customer_email: admin.email,
+        line_items: [
+          {
+            price_data: {
+              currency: 'eur',
+              product_data: {
+                name: pack.nom,
+                description: `${pack.nombreCredits} crédits IA pour la génération de devis`,
+              },
+              unit_amount: pack.prixCentimes,
+            },
+            quantity: 1,
+          },
+        ],
+        metadata: {
+          adminId: userId.toString(),
+          packId: packId.toString(),
+          nombreCredits: pack.nombreCredits.toString(),
+          type: 'credit_pack_purchase_admin'
+        },
+        success_url: `${process.env.ADMIN_FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?payment=success&session_id={CHECKOUT_SESSION_ID}`,
+        cancel_url: `${process.env.ADMIN_FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?payment=cancelled`,
+      });
+
+      return res.status(200).json({
+        success: true,
+        sessionId: session.id,
+        url: session.url
+      });
+    }
+
+    // 🔹 Sinon, c'est une Agence
+    const agencyId = req.agence?._id;
+
+    if (!agencyId) {
+      return res.status(401).json({
+        success: false,
+        message: 'Utilisateur non trouvé'
+      });
+    }
+
     const agency = await Agency.findById(agencyId);
 
     if (!agency) {
@@ -107,7 +185,7 @@ exports.createCheckoutSession = async (req, res) => {
       });
     }
 
-    // Créer la session Stripe
+    // Créer la session Stripe pour l'agence
     const session = await stripe.checkout.sessions.create({
       payment_method_types: ['card'],
       mode: 'payment',
@@ -150,25 +228,17 @@ exports.createCheckoutSession = async (req, res) => {
 };
 
 /**
- * ✅ Webhook Stripe pour confirmer le paiement et ajouter les crédits
+ * ✅ Webhook Stripe pour confirmer le paiement et ajouter les crédits (Admin ou Agence)
  * Cette fonction sera appelée par le webhook Stripe existant
  */
 exports.handlePaymentSuccess = async (session) => {
   try {
     console.log('📦 Traitement achat pack de crédits:', session.id);
 
-    const { agencyId, packId, nombreCredits } = session.metadata;
+    const { agencyId, adminId, packId, nombreCredits, type } = session.metadata;
 
-    if (!agencyId || !packId || !nombreCredits) {
+    if (!packId || !nombreCredits) {
       console.error('Métadonnées manquantes dans la session Stripe');
-      return;
-    }
-
-    // Récupérer l'agence
-    const agency = await Agency.findById(agencyId);
-
-    if (!agency) {
-      console.error('Agence introuvable:', agencyId);
       return;
     }
 
@@ -177,6 +247,42 @@ exports.handlePaymentSuccess = async (session) => {
 
     if (!pack) {
       console.error('Pack introuvable:', packId);
+      return;
+    }
+
+    // 🔹 Si c'est un achat Admin
+    if (type === 'credit_pack_purchase_admin' && adminId) {
+      const admin = await Admin.findById(adminId);
+
+      if (!admin) {
+        console.error('Admin introuvable:', adminId);
+        return;
+      }
+
+      // Ajouter les crédits à l'admin
+      await admin.ajouterCreditsIA({
+        type: 'achat',
+        nombreCredits: parseInt(nombreCredits, 10),
+        description: `Achat du pack "${pack.nom}"`,
+        packAchete: packId,
+        stripePaymentId: session.payment_intent,
+        par: 'stripe'
+      });
+
+      console.log(`✅ ${nombreCredits} crédits ajoutés à l'admin ${admin.email}`);
+      return;
+    }
+
+    // 🔹 Sinon, c'est un achat Agence
+    if (!agencyId) {
+      console.error('Ni agencyId ni adminId trouvé dans les métadonnées');
+      return;
+    }
+
+    const agency = await Agency.findById(agencyId);
+
+    if (!agency) {
+      console.error('Agence introuvable:', agencyId);
       return;
     }
 
@@ -198,47 +304,80 @@ exports.handlePaymentSuccess = async (session) => {
 };
 
 /**
- * 🎁 Ajouter des crédits manuellement (admin only)
+ * 🎁 Ajouter des crédits manuellement (super admin only)
  */
 exports.addCreditsManually = async (req, res) => {
   try {
-    const { agencyId, nombreCredits, description } = req.body;
+    const { agencyId, adminId, nombreCredits, description } = req.body;
 
     // Vérifier que c'est un super admin
-    if (req.role !== 'super_admin') {
+    if (req.user?.role !== 'super_admin') {
       return res.status(403).json({
         success: false,
         message: 'Accès refusé. Super admin requis.'
       });
     }
 
-    if (!agencyId || !nombreCredits) {
+    if (!nombreCredits) {
       return res.status(400).json({
         success: false,
-        message: 'ID agence et nombre de crédits requis'
+        message: 'Nombre de crédits requis'
       });
     }
 
-    const agency = await Agency.findById(agencyId);
+    // 🔹 Si on ajoute des crédits à un Admin
+    if (adminId) {
+      const admin = await Admin.findById(adminId);
 
-    if (!agency) {
-      return res.status(404).json({
-        success: false,
-        message: 'Agence introuvable'
+      if (!admin) {
+        return res.status(404).json({
+          success: false,
+          message: 'Admin introuvable'
+        });
+      }
+
+      await admin.ajouterCreditsIA({
+        type: 'cadeau',
+        nombreCredits: parseInt(nombreCredits, 10),
+        description: description || 'Crédits ajoutés manuellement par le super admin',
+        par: req.user?.email || 'super_admin'
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `${nombreCredits} crédits ajoutés avec succès à l'admin`,
+        nouveauSolde: admin.creditsIA
       });
     }
 
-    await agency.ajouterCreditsIA({
-      type: 'cadeau',
-      nombreCredits: parseInt(nombreCredits, 10),
-      description: description || 'Crédits ajoutés manuellement par un administrateur',
-      par: req.agence?.admin?.email || 'admin'
-    });
+    // 🔹 Si on ajoute des crédits à une Agence
+    if (agencyId) {
+      const agency = await Agency.findById(agencyId);
 
-    return res.status(200).json({
-      success: true,
-      message: `${nombreCredits} crédits ajoutés avec succès`,
-      nouveauSolde: agency.creditsIA
+      if (!agency) {
+        return res.status(404).json({
+          success: false,
+          message: 'Agence introuvable'
+        });
+      }
+
+      await agency.ajouterCreditsIA({
+        type: 'cadeau',
+        nombreCredits: parseInt(nombreCredits, 10),
+        description: description || 'Crédits ajoutés manuellement par le super admin',
+        par: req.user?.email || 'super_admin'
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: `${nombreCredits} crédits ajoutés avec succès à l'agence`,
+        nouveauSolde: agency.creditsIA
+      });
+    }
+
+    return res.status(400).json({
+      success: false,
+      message: 'adminId ou agencyId requis'
     });
   } catch (err) {
     console.error('Erreur addCreditsManually:', err);

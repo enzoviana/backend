@@ -36,6 +36,24 @@ const CompanySchema = new Schema({
 }, { _id: false });
 
 /**
+ * Schéma pour l'historique des crédits IA
+ */
+const CreditsHistoriqueSchema = new Schema({
+  type: {
+    type: String,
+    enum: ['achat', 'utilisation', 'ajustement', 'cadeau'],
+    required: true
+  },
+  nombreCredits: { type: Number, required: true },
+  description: { type: String, default: '' },
+  packAchete: { type: Schema.Types.ObjectId, ref: 'CreditPack', default: null },
+  stripePaymentId: { type: String, default: null },
+  devisGenere: { type: Schema.Types.ObjectId, ref: 'Devis', default: null },
+  par: { type: String, default: 'système' },
+  date: { type: Date, default: Date.now }
+}, { _id: false });
+
+/**
  * Schéma Admin
  */
 const AdminSchema = new Schema({
@@ -57,7 +75,6 @@ const AdminSchema = new Schema({
   telephone: {
     type: String,
     trim: true
-    // Option: ajouter validate: { validator: v => /.../.test(v) } si tu veux
   },
 
   // OPTION A: entreprise embarquée (sous-document)
@@ -69,9 +86,22 @@ const AdminSchema = new Schema({
   // champs utiles supplémentaires
   role: { type: String, default: 'admin' },
   isActive: { type: Boolean, default: true },
-    // 🔹 Champs pour la réinitialisation du mot de passe
+
+  // 🔹 Champs pour la réinitialisation du mot de passe
   resetPasswordToken: { type: String, default: null },
-  resetPasswordExpires: { type: Date, default: null }
+  resetPasswordExpires: { type: Date, default: null },
+
+  // 🤖 Crédits IA pour la génération de devis
+  creditsIA: {
+    type: Number,
+    default: 0,
+    min: 0
+  },
+
+  historiqueCreditsIA: {
+    type: [CreditsHistoriqueSchema],
+    default: []
+  }
 }, 
 
 {
@@ -91,6 +121,57 @@ AdminSchema.pre('save', function(next) {
 // Exemple de méthode d'instance
 AdminSchema.methods.displayName = function() {
   return `${this.prenom} ${this.nom}`;
+};
+
+/**
+ * 🔹 Méthode pour gérer les crédits IA
+ */
+AdminSchema.methods.ajouterCreditsIA = async function({
+  type,
+  nombreCredits,
+  description,
+  packAchete = null,
+  stripePaymentId = null,
+  devisGenere = null,
+  par = 'système'
+}) {
+  try {
+    if (!nombreCredits || isNaN(nombreCredits)) {
+      throw new Error("Nombre de crédits invalide");
+    }
+
+    // Ajouter à l'historique
+    this.historiqueCreditsIA.push({
+      type,
+      nombreCredits,
+      description,
+      packAchete,
+      stripePaymentId,
+      devisGenere,
+      par,
+      date: new Date()
+    });
+
+    // Mettre à jour le solde selon le type
+    if (type === 'achat' || type === 'cadeau' || type === 'ajustement') {
+      this.creditsIA += Math.abs(nombreCredits);
+    } else if (type === 'utilisation') {
+      this.creditsIA = Math.max(0, this.creditsIA - Math.abs(nombreCredits));
+    }
+
+    await this.save();
+    return this;
+  } catch (error) {
+    console.error("Erreur ajouterCreditsIA:", error);
+    throw error;
+  }
+};
+
+/**
+ * 🔹 Méthode pour vérifier si l'admin a assez de crédits
+ */
+AdminSchema.methods.aAssezDeCredits = function(nombreRequis = 1) {
+  return this.creditsIA >= nombreRequis;
 };
 
 module.exports = mongoose.model('Admin', AdminSchema);
