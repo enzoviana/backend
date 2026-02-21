@@ -43,6 +43,18 @@ const ContratTransfertSchema = new Schema({
   codeVerifie: { type: Boolean, default: false },
   dateCodeVerifie: Date,
 
+  // 💳 Informations Stripe pour l'abonnement
+  stripeSubscriptionId: { type: String, default: null },
+  stripeCustomerId: { type: String, default: null },
+  statutPaiement: {
+    type: String,
+    enum: ['en_attente', 'actif', 'suspendu', 'annule'],
+    default: 'en_attente'
+  },
+  dateDebutAbonnement: { type: Date, default: null },
+  dateFinEngagement: { type: Date, default: null }, // Engagement 1 an
+  dateProchaineFacture: { type: Date, default: null },
+
   // 🔒 Informations légales obligatoires (France - Article 1316-1 du Code civil)
   informationsLegales: {
     ipSignature: String,

@@ -136,6 +136,8 @@ router.post('/contrat/envoyer-code', authMiddleware, contratController.envoyerCo
 router.post('/contrat/signer', authMiddleware, contratController.signerContrat);
 router.get('/contrat/details', authMiddleware, contratController.getDetails);
 router.put('/contrat/changer-pack', authMiddleware, contratController.changerPack);
+router.post('/contrat/creer-abonnement', authMiddleware, contratController.creerAbonnementStripe);
+router.get('/contrat/telecharger-pdf', authMiddleware, contratController.telechargerPDF);
 
 // ---------------------- DIAGNOSTIQUEURS ----------------------
 

@@ -127,6 +127,14 @@ async function handleCheckoutCompleted(session) {
       return;
     }
 
+    // Vérifier si c'est un abonnement de contrat de maintenance
+    if (session.metadata && session.metadata.type === 'contrat_maintenance') {
+      console.log('📄 Traitement abonnement contrat de maintenance');
+      const contratController = require('../controllers/contratController');
+      await contratController.handleContratStripeWebhook(session);
+      return;
+    }
+
     // Sinon, c'est un abonnement diagnostiqueur
     const diagnostiqueurId = session.metadata.diagnostiqueurId;
     const subscriptionId = session.subscription;

@@ -2,6 +2,10 @@
 const ContratTransfert = require('../models/ContratTransfert');
 const Admin = require('../models/Admin');
 const sendEmail = require('../utils/sendEmails');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const puppeteer = require('puppeteer');
+const fs = require('fs');
+const path = require('path');
 
 // Définition des packs de maintenance
 const PACKS_MAINTENANCE = {
@@ -378,11 +382,158 @@ exports.getDetails = async (req, res) => {
   }
 };
 
+// POST /api/admin/contrat/creer-abonnement
+// Crée une souscription Stripe pour le contrat signé
+exports.creerAbonnementStripe = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const contrat = await ContratTransfert.findOne({ adminId });
+    if (!contrat || !contrat.isValide) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun contrat signé trouvé'
+      });
+    }
+
+    // Si l'abonnement existe déjà
+    if (contrat.stripeSubscriptionId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Un abonnement existe déjà pour ce contrat'
+      });
+    }
+
+    // Si pas de maintenance, pas de paiement
+    if (contrat.packMaintenance === 'aucun') {
+      return res.status(400).json({
+        success: false,
+        message: 'Aucun paiement requis pour le pack sans maintenance'
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Administrateur introuvable'
+      });
+    }
+
+    // Créer ou récupérer le customer Stripe
+    let customerId = contrat.stripeCustomerId;
+    if (!customerId) {
+      const customer = await stripe.customers.create({
+        email: admin.email,
+        name: `${admin.prenom} ${admin.nom}`,
+        metadata: {
+          adminId: adminId.toString(),
+          entreprise: admin.entreprise?.name || 'Non spécifié'
+        }
+      });
+      customerId = customer.id;
+      contrat.stripeCustomerId = customerId;
+    }
+
+    // Créer la session Stripe Checkout
+    const session = await stripe.checkout.sessions.create({
+      customer: customerId,
+      payment_method_types: ['card'],
+      mode: 'subscription',
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: contrat.detailsPack.nom,
+              description: `Abonnement de maintenance Dimotec - Engagement 1 an`,
+            },
+            unit_amount: contrat.detailsPack.prixMensuel * 100, // En centimes
+            recurring: {
+              interval: 'month',
+            },
+          },
+          quantity: 1,
+        },
+      ],
+      subscription_data: {
+        metadata: {
+          adminId: adminId.toString(),
+          contratId: contrat._id.toString(),
+          packMaintenance: contrat.packMaintenance
+        }
+      },
+      metadata: {
+        adminId: adminId.toString(),
+        contratId: contrat._id.toString(),
+        type: 'contrat_maintenance'
+      },
+      success_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?tab=contrat&payment=success`,
+      cancel_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?tab=contrat&payment=cancelled`,
+    });
+
+    await contrat.save();
+
+    res.json({
+      success: true,
+      sessionUrl: session.url,
+      sessionId: session.id
+    });
+
+  } catch (error) {
+    console.error('Erreur creerAbonnementStripe:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la création de l\'abonnement'
+    });
+  }
+};
+
+// Webhook handler pour les événements Stripe de contrat
+exports.handleContratStripeWebhook = async (session) => {
+  try {
+    const { adminId, contratId } = session.metadata;
+
+    if (!adminId || !contratId) {
+      console.error('Métadonnées manquantes dans le webhook Stripe');
+      return;
+    }
+
+    const contrat = await ContratTransfert.findById(contratId);
+    if (!contrat) {
+      console.error('Contrat introuvable:', contratId);
+      return;
+    }
+
+    // Récupérer l'abonnement Stripe
+    const subscription = await stripe.subscriptions.retrieve(session.subscription);
+
+    // Mettre à jour le contrat
+    contrat.stripeSubscriptionId = subscription.id;
+    contrat.statutPaiement = 'actif';
+    contrat.dateDebutAbonnement = new Date(subscription.current_period_start * 1000);
+    contrat.dateProchaineFacture = new Date(subscription.current_period_end * 1000);
+
+    // Engagement 1 an à partir de la date de début
+    const dateFinEngagement = new Date(subscription.current_period_start * 1000);
+    dateFinEngagement.setFullYear(dateFinEngagement.getFullYear() + 1);
+    contrat.dateFinEngagement = dateFinEngagement;
+
+    await contrat.save();
+
+    console.log(`✅ Abonnement Stripe activé pour le contrat ${contratId}`);
+
+  } catch (error) {
+    console.error('Erreur handleContratStripeWebhook:', error);
+    throw error;
+  }
+};
+
 // PUT /api/admin/contrat/changer-pack
-// Permet de changer de pack après signature (passage au tarif normal)
+// Permet de changer de pack après signature (UPGRADE uniquement)
 exports.changerPack = async (req, res) => {
   try {
-    const adminId = req.user.id; 
+    const adminId = req.user.id;
     const { nouveauPack } = req.body;
 
     if (!['serenite', 'evolution', 'aucun'].includes(nouveauPack)) {
@@ -401,7 +552,19 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    // Changement de pack = perte du tarif préférentiel
+    // 🚫 Empêcher le DOWNGRADE
+    const hierarchie = { 'aucun': 0, 'serenite': 1, 'evolution': 2 };
+    const packActuel = hierarchie[contrat.packMaintenance];
+    const nouveauPackNiveau = hierarchie[nouveauPack];
+
+    if (nouveauPackNiveau < packActuel) {
+      return res.status(400).json({
+        success: false,
+        message: 'Vous ne pouvez pas rétrograder vers un pack inférieur. Contactez le support pour une résiliation.'
+      });
+    }
+
+    // ✅ Changement de pack = perte du tarif préférentiel
     contrat.packMaintenance = nouveauPack;
     contrat.tarifPreferentiel = false;
 
@@ -412,12 +575,41 @@ exports.changerPack = async (req, res) => {
       fonctionnalites: packDetails.fonctionnalites
     };
 
+    // Mettre à jour l'abonnement Stripe si actif
+    if (contrat.stripeSubscriptionId && nouveauPack !== 'aucun') {
+      try {
+        const subscription = await stripe.subscriptions.retrieve(contrat.stripeSubscriptionId);
+
+        // Mettre à jour le montant de l'abonnement
+        await stripe.subscriptions.update(contrat.stripeSubscriptionId, {
+          items: [{
+            id: subscription.items.data[0].id,
+            price_data: {
+              currency: 'eur',
+              product_data: {
+                name: packDetails.nom,
+                description: 'Abonnement de maintenance Dimotec - Engagement 1 an',
+              },
+              unit_amount: packDetails.prixMensuelNormal * 100,
+              recurring: {
+                interval: 'month',
+              },
+            },
+          }],
+          proration_behavior: 'create_prorations'
+        });
+      } catch (stripeError) {
+        console.error('Erreur mise à jour Stripe:', stripeError);
+      }
+    }
+
     await contrat.save();
 
     res.json({
       success: true,
       message: 'Pack de maintenance modifié avec succès',
-      nouveauPack: contrat.detailsPack
+      nouveauPack: contrat.detailsPack,
+      avertissement: 'Le tarif préférentiel a été perdu. Nouveau tarif: ' + contrat.detailsPack.prixMensuel + '€/mois'
     });
 
   } catch (error) {
@@ -425,6 +617,136 @@ exports.changerPack = async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Erreur lors du changement de pack'
+    });
+  }
+};
+
+// GET /api/admin/contrat/telecharger-pdf
+// Génère et télécharge le PDF du contrat signé
+exports.telechargerPDF = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const contrat = await ContratTransfert.findOne({ adminId }).populate('adminId', 'nom prenom email telephone entreprise');
+
+    if (!contrat || !contrat.isValide) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun contrat signé trouvé'
+      });
+    }
+
+    // Générer le HTML du contrat
+    const html = `
+    <!DOCTYPE html>
+    <html lang="fr">
+    <head>
+      <meta charset="UTF-8">
+      <style>
+        body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
+        .header { text-align: center; border-bottom: 3px solid #ed891a; padding-bottom: 20px; margin-bottom: 30px; }
+        .header h1 { color: #ed891a; margin: 0; }
+        .section { margin-bottom: 25px; }
+        .section h2 { color: #ed891a; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+        .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
+        .info-table td { padding: 8px; border: 1px solid #ddd; }
+        .info-table td:first-child { font-weight: bold; background: #f8f9fa; width: 30%; }
+        .signature-box { border: 2px solid #ed891a; padding: 15px; margin-top: 30px; background: #fff3e0; }
+        .signature-img { max-width: 300px; height: auto; border: 1px solid #ddd; background: white; padding: 10px; }
+        .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #666; border-top: 1px solid #ddd; padding-top: 20px; }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <h1>CONTRAT DE TRANSFERT ET LIVRAISON</h1>
+        <p><strong>Application Web Dimotec</strong></p>
+        <p>Contrat n° ${contrat._id}</p>
+      </div>
+
+      <div class="section">
+        <h2>1. Informations du Contractant</h2>
+        <table class="info-table">
+          <tr><td>Nom complet</td><td>${contrat.signature.prenom} ${contrat.signature.nom}</td></tr>
+          <tr><td>Email</td><td>${contrat.adminId.email}</td></tr>
+          <tr><td>Téléphone</td><td>${contrat.informationsLegales?.telephoneContact || 'Non renseigné'}</td></tr>
+          <tr><td>Entreprise</td><td>${contrat.adminId.entreprise?.name || 'Non spécifié'}</td></tr>
+          <tr><td>Adresse</td><td>${contrat.informationsLegales?.adresseComplete || 'Non renseigné'}</td></tr>
+        </table>
+      </div>
+
+      <div class="section">
+        <h2>2. Pack de Maintenance Sélectionné</h2>
+        <table class="info-table">
+          <tr><td>Offre choisie</td><td><strong>${contrat.detailsPack.nom}</strong></td></tr>
+          <tr><td>Tarif mensuel</td><td><strong>${contrat.detailsPack.prixMensuel}€ HT / mois</strong></td></tr>
+          <tr><td>Engagement</td><td>12 mois - Préavis de résiliation: 1 mois</td></tr>
+        </table>
+
+        <p><strong>Fonctionnalités incluses:</strong></p>
+        <ul>
+          ${contrat.detailsPack.fonctionnalites.map(f => `<li>${f}</li>`).join('')}
+        </ul>
+      </div>
+
+      <div class="section">
+        <h2>3. Informations de Signature</h2>
+        <table class="info-table">
+          <tr><td>Date de signature</td><td>${new Date(contrat.dateSignature).toLocaleString('fr-FR')}</td></tr>
+          <tr><td>Adresse IP</td><td>${contrat.informationsLegales?.ipSignature || 'N/A'}</td></tr>
+          <tr><td>Navigateur</td><td>${contrat.informationsLegales?.navigateur || 'N/A'}</td></tr>
+          <tr><td>Système d'exploitation</td><td>${contrat.informationsLegales?.systemeExploitation || 'N/A'}</td></tr>
+          <tr><td>Horodatage complet</td><td>${new Date(contrat.informationsLegales?.horodatageComplet).toLocaleString('fr-FR')}</td></tr>
+        </table>
+      </div>
+
+      <div class="signature-box">
+        <p><strong>Signature électronique manuscrite:</strong></p>
+        ${contrat.signature.signatureCanvas ? `<img src="${contrat.signature.signatureCanvas}" class="signature-img" alt="Signature" />` : '<p>Signature non disponible</p>'}
+        <p style="margin-top: 15px;"><em>Je soussigné(e) ${contrat.signature.prenom} ${contrat.signature.nom}, certifie avoir lu et accepté les conditions générales du présent contrat.</em></p>
+      </div>
+
+      <div class="section" style="margin-top: 30px;">
+        <h2>4. Conditions Générales</h2>
+        <p><strong>Garantie technique:</strong> 3 mois à compter de la signature initiale.</p>
+        <p><strong>Propriété intellectuelle:</strong> DATAFUSE reste propriétaire du moteur logiciel. Le Client bénéficie d'un droit d'usage exclusif.</p>
+        <p><strong>Données:</strong> Les données restent la propriété exclusive du Client.</p>
+        <p><strong>Engagement:</strong> Durée de 12 mois avec reconduction tacite. Résiliation sur préavis d'1 mois.</p>
+        <p><strong>Droit applicable:</strong> Droit français - Tribunal de Commerce de Paris.</p>
+      </div>
+
+      <div class="footer">
+        <p>Document généré le ${new Date().toLocaleDateString('fr-FR')} - Contrat légalement valide</p>
+        <p><strong>DATAFUSE</strong> - Service Dimotec</p>
+        <p>Version du contrat: ${contrat.versionContrat}</p>
+      </div>
+    </body>
+    </html>
+    `;
+
+    // Générer le PDF avec puppeteer
+    const browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    });
+    const page = await browser.newPage();
+    await page.setContent(html, { waitUntil: 'networkidle0' });
+    const pdfBuffer = await page.pdf({
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
+    });
+    await browser.close();
+
+    // Envoyer le PDF
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Contrat_Dimotec_${contrat._id}.pdf"`);
+    res.send(pdfBuffer);
+
+  } catch (error) {
+    console.error('Erreur telechargerPDF:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la génération du PDF'
     });
   }
 };
