@@ -426,7 +426,15 @@ exports.generateDevisAI = async (req, res) => {
 
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // 4. APPEL UNIQUE OPENAI : Extraction Client + Analyse Technique
+    // 4. Pré-récupération des suppléments disponibles pour guider l'IA
+    const supplementsMaison = await Supplement.find({ typeBien: "maison" });
+    const supplementsAppartement = await Supplement.find({ typeBien: "appartement" });
+    const tousSupplements = [...supplementsMaison, ...supplementsAppartement];
+    const nomsSupplementsUniques = [...new Set(tousSupplements.map(s => s.nom))];
+
+    console.log("🗄️ Suppléments disponibles en base:", nomsSupplementsUniques);
+
+    // 5. APPEL UNIQUE OPENAI : Extraction Client + Analyse Technique
     let installationGaz = data.installationGaz || false;
     let copropriete = data.copropriete || false;
     let diagnosticsSpecifiques = [];
@@ -462,25 +470,30 @@ exports.generateDevisAI = async (req, res) => {
           IMPORTANT : Retourne les noms EXACTS tels qu'ils apparaissent dans cette liste.
         - Installation gaz : true si le message mentionne "gaz", "installation gaz", "chauffage gaz", etc.
         - Copropriété : true si le message mentionne "copropriété", "copro", etc.
-        - Suppléments : DÉTECTE ET LISTE TOUS les suppléments mentionnés dans le prompt. Analyse ATTENTIVEMENT toutes les variations de formulation ET les mots composés :
-          * CAVE : "cave", "une cave", "avec cave", "avec une cave", "présence de cave", "il y a une cave", "possède une cave", "comporte une cave" → ajoute "Cave"
-          * GARAGE : "garage", "un garage", "avec garage", "avec un garage", "présence de garage", "il y a un garage", "possède un garage", "box garage" → ajoute "Garage"
-          * PARKING : "parking", "place de parking", "avec parking", "stationnement", "place de stationnement", "box" → ajoute "Parking"
-          * JARDIN : "jardin", "un jardin", "avec jardin", "espace extérieur", "terrain", "espace vert" → ajoute "Jardin"
-          * TERRASSE : "terrasse", "une terrasse", "avec terrasse", "balcon" → ajoute "Terrasse"
-          * PISCINE : "piscine", "une piscine", "avec piscine", "local piscine", "local technique piscine" → ajoute "Piscine"
-          * DÉPENDANCE : "dépendance", "annexe", "bâtiment annexe", "construction annexe" → ajoute "Dépendance"
-          * LOCAL : "local", "local technique" → ajoute "Local"
 
-          ATTENTION : Si tu vois "local piscine", retourne ["Local", "Piscine"] (les DEUX suppléments)
-          Si tu vois "box garage", retourne ["Garage"]
+        - Suppléments : TRÈS IMPORTANT - DÉTECTE ET SÉLECTIONNE les suppléments mentionnés dans le prompt en utilisant UNIQUEMENT les NOMS EXACTS de cette liste :
 
-          RETOURNE les noms normalisés possibles : ["Cave", "Garage", "Parking", "Jardin", "Terrasse", "Piscine", "Dépendance", "Local"]
+          SUPPLÉMENTS DISPONIBLES EN BASE :
+          ${JSON.stringify(nomsSupplementsUniques)}
 
-          EXEMPLES :
-          - "maison avec un garage et une cave" → supplements_demandes: ["Garage", "Cave"]
-          - "bien avec local piscine" → supplements_demandes: ["Local Piscine"]
-          - "appartement avec parking et terrasse" → supplements_demandes: ["Parking", "Terrasse"]
+          RÈGLES D'EXTRACTION :
+          1. Analyse le prompt pour détecter les mots-clés : cave, garage, parking, jardin, terrasse, piscine, local, dépendance, box, annexe, etc.
+          2. Pour chaque mot-clé détecté, cherche le supplément correspondant DANS LA LISTE CI-DESSUS
+          3. Retourne le NOM EXACT tel qu'il apparaît dans la liste (respecte la casse et les espaces)
+          4. Si "local piscine" est mentionné :
+             - ET que "Local Piscine" (avec espace) existe dans la liste → retourne ["Local Piscine"]
+             - MAIS que seuls "Local" et "Piscine" existent séparément → retourne ["Local", "Piscine"]
+          5. Ne retourne QUE des noms qui existent dans la liste ci-dessus
+
+          EXEMPLES AVEC LISTE :
+          - Prompt: "maison avec garage et cave" + Liste: ["Cave", "Garage", "Parking"]
+            → supplements_demandes: ["Garage", "Cave"]
+
+          - Prompt: "bien avec local piscine" + Liste: ["Cave", "Local Piscine", "Garage"]
+            → supplements_demandes: ["Local Piscine"]
+
+          - Prompt: "bien avec local piscine" + Liste: ["Cave", "Local", "Piscine", "Garage"]
+            → supplements_demandes: ["Local", "Piscine"]
 
         RETOURNE UNIQUEMENT CE JSON :
         {
@@ -658,40 +671,42 @@ exports.generateDevisAI = async (req, res) => {
     console.log("🗄️ Suppléments disponibles en base:", supplements.map(s => s.nom));
 
     supplements = supplements.map(s => {
-      const nomSupplementBase = s.nom.toLowerCase();
+      const nomSupplementBase = s.nom.toLowerCase().trim();
 
       const isSelected = supplementsSpecifiques.length > 0 && supplementsSpecifiques.some(nomIA => {
-        const nomIALower = nomIA.toLowerCase();
+        const nomIALower = nomIA.toLowerCase().trim();
 
-        // Match exact ou inclusion
-        if (nomSupplementBase.includes(nomIALower) || nomIALower.includes(nomSupplementBase)) {
+        // 1. MATCH EXACT (priorité absolue)
+        if (nomSupplementBase === nomIALower) {
+          console.log(`✅ MATCH EXACT: "${s.nom}" === "${nomIA}"`);
           return true;
         }
 
-        // Match par mots individuels pour gérer "Local piscine" vs "Piscine"
+        // 2. MATCH par inclusion complète
+        // "Local Piscine" contient "piscine" OU "piscine" contient "Local Piscine"
+        if (nomSupplementBase.includes(nomIALower) || nomIALower.includes(nomSupplementBase)) {
+          console.log(`✅ MATCH INCLUSION: "${s.nom}" inclut "${nomIA}"`);
+          return true;
+        }
+
+        // 3. MATCH par mots individuels (pour compatibilité avec noms composés)
+        // Si "Local Piscine" en base et IA retourne ["Piscine"] séparément
         const motsBase = nomSupplementBase.split(/\s+/);
         const motsIA = nomIALower.split(/\s+/);
 
-        // Si un mot de l'IA correspond à un mot du supplément en base
-        return motsIA.some(motIA => motsBase.some(motBase =>
+        const matchMots = motsIA.some(motIA => motsBase.some(motBase =>
           motBase.includes(motIA) || motIA.includes(motBase)
         ));
+
+        if (matchMots) {
+          console.log(`✅ MATCH PAR MOTS: "${s.nom}" contient un mot de "${nomIA}"`);
+        }
+
+        return matchMots;
       });
 
-      if (isSelected) {
-        console.log(`✅ Supplément "${s.nom}" coché car correspond à:`, supplementsSpecifiques.filter(nomIA => {
-          const nomIALower = nomIA.toLowerCase();
-          if (nomSupplementBase.includes(nomIALower) || nomIALower.includes(nomSupplementBase)) {
-            return true;
-          }
-          const motsBase = nomSupplementBase.split(/\s+/);
-          const motsIA = nomIALower.split(/\s+/);
-          return motsIA.some(motIA => motsBase.some(motBase =>
-            motBase.includes(motIA) || motIA.includes(motBase)
-          ));
-        }));
-      } else {
-        console.log(`❌ Supplément "${s.nom}" NON coché - ne correspond à aucun mot-clé IA`);
+      if (!isSelected) {
+        console.log(`❌ Supplément "${s.nom}" NON sélectionné`);
       }
 
       return {
