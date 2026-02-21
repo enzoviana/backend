@@ -427,33 +427,57 @@ exports.generateDevisAI = async (req, res) => {
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
     // 4. APPEL UNIQUE OPENAI : Extraction Client + Analyse Technique
+    let installationGaz = data.installationGaz || false;
+    let copropriete = data.copropriete || false;
+    let diagnosticsSpecifiques = [];
+    let supplementsSpecifiques = [];
+
     if (prompt) {
       console.log("📝 Analyse du prompt par l'IA...");
       const extractionPrompt = `
         Tu es un expert en immobilier français. Analyse ce message : "${prompt}"
-        
-        Extraits les informations de manière structurée.
-        Pour la transaction, choisis entre "vente" ou "location".
-        Pour le type de bien, choisis "appartement" ou "maison".
-        Pour l'année, si une année est mentionnée, détermine la tranche : 
-        - avant 1949 -> "avant_1949"
-        - 1949 à 1997 -> "1949_1997"
-        - 1998 à 2012 -> "1juillet1997_plus15"
-        - après 2012 -> "moins_15"
 
-        RETOURNE UNIQUEMENT UN JSON :
+        Extraits TOUTES les informations de manière structurée.
+
+        RÈGLES IMPORTANTES :
+        - Transaction : "vente" ou "location"
+        - Type de bien : "appartement" ou "maison"
+        - Année de construction → tranche :
+          * avant 1949 → "avant_1949"
+          * 1949 à 1997 → "1949_1997"
+          * 1998 à 2012 → "1juillet1997_plus15"
+          * après 2012 → "moins_15"
+        - Surface : extrais le nombre en m2 (ex: "120m2" → "120")
+        - Pour appartement, extrais le type si mentionné (ex: "T2", "T3", "F2")
+        - ProductMode : si le message mentionne explicitement des diagnostics spécifiques (DPE, Amiante, Plomb, Termites, Gaz, Électricité, ERP, ERNMT), retourne "diagnostic". Sinon "pack".
+        - Diagnostics demandés : liste les noms exacts des diagnostics mentionnés (ex: ["ERP", "Termites"])
+        - Installation gaz : true si le message mentionne "gaz", "installation gaz", "chauffage gaz", etc.
+        - Copropriété : true si le message mentionne "copropriété", "copro", etc.
+        - Suppléments : liste les suppléments mentionnés (cave, garage, parking, jardin, terrasse, etc.)
+
+        RETOURNE UNIQUEMENT CE JSON :
         {
-          "client": { "nom": "", "prenom": "", "email": "", "tel": "" },
-          "bien": { 
-            "type": "", 
-            "transaction": "", 
-            "annee_tranche": "", 
-            "adresse": "", 
-            "cp": "", 
-            "ville": "",
-            "surface_type": "" 
+          "client": {
+            "nom": "",
+            "prenom": "",
+            "email": "",
+            "tel": ""
           },
-          "productMode": "pack"
+          "bien": {
+            "type": "",
+            "transaction": "",
+            "annee_tranche": "",
+            "adresse": "",
+            "cp": "",
+            "ville": "",
+            "surface_m2": "",
+            "surface_type": "",
+            "installation_gaz": false,
+            "copropriete": false
+          },
+          "productMode": "pack",
+          "diagnostics_demandes": [],
+          "supplements_demandes": []
         }
       `;
 
@@ -465,7 +489,8 @@ exports.generateDevisAI = async (req, res) => {
       });
 
       const extracted = JSON.parse(completion.choices[0].message.content);
-      
+      console.log("🤖 Extraction IA:", extracted);
+
       // Mise à jour des données avec l'extraction IA
       clientInfo = { ...clientInfo, ...extracted.client };
       bien.bien = extracted.bien.type || "appartement";
@@ -476,34 +501,102 @@ exports.generateDevisAI = async (req, res) => {
         codePostal: extracted.bien.cp || "",
         ville: extracted.bien.ville || ""
       };
-      bien.surfaceAppartement = extracted.bien.surface_type || "";
+
+      // Gestion de la surface selon le type de bien
+      if (bien.bien === "appartement") {
+        bien.surfaceAppartement = extracted.bien.surface_type || "";
+      } else {
+        bien.surfaceMaison = extracted.bien.surface_m2 || "";
+      }
+
       productMode = extracted.productMode || "pack";
+      installationGaz = extracted.bien.installation_gaz || false;
+      copropriete = extracted.bien.copropriete || false;
+      diagnosticsSpecifiques = extracted.diagnostics_demandes || [];
+      supplementsSpecifiques = extracted.supplements_demandes || [];
+
+      console.log("📊 Mode produit:", productMode);
+      console.log("🔧 Installation gaz:", installationGaz);
+      console.log("🏢 Copropriété:", copropriete);
+      console.log("📋 Diagnostics demandés:", diagnosticsSpecifiques);
+      console.log("🏗️ Suppléments demandés:", supplementsSpecifiques);
     }
 
     // 5. Recherche en Base de Données (Packs & Diagnostics)
-    let packs = await Pack.find({ 
-      typeBien: bien.bien, 
-      trancheAnnee: trancheAnnee, 
-      typeOperation: bien.transaction 
+    let packs = await Pack.find({
+      typeBien: bien.bien,
+      trancheAnnee: trancheAnnee,
+      typeOperation: bien.transaction
     }).populate("diagnostics");
 
-    let diagnosticsFiltres = await Diagnostic.find({ 
-      typeBien: bien.bien, 
-      trancheAnnee: trancheAnnee, 
-      typeOperation: bien.transaction 
+    let diagnosticsFiltres = await Diagnostic.find({
+      typeBien: bien.bien,
+      trancheAnnee: trancheAnnee,
+      typeOperation: bien.transaction
     });
 
-    const supplements = await Supplement.find({ typeBien: bien.bien });
+    // Si des diagnostics spécifiques sont demandés, les filtrer
+    if (diagnosticsSpecifiques.length > 0 && productMode === "diagnostic") {
+      diagnosticsFiltres = diagnosticsFiltres.filter(d =>
+        diagnosticsSpecifiques.some(nom =>
+          d.nom.toLowerCase().includes(nom.toLowerCase()) ||
+          nom.toLowerCase().includes(d.nom.toLowerCase())
+        )
+      );
+      console.log("🎯 Diagnostics filtrés selon demande:", diagnosticsFiltres.map(d => d.nom));
+    }
+
+    // Ajouter diagnostic gaz si installation gaz détectée
+    if (installationGaz) {
+      const diagGaz = await Diagnostic.findOne({
+        typeBien: bien.bien,
+        nom: { $regex: /gaz/i }
+      });
+      if (diagGaz && !diagnosticsFiltres.find(d => d._id.equals(diagGaz._id))) {
+        diagnosticsFiltres.push(diagGaz);
+        console.log("⛽ Diagnostic gaz ajouté");
+      }
+    }
+
+    // Ajouter diagnostic copropriété si mentionné
+    if (copropriete) {
+      const diagCopro = await Diagnostic.findOne({
+        typeBien: bien.bien,
+        nom: { $regex: /copro|surface/i }
+      });
+      if (diagCopro && !diagnosticsFiltres.find(d => d._id.equals(diagCopro._id))) {
+        diagnosticsFiltres.push(diagCopro);
+        console.log("🏢 Diagnostic copropriété ajouté");
+      }
+    }
+
+    let supplements = await Supplement.find({ typeBien: bien.bien });
+
+    // Si des suppléments spécifiques sont demandés, les sélectionner
+    if (supplementsSpecifiques.length > 0) {
+      supplements = supplements.map(s => ({
+        ...s.toObject(),
+        selected: supplementsSpecifiques.some(nom =>
+          s.nom.toLowerCase().includes(nom.toLowerCase()) ||
+          nom.toLowerCase().includes(s.nom.toLowerCase())
+        )
+      }));
+      console.log("🏗️ Suppléments sélectionnés:", supplements.filter(s => s.selected).map(s => s.nom));
+    }
 
     // 6. DEUXIÈME APPEL : Recommandation de Devis (Le conseil métier)
     const conseilPrompt = `
       Basé sur un(e) ${bien.bien} de la période ${trancheAnnee} en ${bien.transaction}.
-      Packs dispo : ${packs.map(p => p.nom).join(", ")}
-      Diagnostics dispo : ${diagnosticsFiltres.map(d => d.nom).join(", ")}
-      Installation Gaz : ${data.installationGaz ? "OUI" : "NON"}
-      Copropriété : ${data.copropriete ? "OUI" : "NON"}
+      ${productMode === "pack" ? `Packs disponibles : ${packs.map(p => p.nom).join(", ")}` : ""}
+      ${productMode === "diagnostic" ? `Diagnostics sélectionnés : ${diagnosticsFiltres.map(d => d.nom).join(", ")}` : ""}
+      Installation Gaz : ${installationGaz ? "OUI" : "NON"}
+      Copropriété : ${copropriete ? "OUI" : "NON"}
+      ${supplementsSpecifiques.length > 0 ? `Suppléments demandés : ${supplementsSpecifiques.join(", ")}` : ""}
 
-      Rédige une recommandation courte pour le devis (Pack conseillé, pourquoi, et diagnostics obligatoires).
+      ${productMode === "pack"
+        ? "Rédige une recommandation courte expliquant pourquoi ce pack est adapté."
+        : "Rédige une recommandation courte expliquant pourquoi ces diagnostics sont nécessaires pour cette transaction."
+      }
     `;
 
     const recommandation = await openai.chat.completions.create({
@@ -531,20 +624,52 @@ exports.generateDevisAI = async (req, res) => {
       bien: {
         ...bien,
         trancheAnnee,
-        anneeConstruction: trancheAnnee
+        anneeConstruction: trancheAnnee,
+        gaz: installationGaz,
+        copropriete: copropriete
       },
-      packs: packs.map((p, index) => ({
-        ...p.toObject(),
-        selected: index === 0,
+      packs: productMode === "pack" ? packs.map((p, index) => ({
+        _id: p._id,
+        id: p._id,
+        nom: p.nom,
+        tarifs: p.tarifs || {},
+        tarifsParAppartement: p.tarifsParAppartement || [],
         tarif: bien.bien === "appartement" && p.tarifsParAppartement
           ? p.tarifsParAppartement.find(t => t.typeAppartement === bien.surfaceAppartement)?.tarifs || p.tarifs
-          : p.tarifs
-      })),
-      diagnostics: diagnosticsFiltres.map(d => ({
-        ...d.toObject(),
+          : p.tarifs,
+        diagnostics: p.diagnostics || [],
+        selected: index === 0
+      })) : [],
+      diagnostics: productMode === "diagnostic" ? diagnosticsFiltres.map(d => ({
+        _id: d._id,
+        id: d._id,
+        nom: d.nom,
+        prix: d.prix,
+        tarifs: d.tarifs || {},
         selected: true
-      })),
-      supplements: supplements.map(s => ({ ...s.toObject(), selected: false }))
+      })) : [],
+      supplements: Array.isArray(supplements) && supplements.length > 0
+        ? supplements.map(s => {
+            // Si le supplément a déjà une propriété selected (de la requête), la garder
+            if (typeof s.selected !== 'undefined') {
+              return {
+                _id: s._id,
+                id: s._id,
+                nom: s.nom,
+                tarifs: s.tarifs || {},
+                selected: s.selected
+              };
+            }
+            // Sinon, créer la structure
+            return {
+              _id: s._id,
+              id: s._id,
+              nom: s.nom,
+              tarifs: s.tarifs || {},
+              selected: false
+            };
+          })
+        : []
     };
 
     // 🤖 Déduction du crédit
