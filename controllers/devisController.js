@@ -541,7 +541,72 @@ exports.generateDevisAI = async (req, res) => {
     // Par défaut → PACK si rien détecté
     if (!productMode) productMode = "pack";
 
-    // Prompt OpenAI
+    // Initialiser OpenAI une seule fois
+    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+    // Extraire les informations du client depuis le prompt avec OpenAI
+    let clientInfo = {
+      nom: "",
+      prenom: "",
+      email: "",
+      tel: "",
+      adresse: bien.adresseBien?.adresse || "",
+      ville: bien.adresseBien?.ville || "",
+      codePostal: bien.adresseBien?.codePostal || ""
+    };
+
+    if (data.prompt) {
+      const extractionPrompt = `
+Extrait UNIQUEMENT les informations du client depuis ce texte :
+"${data.prompt}"
+
+Retourne un JSON avec ces champs (laisse vide "" si non trouvé) :
+{
+  "nom": "",
+  "prenom": "",
+  "email": "",
+  "tel": ""
+}
+`;
+
+      try {
+        const extractionCompletion = await openai.chat.completions.create({
+          model: "gpt-4",
+          messages: [{ role: "user", content: extractionPrompt }],
+          temperature: 0,
+        });
+
+        const extractedText = extractionCompletion.choices[0].message.content;
+        const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const extracted = JSON.parse(jsonMatch[0]);
+          clientInfo = { ...clientInfo, ...extracted };
+          console.log("✅ Informations client extraites :", clientInfo);
+        }
+      } catch (extractError) {
+        console.error("Erreur extraction client:", extractError);
+      }
+
+      // Vérifier si le client existe déjà dans la base
+      if (clientInfo.email) {
+        const existingClient = await Client.findOne({ email: clientInfo.email });
+        if (existingClient) {
+          console.log("✅ Client trouvé dans la base:", existingClient);
+          clientInfo = {
+            _id: existingClient._id,
+            nom: existingClient.nom,
+            prenom: existingClient.prenom,
+            email: existingClient.email,
+            tel: existingClient.tel,
+            adresse: existingClient.adresse || clientInfo.adresse,
+            ville: existingClient.ville || clientInfo.ville,
+            codePostal: existingClient.codePostal || clientInfo.codePostal
+          };
+        }
+      }
+    }
+
+    // Prompt OpenAI pour la recommandation de devis
     const promptOpenAI = `
 Tu es un assistant expert en devis immobiliers.
 Le bien est un(e) ${bien.bien}, tranche d'année ${trancheAnnee}.
@@ -551,7 +616,7 @@ Les packs disponibles sont : ${packs.map(p => p.nom).join(", ")}.
 Les diagnostics possibles sont : ${diagnosticsFiltres.map(d => d.nom).join(", ")}.
 Les suppléments possibles sont : ${supplements.map(s => s.nom).join(", ")}.
 
-Propose un devis recommandé en listant : 
+Propose un devis recommandé en listant :
 - Pack suggéré
 - Diagnostics nécessaires
 - Suppléments utiles
@@ -560,7 +625,6 @@ Propose un devis recommandé en listant :
 
     console.log("🤖 Prompt envoyé à OpenAI :", promptOpenAI);
 
-    const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [{ role: "user", content: promptOpenAI }],
@@ -575,15 +639,7 @@ Propose un devis recommandé en listant :
       message: "✅ Devis recommandé généré via AI",
       suggestion: aiResponse,
       productMode,
-      client: {
-        nom: data.client?.nom || "Jean",
-        prenom: data.client?.prenom || "Dupont",
-        email: data.client?.email || "jean.dupont@email.com",
-        tel: data.client?.tel || "0601020304",
-        adresse: data.client?.adresse || bien.adresseBien?.adresse || "",
-        ville: data.client?.ville || bien.adresseBien?.ville || "",
-        codePostal: data.client?.codePostal || bien.adresseBien?.codePostal || "",
-      },
+      client: clientInfo,
       bien: {
         bien: bien.bien,
         type: bien.type || "",
@@ -596,17 +652,24 @@ Propose un devis recommandé en listant :
         numeroFiscalBien: bien.numeroFiscalBien || "",
         note: ""
       },
-      packs: productMode === "pack" ? packs.map(p => ({
+      packs: productMode === "pack" ? packs.map((p, index) => ({
+        _id: p._id,
         id: p._id,
         nom: p.nom,
+        tarifs: p.tarifs || {},
+        tarifsParAppartement: p.tarifsParAppartement || [],
         tarif: bien.bien === "appartement" && p.tarifsParAppartement
           ? p.tarifsParAppartement.find(t => t.typeAppartement === bien.surfaceAppartement)?.tarifs || p.tarifs
           : p.tarifs,
-        selected: true
+        diagnostics: p.diagnostics || [],
+        selected: index === 0
       })) : [],
       diagnostics: productMode === "diagnostic" ? diagnosticsFiltres.map(d => ({
+        _id: d._id,
         id: d._id,
         nom: d.nom,
+        prix: d.prix,
+        tarifs: d.tarifs || {},
         selected: true
       })) : [],
       supplements: []
