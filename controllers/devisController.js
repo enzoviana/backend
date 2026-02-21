@@ -450,19 +450,28 @@ exports.generateDevisAI = async (req, res) => {
         - Surface : extrais le nombre en m2 (ex: "120m2" → "120")
         - Pour appartement, extrais le type si mentionné (ex: "T2", "T3", "F2")
         - ProductMode : si le message mentionne explicitement des diagnostics spécifiques (DPE, Amiante, Plomb, Termites, Gaz, Électricité, ERP, ERNMT), retourne "diagnostic". Sinon "pack".
-          ATTENTION : Ne retourne "diagnostic" que si des diagnostics SPÉCIFIQUES sont mentionnés. Ne pas inclure "DPE" ou "AUDIT DPE" sauf si explicitement demandé.
-        - Diagnostics demandés : liste UNIQUEMENT les noms exacts des diagnostics EXPLICITEMENT mentionnés (ex: ["ERP", "Termites"]). NE PAS inclure "DPE" ou "AUDIT" s'ils ne sont pas mentionnés.
+        - Diagnostics demandés : liste TOUS les diagnostics mentionnés dans le prompt avec leurs NOMS COMPLETS :
+          * Si "DPE" est mentionné → ajoute "DPE" (pas "AUDIT DPE")
+          * Si "Amiante" est mentionné → ajoute "Amiante"
+          * Si "ERP" est mentionné → ajoute "ERP"
+          * Si "Termites" est mentionné → ajoute "Termites"
+          * Si "Plomb" est mentionné → ajoute "Plomb"
+          * Si "Gaz" ou "Diagnostic Gaz" est mentionné → ajoute "Gaz"
+          * Si "Électricité" ou "Diagnostic Électricité" est mentionné → ajoute "Électricité"
+          * Si "ERNMT" est mentionné → ajoute "ERNMT"
+          IMPORTANT : Retourne les noms EXACTS tels qu'ils apparaissent dans cette liste.
         - Installation gaz : true si le message mentionne "gaz", "installation gaz", "chauffage gaz", etc.
         - Copropriété : true si le message mentionne "copropriété", "copro", etc.
-        - Suppléments : détecte TOUS les suppléments mentionnés avec leurs variations de langage :
-          * Cave : "cave", "avec une cave", "présence de cave", "il y a une cave", "possède une cave"
-          * Garage : "garage", "avec un garage", "présence de garage", "il y a un garage", "possède un garage"
-          * Parking : "parking", "avec parking", "place de parking", "stationnement"
-          * Jardin : "jardin", "avec jardin", "présence d'un jardin", "espace extérieur", "terrain"
-          * Terrasse : "terrasse", "avec terrasse", "présence d'une terrasse", "balcon"
-          * Piscine : "piscine", "avec piscine", "présence d'une piscine"
-          * Dépendance : "dépendance", "annexe", "bâtiment annexe"
-          Retourne la liste normalisée : ["Cave", "Garage", "Parking", "Jardin", "Terrasse", "Piscine", "Dépendance"]
+        - Suppléments : DÉTECTE ET LISTE TOUS les suppléments mentionnés dans le prompt. Analyse ATTENTIVEMENT toutes les variations de formulation :
+          * Si le prompt contient "cave", "une cave", "avec cave", "avec une cave", "présence de cave", "il y a une cave", "possède une cave", "comporte une cave" → ajoute "Cave"
+          * Si le prompt contient "garage", "un garage", "avec garage", "avec un garage", "présence de garage", "il y a un garage", "possède un garage" → ajoute "Garage"
+          * Si le prompt contient "parking", "place de parking", "avec parking", "stationnement", "place de stationnement" → ajoute "Parking"
+          * Si le prompt contient "jardin", "un jardin", "avec jardin", "espace extérieur", "terrain", "espace vert" → ajoute "Jardin"
+          * Si le prompt contient "terrasse", "une terrasse", "avec terrasse", "balcon" → ajoute "Terrasse"
+          * Si le prompt contient "piscine", "une piscine", "avec piscine" → ajoute "Piscine"
+          * Si le prompt contient "dépendance", "annexe", "bâtiment annexe", "construction annexe" → ajoute "Dépendance"
+          RETOURNE UNIQUEMENT les noms normalisés : ["Cave", "Garage", "Parking", "Jardin", "Terrasse", "Piscine", "Dépendance"]
+          EXEMPLE : "maison avec un garage et une cave" → supplements_demandes: ["Garage", "Cave"]
 
         RETOURNE UNIQUEMENT CE JSON :
         {
@@ -494,24 +503,36 @@ exports.generateDevisAI = async (req, res) => {
           → diagnostics_demandes: ["ERP", "Termites"]
           → supplements_demandes: ["Garage", "Cave"]
 
-        - Prompt: "Appartement T3 en vente, présence de parking et terrasse"
-          → diagnostics_demandes: []
+        - Prompt: "Appartement T3 en vente, présence de parking et terrasse, avec DPE"
+          → diagnostics_demandes: ["DPE"]
           → supplements_demandes: ["Parking", "Terrasse"]
 
-        - Prompt: "Maison avec jardin et piscine"
-          → diagnostics_demandes: []
+        - Prompt: "Maison avec jardin et piscine, diagnostics Plomb et Amiante"
+          → diagnostics_demandes: ["Plomb", "Amiante"]
           → supplements_demandes: ["Jardin", "Piscine"]
+
+        - Prompt: "Bien avec une cave"
+          → diagnostics_demandes: []
+          → supplements_demandes: ["Cave"]
       `;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4-turbo-preview",
-        messages: [{ role: "user", content: extractionPrompt }],
+        messages: [
+          {
+            role: "system",
+            content: "Tu es un assistant spécialisé dans l'extraction d'informations pour des devis immobiliers. Tu dois être EXTRÊMEMENT ATTENTIF aux détails suivants : diagnostics demandés, suppléments (cave, garage, parking, jardin, etc.). N'oublie JAMAIS de remplir les champs diagnostics_demandes et supplements_demandes s'ils sont mentionnés dans le prompt."
+          },
+          { role: "user", content: extractionPrompt }
+        ],
         response_format: { type: "json_object" },
         temperature: 0,
       });
 
       const extracted = JSON.parse(completion.choices[0].message.content);
-      console.log("🤖 Extraction IA:", extracted);
+      console.log("🤖 ========== EXTRACTION IA COMPLÈTE ==========");
+      console.log(JSON.stringify(extracted, null, 2));
+      console.log("🤖 ==========================================");
 
       // Mise à jour des données avec l'extraction IA
       clientInfo = { ...clientInfo, ...extracted.client };
@@ -542,6 +563,7 @@ exports.generateDevisAI = async (req, res) => {
       console.log("🏢 Copropriété:", copropriete);
       console.log("📋 Diagnostics demandés:", diagnosticsSpecifiques);
       console.log("🏗️ Suppléments demandés:", supplementsSpecifiques);
+      console.log("🚨 ATTENTION: Si les suppléments sont vides alors que vous les avez mentionnés, l'IA ne les a pas détectés!");
     }
 
     // 5. Recherche en Base de Données (Packs & Diagnostics)
@@ -564,20 +586,20 @@ exports.generateDevisAI = async (req, res) => {
     if (diagnosticsSpecifiques.length > 0 && productMode === "diagnostic") {
       diagnosticsFiltres = diagnosticsFiltres.filter(d => {
         const nomDiag = d.nom.toLowerCase();
-        // Exclure AUDIT DPE si pas explicitement demandé
-        if ((nomDiag.includes('audit') || nomDiag.includes('dpe')) &&
-            !diagnosticsSpecifiques.some(nom =>
-              nom.toLowerCase().includes('audit') ||
-              nom.toLowerCase().includes('dpe')
-            )) {
-          console.log(`❌ Diagnostic "${d.nom}" exclu (AUDIT/DPE non demandé)`);
-          return false;
-        }
+
         // Vérifier si le diagnostic correspond à un diagnostic demandé
-        const match = diagnosticsSpecifiques.some(nom =>
-          nomDiag.includes(nom.toLowerCase()) ||
-          nom.toLowerCase().includes(nomDiag)
-        );
+        const match = diagnosticsSpecifiques.some(nom => {
+          const nomDemande = nom.toLowerCase();
+
+          // Si on demande "DPE" mais pas "AUDIT", ne pas inclure "AUDIT DPE"
+          if (nomDemande === 'dpe' && nomDiag.includes('audit') && !diagnosticsSpecifiques.some(n => n.toLowerCase().includes('audit'))) {
+            return false;
+          }
+
+          // Sinon, vérifier le match classique
+          return nomDiag.includes(nomDemande) || nomDemande.includes(nomDiag);
+        });
+
         if (match) {
           console.log(`✅ Diagnostic "${d.nom}" retenu`);
         } else {
