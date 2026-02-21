@@ -130,6 +130,28 @@ historiqueCagnotte: {
     default: []
   },
 
+  // 📅 Intégration Google Calendar
+  googleCalendar: {
+    isConnected: { type: Boolean, default: false },
+    accessToken: { type: String, default: null, select: false }, // Masqué par défaut pour sécurité
+    refreshToken: { type: String, default: null, select: false },
+    tokenExpiry: { type: Date, default: null },
+    email: { type: String, default: null }, // Email du compte Google connecté
+    connectedAt: { type: Date, default: null },
+    lastSync: { type: Date, default: null }
+  },
+
+  // 📄 Contrat de transfert
+  contratTransfert: {
+    signe: { type: Boolean, default: false },
+    dateSignature: { type: Date, default: null },
+    packMaintenance: {
+      type: String,
+      enum: ['serenite', 'evolution', 'aucun'],
+      default: null
+    }
+  },
+
   // Diagnostiqueur
   diagnostiqueurParDefaut: {
     type: Schema.Types.ObjectId,
@@ -238,6 +260,61 @@ AgenceSchema.methods.ajouterCreditsIA = async function({
 // 🔹 Méthode pour vérifier si l'agence a assez de crédits
 AgenceSchema.methods.aAssezDeCredits = function(nombreRequis = 1) {
   return this.creditsIA >= nombreRequis;
+};
+
+// 📅 Méthode pour connecter Google Calendar
+AgenceSchema.methods.connectGoogleCalendar = async function({
+  accessToken,
+  refreshToken,
+  tokenExpiry,
+  email
+}) {
+  try {
+    this.googleCalendar = {
+      isConnected: true,
+      accessToken,
+      refreshToken,
+      tokenExpiry: new Date(tokenExpiry),
+      email,
+      connectedAt: new Date(),
+      lastSync: new Date()
+    };
+
+    await this.save();
+    console.log(`✅ Google Calendar connecté pour ${this.nom_commercial} (${email})`);
+    return this;
+  } catch (error) {
+    console.error("Erreur connectGoogleCalendar:", error);
+    throw error;
+  }
+};
+
+// 📅 Méthode pour déconnecter Google Calendar
+AgenceSchema.methods.disconnectGoogleCalendar = async function() {
+  try {
+    this.googleCalendar = {
+      isConnected: false,
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiry: null,
+      email: null,
+      connectedAt: null,
+      lastSync: null
+    };
+
+    await this.save();
+    console.log(`✅ Google Calendar déconnecté pour ${this.nom_commercial}`);
+    return this;
+  } catch (error) {
+    console.error("Erreur disconnectGoogleCalendar:", error);
+    throw error;
+  }
+};
+
+// 📅 Méthode pour vérifier si le token Google est expiré
+AgenceSchema.methods.isGoogleTokenExpired = function() {
+  if (!this.googleCalendar.tokenExpiry) return true;
+  return new Date() >= new Date(this.googleCalendar.tokenExpiry);
 };
 
 

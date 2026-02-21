@@ -8,6 +8,8 @@ const agencyController = require('../controllers/agencyController');
 const devisController = require('../controllers/devisController');
 const adminDiagnostiqueurController = require('../controllers/adminDiagnostiqueurController');
 const creditsController = require('../controllers/creditsController');
+const googleCalendarController = require('../controllers/googleCalendarController');
+const contratController = require('../controllers/contratController');
 const upload = require('../middlewares/upload');
 
 // Diagnostics
@@ -118,6 +120,20 @@ router.get('/credits/packs', authMiddleware, creditsController.getPacks);
 router.get('/credits/balance', authMiddleware, creditsController.getBalance);
 router.post('/credits/checkout', authMiddleware, creditsController.createCheckoutSession);
 router.post('/credits/add-manually', authMiddleware, creditsController.addCreditsManually);
+
+// ---------------------- GOOGLE CALENDAR ----------------------
+router.get('/google/auth/url', authMiddleware, googleCalendarController.getAuthUrl);
+router.get('/google/auth/callback', googleCalendarController.handleCallback); // Pas de authMiddleware car appelé par Google
+router.get('/google/status', authMiddleware, googleCalendarController.getStatus);
+router.post('/google/disconnect', authMiddleware, googleCalendarController.disconnect);
+router.post('/google/calendar/event', authMiddleware, googleCalendarController.createEvent);
+
+// ---------------------- CONTRAT DE TRANSFERT ----------------------
+router.get('/contrat/status', authMiddleware, contratController.getStatus);
+router.get('/contrat/packs', authMiddleware, contratController.getPacks);
+router.post('/contrat/signer', authMiddleware, contratController.signerContrat);
+router.get('/contrat/details', authMiddleware, contratController.getDetails);
+router.put('/contrat/changer-pack', authMiddleware, contratController.changerPack);
 
 // ---------------------- DIAGNOSTIQUEURS ----------------------
 
