@@ -383,323 +383,189 @@ exports.generateDevisAI = async (req, res) => {
   try {
     console.log("📌 Requête reçue pour génération de devis AI");
 
-    // 🤖 Vérifier les crédits IA disponibles (Admin ou Agence)
     const userId = req.user?.id;
-
     if (!userId) {
-      return res.status(401).json({
-        success: false,
-        message: "Utilisateur non authentifié"
-      });
+      return res.status(401).json({ success: false, message: "Utilisateur non authentifié" });
     }
 
-    // 🔹 Vérifier si c'est un Admin
+    // 1. Identification de l'entité (Admin ou Agence) pour les crédits
     let userEntity = await Admin.findById(userId);
     let isAdmin = !!userEntity;
 
-    // 🔹 Si ce n'est pas un Admin, chercher une Agence par l'email de l'utilisateur
     if (!userEntity) {
       const userEmail = req.user?.email;
-      if (!userEmail) {
-        return res.status(401).json({
-          success: false,
-          message: "Email utilisateur manquant"
-        });
-      }
-
-      // Chercher une agence dont l'admin a cet email
       userEntity = await Agence.findOne({ 'admin.email': userEmail });
-
-      if (!userEntity) {
-        return res.status(404).json({
-          success: false,
-          message: "Utilisateur non trouvé (ni Admin ni Agence)"
-        });
-      }
     }
 
     if (!userEntity) {
-      return res.status(404).json({
-        success: false,
-        message: "Utilisateur introuvable"
-      });
+      return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
     }
 
-    // Vérifier si l'utilisateur a au moins 1 crédit
+    // 2. Vérification des crédits
     if (!userEntity.aAssezDeCredits(1)) {
       return res.status(403).json({
         success: false,
-        message: "Crédits IA insuffisants. Veuillez acheter un pack de crédits dans les paramètres.",
+        message: "Crédits IA insuffisants.",
         creditsRestants: userEntity.creditsIA || 0
       });
     }
 
     const data = typeof req.body.data === "string" ? JSON.parse(req.body.data) : req.body.data || req.body;
-    console.log("📄 Données reçues :", data);
+    const prompt = data.prompt || "";
 
-    let bien = data.bien || {};
-    let productMode = data.productMode || ""; // pack / diagnostic / supplement / manuel
-    let trancheAnnee;
+    // 3. Initialisation des objets de base
+    let bien = {
+      bien: "",
+      transaction: "vente",
+      adresseBien: { adresse: "", codePostal: "", ville: "" },
+      surfaceAppartement: ""
+    };
+    let clientInfo = { nom: "", prenom: "", email: "", tel: "" };
+    let productMode = "pack";
+    let trancheAnnee = "1949_1997"; // Fallback par défaut
 
-    // Extraction depuis le prompt si nécessaire
-    if (data.prompt) {
-      console.log("📝 Prompt détecté :", data.prompt);
-      const promptLower = data.prompt.toLowerCase();
-
-      /**
-       * 📌 DÉTECTION DU MODE DE PRODUIT DEMANDÉ
-       */
-      if (!productMode) {
-        if (/pack|formule|tout compris|complet/i.test(promptLower)) productMode = "pack";
-        else if (/diagnostic|dpe|amiante|plomb|termites|gaz|électricité|electricite|erp|ernmt/i.test(promptLower)) productMode = "diagnostic";
-        else if (/supplément|option|express|plan|photo|drone|relevé/i.test(promptLower)) productMode = "supplement";
-        else productMode = "manuel";
-      }
-
-      // Détection du type de bien
-      if (!bien.bien) {
-        const bienMatch = data.prompt.match(/Le bien est un[e]? (\w+)/i);
-        bien.bien = bienMatch ? bienMatch[1].trim().toLowerCase() : "";
-      }
-
-      // Année → Tranche
-      const anneeMatch = data.prompt.match(/construit[e]? en (\d{4})/i);
-      if (anneeMatch) {
-        const annee = parseInt(anneeMatch[1], 10);
-        if (annee < 1949) trancheAnnee = "avant_1949";
-        else if (annee <= 1997) trancheAnnee = "1949_1997";
-        else if (annee <= 2012) trancheAnnee = "1juillet1997_plus15";
-        else trancheAnnee = "moins_15";
-      }
-
-      // Transaction
-      const transactionMatch = data.prompt.match(/op[eé]ration\s*[: ]\s*(vente|location)/i);
-      bien.transaction = transactionMatch ? transactionMatch[1].toLowerCase() : "vente";
-
-      // Adresse
-      const adresseMatch = data.prompt.match(/situé[e]? au (.+?), (\d{5}) (.+)\./i);
-      bien.adresseBien = {
-        adresse: adresseMatch ? adresseMatch[1] : "",
-        codePostal: adresseMatch ? adresseMatch[2] : "",
-        ville: adresseMatch ? adresseMatch[3] : "",
-      };
-
-      // Surface (ex: T2, T3…)
-      const surfaceMatch = data.prompt.match(/Surface\s*:\s*(T\d+)/i);
-      bien.surfaceAppartement = surfaceMatch ? surfaceMatch[1] : "";
-
-      console.log("🏠 Type de bien :", bien.bien);
-      console.log("📆 Tranche année :", trancheAnnee);
-      console.log("💰 Transaction :", bien.transaction);
-      console.log("🎯 ProductMode détecté :", productMode);
-    }
-
-
-    // Récupérer packs, diagnostics, suppléments
-    let packs = await Pack.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction }).populate("diagnostics");
-    let diagnostics = await Diagnostic.find({ typeBien: bien.bien, trancheAnnee, typeOperation: bien.transaction });
-    const supplements = await Supplement.find({ typeBien: bien.bien });
-
-    if (packs.length === 0) packs = [{ nom: "Pack standard", _id: "fallback-pack", tarifs: { var: 0, herault: 0, autre: 0 } }];
-
-    // Compléter diagnostics selon gaz et copro
-    let diagnosticsFiltres = [...diagnostics];
-    if (data.installationGaz) {
-      const diagGaz = diagnostics.find(d => /gaz/i.test(d.nom));
-      if (diagGaz && !diagnosticsFiltres.includes(diagGaz)) diagnosticsFiltres.push(diagGaz);
-    }
-    if (data.copropriete) {
-      const diagCopro = diagnostics.find(d => /copropriété|surface/i.test(d.nom));
-      if (diagCopro && !diagnosticsFiltres.includes(diagCopro)) diagnosticsFiltres.push(diagCopro);
-    }
-
-    // Détection des diagnostics précis dans le prompt
-    if (data.prompt) {
-      const promptLower = data.prompt.toLowerCase();
-
-      const demandeDiagnostics = diagnostics
-        .filter(d => d.typeBien === bien.bien && d.typeOperation === bien.transaction)
-        .filter(d => {
-          const nameLower = d.nom.toLowerCase();
-          return promptLower.includes(nameLower) ||
-            (/dpe/.test(promptLower) && /dpe/.test(nameLower)) ||
-            (/amiante/.test(promptLower) && /amiante/.test(nameLower)) ||
-            (/plomb/.test(promptLower) && /plomb/.test(nameLower)) ||
-            (/termites/.test(promptLower) && /termites/.test(nameLower)) ||
-            (/gaz/.test(promptLower) && /gaz/.test(nameLower)) ||
-            (/élec|elect/.test(promptLower) && /élec|elect/.test(nameLower)) ||
-            (/erp|ernmt/.test(promptLower) && /erp|ernmt/.test(nameLower));
-        });
-
-      // Supprimer doublons
-      if (demandeDiagnostics.length > 0) {
-        diagnosticsFiltres = [...new Map(demandeDiagnostics.map(d => [d._id, d])).values()];
-        productMode = "diagnostic"; // seulement si diagnostics détectés
-      }
-    }
-
-    // Par défaut → PACK si rien détecté
-    if (!productMode) productMode = "pack";
-
-    // Initialiser OpenAI une seule fois
     const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-    // Extraire les informations du client depuis le prompt avec OpenAI
-    let clientInfo = {
-      nom: "",
-      prenom: "",
-      email: "",
-      tel: "",
-      adresse: bien.adresseBien?.adresse || "",
-      ville: bien.adresseBien?.ville || "",
-      codePostal: bien.adresseBien?.codePostal || ""
-    };
-
-    if (data.prompt) {
+    // 4. APPEL UNIQUE OPENAI : Extraction Client + Analyse Technique
+    if (prompt) {
+      console.log("📝 Analyse du prompt par l'IA...");
       const extractionPrompt = `
-Extrait UNIQUEMENT les informations du client depuis ce texte :
-"${data.prompt}"
+        Tu es un expert en immobilier français. Analyse ce message : "${prompt}"
+        
+        Extraits les informations de manière structurée.
+        Pour la transaction, choisis entre "vente" ou "location".
+        Pour le type de bien, choisis "appartement" ou "maison".
+        Pour l'année, si une année est mentionnée, détermine la tranche : 
+        - avant 1949 -> "avant_1949"
+        - 1949 à 1997 -> "1949_1997"
+        - 1998 à 2012 -> "1juillet1997_plus15"
+        - après 2012 -> "moins_15"
 
-Retourne un JSON avec ces champs (laisse vide "" si non trouvé) :
-{
-  "nom": "",
-  "prenom": "",
-  "email": "",
-  "tel": ""
-}
-`;
-
-      try {
-        const extractionCompletion = await openai.chat.completions.create({
-          model: "gpt-4",
-          messages: [{ role: "user", content: extractionPrompt }],
-          temperature: 0,
-        });
-
-        const extractedText = extractionCompletion.choices[0].message.content;
-        const jsonMatch = extractedText.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          const extracted = JSON.parse(jsonMatch[0]);
-          clientInfo = { ...clientInfo, ...extracted };
-          console.log("✅ Informations client extraites :", clientInfo);
+        RETOURNE UNIQUEMENT UN JSON :
+        {
+          "client": { "nom": "", "prenom": "", "email": "", "tel": "" },
+          "bien": { 
+            "type": "", 
+            "transaction": "", 
+            "annee_tranche": "", 
+            "adresse": "", 
+            "cp": "", 
+            "ville": "",
+            "surface_type": "" 
+          },
+          "productMode": "pack"
         }
-      } catch (extractError) {
-        console.error("Erreur extraction client:", extractError);
-      }
+      `;
 
-      // Vérifier si le client existe déjà dans la base
-      if (clientInfo.email) {
-        const existingClient = await Client.findOne({ email: clientInfo.email });
-        if (existingClient) {
-          console.log("✅ Client trouvé dans la base:", existingClient);
-          clientInfo = {
-            _id: existingClient._id,
-            nom: existingClient.nom,
-            prenom: existingClient.prenom,
-            email: existingClient.email,
-            tel: existingClient.tel,
-            adresse: existingClient.adresse || clientInfo.adresse,
-            ville: existingClient.ville || clientInfo.ville,
-            codePostal: existingClient.codePostal || clientInfo.codePostal
-          };
-        }
-      }
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [{ role: "user", content: extractionPrompt }],
+        response_format: { type: "json_object" },
+        temperature: 0,
+      });
+
+      const extracted = JSON.parse(completion.choices[0].message.content);
+      
+      // Mise à jour des données avec l'extraction IA
+      clientInfo = { ...clientInfo, ...extracted.client };
+      bien.bien = extracted.bien.type || "appartement";
+      bien.transaction = extracted.bien.transaction || "vente";
+      trancheAnnee = extracted.bien.annee_tranche || "1949_1997";
+      bien.adresseBien = {
+        adresse: extracted.bien.adresse || "",
+        codePostal: extracted.bien.cp || "",
+        ville: extracted.bien.ville || ""
+      };
+      bien.surfaceAppartement = extracted.bien.surface_type || "";
+      productMode = extracted.productMode || "pack";
     }
 
-    // Prompt OpenAI pour la recommandation de devis
-    const promptOpenAI = `
-Tu es un assistant expert en devis immobiliers.
-Le bien est un(e) ${bien.bien}, tranche d'année ${trancheAnnee}.
-L'installation gaz est ${data.installationGaz ? "présente" : "absente"}.
-La copropriété est ${data.copropriete ? "présente" : "absente"}.
-Les packs disponibles sont : ${packs.map(p => p.nom).join(", ")}.
-Les diagnostics possibles sont : ${diagnosticsFiltres.map(d => d.nom).join(", ")}.
-Les suppléments possibles sont : ${supplements.map(s => s.nom).join(", ")}.
+    // 5. Recherche en Base de Données (Packs & Diagnostics)
+    let packs = await Pack.find({ 
+      typeBien: bien.bien, 
+      trancheAnnee: trancheAnnee, 
+      typeOperation: bien.transaction 
+    }).populate("diagnostics");
 
-Propose un devis recommandé en listant :
-- Pack suggéré
-- Diagnostics nécessaires
-- Suppléments utiles
-- Justification du choix
-`;
+    let diagnosticsFiltres = await Diagnostic.find({ 
+      typeBien: bien.bien, 
+      trancheAnnee: trancheAnnee, 
+      typeOperation: bien.transaction 
+    });
 
-    console.log("🤖 Prompt envoyé à OpenAI :", promptOpenAI);
+    const supplements = await Supplement.find({ typeBien: bien.bien });
 
-    const completion = await openai.chat.completions.create({
+    // 6. DEUXIÈME APPEL : Recommandation de Devis (Le conseil métier)
+    const conseilPrompt = `
+      Basé sur un(e) ${bien.bien} de la période ${trancheAnnee} en ${bien.transaction}.
+      Packs dispo : ${packs.map(p => p.nom).join(", ")}
+      Diagnostics dispo : ${diagnosticsFiltres.map(d => d.nom).join(", ")}
+      Installation Gaz : ${data.installationGaz ? "OUI" : "NON"}
+      Copropriété : ${data.copropriete ? "OUI" : "NON"}
+
+      Rédige une recommandation courte pour le devis (Pack conseillé, pourquoi, et diagnostics obligatoires).
+    `;
+
+    const recommandation = await openai.chat.completions.create({
       model: "gpt-4",
-      messages: [{ role: "user", content: promptOpenAI }],
+      messages: [{ role: "user", content: conseilPrompt }],
       temperature: 0.7,
     });
 
-    const aiResponse = completion.choices[0].message.content;
-    console.log("✅ Réponse OpenAI reçue :", aiResponse);
+    const aiResponse = recommandation.choices[0].message.content;
 
-    // Réponse front
+    // 7. Vérification si le client existe déjà
+    if (clientInfo.email) {
+      const existingClient = await Client.findOne({ email: clientInfo.email });
+      if (existingClient) {
+        clientInfo = { ...existingClient.toObject(), ...clientInfo }; // Fusionne avec l'existant
+      }
+    }
+
+    // 8. Construction de la réponse Finale
     const responseJSON = {
-      message: "✅ Devis recommandé généré via AI",
+      message: "✅ Devis généré avec succès",
       suggestion: aiResponse,
       productMode,
       client: clientInfo,
       bien: {
-        bien: bien.bien,
-        type: bien.type || "",
-        adresseBien: bien.adresseBien,
-        surfaceAppartement: bien.surfaceAppartement || "",
-        surfaceMaison: bien.surfaceMaison || "",
+        ...bien,
         trancheAnnee,
-        anneeConstruction: trancheAnnee,
-        transaction: bien.transaction,
-        numeroFiscalBien: bien.numeroFiscalBien || "",
-        note: ""
+        anneeConstruction: trancheAnnee
       },
-      packs: productMode === "pack" ? packs.map((p, index) => ({
-        _id: p._id,
-        id: p._id,
-        nom: p.nom,
-        tarifs: p.tarifs || {},
-        tarifsParAppartement: p.tarifsParAppartement || [],
+      packs: packs.map((p, index) => ({
+        ...p.toObject(),
+        selected: index === 0,
         tarif: bien.bien === "appartement" && p.tarifsParAppartement
           ? p.tarifsParAppartement.find(t => t.typeAppartement === bien.surfaceAppartement)?.tarifs || p.tarifs
-          : p.tarifs,
-        diagnostics: p.diagnostics || [],
-        selected: index === 0
-      })) : [],
-      diagnostics: productMode === "diagnostic" ? diagnosticsFiltres.map(d => ({
-        _id: d._id,
-        id: d._id,
-        nom: d.nom,
-        prix: d.prix,
-        tarifs: d.tarifs || {},
+          : p.tarifs
+      })),
+      diagnostics: diagnosticsFiltres.map(d => ({
+        ...d.toObject(),
         selected: true
-      })) : [],
-      supplements: []
+      })),
+      supplements: supplements.map(s => ({ ...s.toObject(), selected: false }))
     };
 
-    // 🤖 Déduire 1 crédit après génération réussie
+    // 🤖 Déduction du crédit
     try {
       await userEntity.ajouterCreditsIA({
         type: 'utilisation',
         nombreCredits: 1,
-        description: 'Génération de devis par IA',
+        description: `Génération devis AI - ${bien.bien}`,
         par: isAdmin ? userEntity.email : (userEntity.admin?.email || 'système')
       });
-      console.log(`✅ 1 crédit IA déduit. Reste: ${userEntity.creditsIA} crédits`);
-    } catch (creditError) {
-      console.error('Erreur déduction crédit:', creditError);
-      // On continue quand même, car le devis a été généré
-    }
+    } catch (e) { console.error("Erreur crédit:", e); }
 
-    // Ajouter le nombre de crédits restants dans la réponse
     responseJSON.creditsRestants = userEntity.creditsIA;
-
     return res.status(200).json(responseJSON);
 
   } catch (error) {
-    console.error("Erreur génération devis AI :", error);
-    return res.status(500).json({ message: "Erreur serveur lors de la génération du devis AI." });
+    console.error("❌ Erreur generateDevisAI:", error);
+    return res.status(500).json({ message: "Erreur lors de la génération IA." });
   }
 };
-
+ 
 
 
 
