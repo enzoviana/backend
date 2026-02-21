@@ -168,7 +168,7 @@ exports.getStatus = async (req, res) => {
       packEvolution,
       dateAchat: admin.optionsAchetees?.googleCalendar?.dateAchat || null,
       prixPaye: admin.optionsAchetees?.googleCalendar?.prixPaye || null,
-      prixOption: parseInt(process.env.GOOGLE_CALENDAR_OPTION_PRICE || 9900, 10) / 100 // En euros
+      prixOption: parseInt(process.env.GOOGLE_CALENDAR_OPTION_PRICE || 75000, 10) / 100 // En euros
     });
   } catch (err) {
     console.error('Erreur getStatus:', err);
@@ -362,8 +362,8 @@ exports.createGoogleCalendarCheckoutSession = async (req, res) => {
       });
     }
 
-    // Prix de l'option Google Calendar (99€)
-    const PRIX_GOOGLE_CALENDAR = process.env.GOOGLE_CALENDAR_OPTION_PRICE || 9900; // en centimes
+    // Prix de l'option Google Calendar (750€)
+    const PRIX_GOOGLE_CALENDAR = process.env.GOOGLE_CALENDAR_OPTION_PRICE || 75000; // en centimes
 
     // Créer la session Stripe
     const session = await stripe.checkout.sessions.create({
