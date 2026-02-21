@@ -46,19 +46,19 @@ const PACKS_MAINTENANCE = {
 // Vérifie si le contrat est signé
 exports.getStatus = async (req, res) => {
   try {
-    const agenceId = req.user.agenceId;
+    const adminId = req.user.id; // ID de l'admin depuis le token
 
-    // Récupérer l'admin ID de l'agence
-    const agency = await Agency.findById(agenceId).select('admin');
-    if (!agency || !agency.admin || !agency.admin._id) {
+    // Trouver l'agence qui contient cet admin
+    const agency = await Agency.findOne({ 'admin._id': adminId });
+
+    if (!agency) {
       return res.status(404).json({
         success: false,
-        message: 'Agence ou admin non trouvé'
+        message: 'Agence non trouvée pour cet admin'
       });
     }
 
-    const adminId = agency.admin._id;
-    const contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agenceId);
+    const contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agency._id);
 
     res.json({
       success: true,
@@ -81,18 +81,7 @@ exports.getStatus = async (req, res) => {
 // Récupère la liste des packs disponibles
 exports.getPacks = async (req, res) => {
   try {
-    const agenceId = req.user.agenceId;
-
-    // Récupérer l'admin ID
-    const agency = await Agency.findById(agenceId).select('admin');
-    if (!agency || !agency.admin || !agency.admin._id) {
-      return res.status(404).json({
-        success: false,
-        message: 'Agence ou admin non trouvé'
-      });
-    }
-
-    const adminId = agency.admin._id;
+    const adminId = req.user.id; // ID de l'admin depuis le token
 
     // Vérifier si l'admin a déjà un contrat
     const contrat = await ContratTransfert.findOne({ adminId });
@@ -129,7 +118,7 @@ exports.getPacks = async (req, res) => {
 // Signe le contrat avec le pack choisi
 exports.signerContrat = async (req, res) => {
   try {
-    const agenceId = req.user.agenceId;
+    const adminId = req.user.id; // ID de l'admin depuis le token
     const { packMaintenance, signature } = req.body;
 
     // Validation
@@ -147,19 +136,18 @@ exports.signerContrat = async (req, res) => {
       });
     }
 
-    // Récupérer l'admin ID
-    const agency = await Agency.findById(agenceId).select('admin');
-    if (!agency || !agency.admin || !agency.admin._id) {
+    // Trouver l'agence qui contient cet admin
+    const agency = await Agency.findOne({ 'admin._id': adminId });
+
+    if (!agency) {
       return res.status(404).json({
         success: false,
-        message: 'Agence ou admin non trouvé'
+        message: 'Agence non trouvée pour cet admin'
       });
     }
 
-    const adminId = agency.admin._id;
-
     // Récupérer ou créer le contrat
-    let contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agenceId);
+    let contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agency._id);
 
     // Si déjà signé, ne pas permettre de re-signer
     if (contrat.isValide) {
@@ -186,7 +174,7 @@ exports.signerContrat = async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
     // Valider le contrat
-    await contrat.valider(signature, ip, agenceId);
+    await contrat.valider(signature, ip, agency._id);
 
     res.json({
       success: true,
@@ -211,21 +199,19 @@ exports.signerContrat = async (req, res) => {
 // Récupère les détails complets du contrat signé
 exports.getDetails = async (req, res) => {
   try {
-    const agenceId = req.user.agenceId;
+    const adminId = req.user.id; // ID de l'admin depuis le token
 
-    // Récupérer l'admin ID
-    const agency = await Agency.findById(agenceId).select('admin nom_commercial email telephone');
-    if (!agency || !agency.admin || !agency.admin._id) {
+    // Trouver l'agence qui contient cet admin
+    const agency = await Agency.findOne({ 'admin._id': adminId });
+
+    if (!agency) {
       return res.status(404).json({
         success: false,
-        message: 'Agence ou admin non trouvé'
+        message: 'Agence non trouvée pour cet admin'
       });
     }
 
-    const adminId = agency.admin._id;
-
-    const contrat = await ContratTransfert.findOne({ adminId })
-      .populate('agence', 'nom_commercial email admin.telephone_portable');
+    const contrat = await ContratTransfert.findOne({ adminId });
 
     if (!contrat || !contrat.isValide) {
       return res.status(404).json({
@@ -247,8 +233,8 @@ exports.getDetails = async (req, res) => {
         },
         agence: {
           nomAgence: agency.nom_commercial,
-          email: agency.admin?.email || agency.email,
-          telephone: agency.admin?.telephone_portable || agency.telephone
+          email: agency.admin?.email,
+          telephone: agency.admin?.telephone_portable
         },
         versionContrat: contrat.versionContrat
       }
@@ -267,7 +253,7 @@ exports.getDetails = async (req, res) => {
 // Permet de changer de pack après signature (tarif normal)
 exports.changerPack = async (req, res) => {
   try {
-    const agenceId = req.user.agenceId;
+    const adminId = req.user.id; // ID de l'admin depuis le token
     const { nouveauPack } = req.body;
 
     if (!['serenite', 'evolution', 'aucun'].includes(nouveauPack)) {
@@ -277,16 +263,15 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    // Récupérer l'admin ID
-    const agency = await Agency.findById(agenceId).select('admin');
-    if (!agency || !agency.admin || !agency.admin._id) {
+    // Trouver l'agence qui contient cet admin
+    const agency = await Agency.findOne({ 'admin._id': adminId });
+
+    if (!agency) {
       return res.status(404).json({
         success: false,
-        message: 'Agence ou admin non trouvé'
+        message: 'Agence non trouvée pour cet admin'
       });
     }
-
-    const adminId = agency.admin._id;
 
     const contrat = await ContratTransfert.findOne({ adminId });
 
@@ -311,7 +296,7 @@ exports.changerPack = async (req, res) => {
     await contrat.save();
 
     // Mettre à jour l'agence
-    await Agency.findByIdAndUpdate(agenceId, {
+    await Agency.findByIdAndUpdate(agency._id, {
       'contratTransfert.packMaintenance': nouveauPack
     });
 
