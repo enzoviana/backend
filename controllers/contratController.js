@@ -505,7 +505,6 @@ exports.creerAbonnementStripe = async (req, res) => {
   }
 };
 
-// Webhook handler pour les événements Stripe de contrat
 exports.handleContratStripeWebhook = async (session) => {
   try {
     const { adminId, contratId } = session.metadata;
@@ -524,23 +523,30 @@ exports.handleContratStripeWebhook = async (session) => {
     // Récupérer l'abonnement Stripe
     const subscription = await stripe.subscriptions.retrieve(session.subscription);
 
-    // Vérifier que les timestamps sont valides
-    if (!subscription.current_period_start || !subscription.current_period_end) {
-      console.error('Timestamps Stripe invalides:', subscription);
-      throw new Error('Timestamps Stripe manquants');
+    // --- CORRECTION ICI : FALLBACKS SUR LES TIMESTAMPS ---
+    // On utilise start_date ou created si current_period_start n'est pas encore là
+    const startTimestamp = subscription.current_period_start || subscription.start_date || subscription.created;
+    
+    // Si current_period_end manque (ex: période d'essai ou bug synchro), 
+    // on calcule +30 jours par défaut pour ne pas bloquer le script
+    const endTimestamp = subscription.current_period_end || (startTimestamp + 30 * 24 * 60 * 60);
+
+    if (!startTimestamp) {
+      console.error('Données temporelles Stripe totalement introuvables:', subscription);
+      throw new Error('Données Stripe manquantes');
     }
 
     // Mettre à jour le contrat
     contrat.stripeSubscriptionId = subscription.id;
     contrat.statutPaiement = 'actif';
 
-    // Les timestamps Stripe sont en secondes, on les convertit en millisecondes
-    const dateDebut = new Date(subscription.current_period_start * 1000);
-    const dateFin = new Date(subscription.current_period_end * 1000);
+    // Conversion sécurisée
+    const dateDebut = new Date(startTimestamp * 1000);
+    const dateFin = new Date(endTimestamp * 1000);
 
-    // Vérifier que les dates sont valides
+    // Vérifier que les dates sont valides (isNaN)
     if (isNaN(dateDebut.getTime()) || isNaN(dateFin.getTime())) {
-      console.error('Dates invalides après conversion:', { dateDebut, dateFin });
+      console.error('Dates invalides après conversion:', { startTimestamp, endTimestamp });
       throw new Error('Conversion de dates échouée');
     }
 
@@ -558,6 +564,7 @@ exports.handleContratStripeWebhook = async (session) => {
 
   } catch (error) {
     console.error('Erreur handleContratStripeWebhook:', error);
+    // On re-throw pour que Stripe sache que le webhook a échoué et réessaie plus tard
     throw error;
   }
 };
