@@ -2,11 +2,16 @@ const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const ContratTransfertSchema = new Schema({
+  adminId: {
+    type: Schema.Types.ObjectId,
+    required: true,
+    unique: true
+  },
+
   agence: {
     type: Schema.Types.ObjectId,
     ref: 'Agency',
-    required: true,
-    unique: true
+    required: true
   },
 
   // Informations de signature
@@ -69,7 +74,7 @@ const ContratTransfertSchema = new Schema({
 }, { timestamps: true });
 
 // Méthode pour valider le contrat
-ContratTransfertSchema.methods.valider = async function(signatureData, ip) {
+ContratTransfertSchema.methods.valider = async function(signatureData, ip, agenceId) {
   this.isValide = true;
   this.dateSignature = new Date();
   this.signature = signatureData;
@@ -80,21 +85,23 @@ ContratTransfertSchema.methods.valider = async function(signatureData, ip) {
 
   // Mettre à jour l'agence
   const Agency = mongoose.model('Agency');
-  await Agency.findByIdAndUpdate(this.agence, {
+  const updateAgenceId = agenceId || this.agence;
+  await Agency.findByIdAndUpdate(updateAgenceId, {
     'contratTransfert.signe': true,
-    'contratTransfert.dateSingature': this.dateSignature,
+    'contratTransfert.dateSignature': this.dateSignature,
     'contratTransfert.packMaintenance': this.packMaintenance
   });
 
   return this;
 };
 
-// Méthode statique pour récupérer ou créer un contrat pour une agence
-ContratTransfertSchema.statics.getOrCreateForAgency = async function(agenceId) {
-  let contrat = await this.findOne({ agence: agenceId });
+// Méthode statique pour récupérer ou créer un contrat pour un admin
+ContratTransfertSchema.statics.getOrCreateForAdmin = async function(adminId, agenceId) {
+  let contrat = await this.findOne({ adminId });
 
   if (!contrat) {
     contrat = new this({
+      adminId,
       agence: agenceId,
       packMaintenance: 'aucun',
       tarifPreferentiel: true,

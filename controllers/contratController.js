@@ -48,7 +48,17 @@ exports.getStatus = async (req, res) => {
   try {
     const agenceId = req.user.agenceId;
 
-    const contrat = await ContratTransfert.getOrCreateForAgency(agenceId);
+    // Récupérer l'admin ID de l'agence
+    const agency = await Agency.findById(agenceId).select('admin');
+    if (!agency || !agency.admin || !agency.admin._id) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agence ou admin non trouvé'
+      });
+    }
+
+    const adminId = agency.admin._id;
+    const contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agenceId);
 
     res.json({
       success: true,
@@ -73,8 +83,19 @@ exports.getPacks = async (req, res) => {
   try {
     const agenceId = req.user.agenceId;
 
-    // Vérifier si l'agence a déjà un contrat
-    const contrat = await ContratTransfert.findOne({ agence: agenceId });
+    // Récupérer l'admin ID
+    const agency = await Agency.findById(agenceId).select('admin');
+    if (!agency || !agency.admin || !agency.admin._id) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agence ou admin non trouvé'
+      });
+    }
+
+    const adminId = agency.admin._id;
+
+    // Vérifier si l'admin a déjà un contrat
+    const contrat = await ContratTransfert.findOne({ adminId });
     const tarifPreferentiel = contrat ? contrat.tarifPreferentiel : true;
 
     const packs = Object.keys(PACKS_MAINTENANCE).map(key => {
@@ -126,8 +147,19 @@ exports.signerContrat = async (req, res) => {
       });
     }
 
+    // Récupérer l'admin ID
+    const agency = await Agency.findById(agenceId).select('admin');
+    if (!agency || !agency.admin || !agency.admin._id) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agence ou admin non trouvé'
+      });
+    }
+
+    const adminId = agency.admin._id;
+
     // Récupérer ou créer le contrat
-    let contrat = await ContratTransfert.getOrCreateForAgency(agenceId);
+    let contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agenceId);
 
     // Si déjà signé, ne pas permettre de re-signer
     if (contrat.isValide) {
@@ -154,7 +186,7 @@ exports.signerContrat = async (req, res) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
     // Valider le contrat
-    await contrat.valider(signature, ip);
+    await contrat.valider(signature, ip, agenceId);
 
     res.json({
       success: true,
@@ -181,8 +213,19 @@ exports.getDetails = async (req, res) => {
   try {
     const agenceId = req.user.agenceId;
 
-    const contrat = await ContratTransfert.findOne({ agence: agenceId })
-      .populate('agence', 'nomAgence email telephone');
+    // Récupérer l'admin ID
+    const agency = await Agency.findById(agenceId).select('admin nom_commercial email telephone');
+    if (!agency || !agency.admin || !agency.admin._id) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agence ou admin non trouvé'
+      });
+    }
+
+    const adminId = agency.admin._id;
+
+    const contrat = await ContratTransfert.findOne({ adminId })
+      .populate('agence', 'nom_commercial email admin.telephone_portable');
 
     if (!contrat || !contrat.isValide) {
       return res.status(404).json({
@@ -202,7 +245,11 @@ exports.getDetails = async (req, res) => {
           prenom: contrat.signature.prenom,
           fonction: contrat.signature.fonction
         },
-        agence: contrat.agence,
+        agence: {
+          nomAgence: agency.nom_commercial,
+          email: agency.admin?.email || agency.email,
+          telephone: agency.admin?.telephone_portable || agency.telephone
+        },
         versionContrat: contrat.versionContrat
       }
     });
@@ -230,7 +277,18 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    const contrat = await ContratTransfert.findOne({ agence: agenceId });
+    // Récupérer l'admin ID
+    const agency = await Agency.findById(agenceId).select('admin');
+    if (!agency || !agency.admin || !agency.admin._id) {
+      return res.status(404).json({
+        success: false,
+        message: 'Agence ou admin non trouvé'
+      });
+    }
+
+    const adminId = agency.admin._id;
+
+    const contrat = await ContratTransfert.findOne({ adminId });
 
     if (!contrat || !contrat.isValide) {
       return res.status(404).json({
