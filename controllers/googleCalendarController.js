@@ -1,5 +1,5 @@
 const { google } = require('googleapis');
-const Agency = require('../models/Agency');
+const Admin = require('../models/Admin');
 
 /**
  * Configuration OAuth2
@@ -25,12 +25,29 @@ const SCOPES = [
  */
 exports.getAuthUrl = async (req, res) => {
   try {
-    const agencyId = req.agence?._id;
+    const adminId = req.user?.id;
 
-    if (!agencyId) {
+    if (!adminId) {
       return res.status(401).json({
         success: false,
-        message: 'Agence non authentifiée'
+        message: 'Admin non authentifié'
+      });
+    }
+
+    // Vérifier l'accès à Google Calendar
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin introuvable'
+      });
+    }
+
+    if (!admin.aAccesGoogleCalendar()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé. Vous devez acheter l\'option Google Calendar ou disposer du Pack Évolutions.'
       });
     }
 
@@ -39,7 +56,7 @@ exports.getAuthUrl = async (req, res) => {
     const authUrl = oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
-      state: agencyId.toString(), // Passer l'ID de l'agence dans le state
+      state: adminId.toString(), // Passer l'ID de l'admin dans le state
       prompt: 'consent' // Forcer le consentement pour obtenir refresh_token
     });
 
@@ -64,13 +81,13 @@ exports.handleCallback = async (req, res) => {
     const { code, state } = req.query;
 
     if (!code) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=no_code`);
+      return res.redirect(`${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=no_code`);
     }
 
-    const agencyId = state;
+    const adminId = state;
 
-    if (!agencyId) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=no_state`);
+    if (!adminId) {
+      return res.redirect(`${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=no_state`);
     }
 
     const oauth2Client = getOAuth2Client();
@@ -84,26 +101,31 @@ exports.handleCallback = async (req, res) => {
     const userInfo = await oauth2.userinfo.get();
 
     // Sauvegarder dans la base de données
-    const agency = await Agency.findById(agencyId).select('+googleCalendar.accessToken +googleCalendar.refreshToken');
+    const admin = await Admin.findById(adminId).select('+googleCalendar.accessToken +googleCalendar.refreshToken');
 
-    if (!agency) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=agency_not_found`);
+    if (!admin) {
+      return res.redirect(`${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=admin_not_found`);
     }
 
-    await agency.connectGoogleCalendar({
+    // Vérifier l'accès
+    if (!admin.aAccesGoogleCalendar()) {
+      return res.redirect(`${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=access_denied`);
+    }
+
+    await admin.connectGoogleCalendar({
       accessToken: tokens.access_token,
       refreshToken: tokens.refresh_token,
       tokenExpiry: tokens.expiry_date,
       email: userInfo.data.email
     });
 
-    console.log(`✅ Google Calendar connecté pour ${agency.nom_commercial}`);
+    console.log(`✅ Google Calendar connecté pour ${admin.email}`);
 
     // Rediriger vers le frontend avec succès
-    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?google_success=true`);
+    return res.redirect(`${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_success=true`);
   } catch (err) {
     console.error('Erreur handleCallback:', err);
-    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=callback_failed`);
+    return res.redirect(`${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?google_error=callback_failed`);
   }
 };
 
@@ -112,30 +134,31 @@ exports.handleCallback = async (req, res) => {
  */
 exports.getStatus = async (req, res) => {
   try {
-    const agencyId = req.agence?._id;
+    const adminId = req.user?.id;
 
-    if (!agencyId) {
+    if (!adminId) {
       return res.status(401).json({
         success: false,
-        message: 'Agence non authentifiée'
+        message: 'Admin non authentifié'
       });
     }
 
-    const agency = await Agency.findById(agencyId).select('googleCalendar');
+    const admin = await Admin.findById(adminId).select('googleCalendar contratMaintenance optionsAchetees');
 
-    if (!agency) {
+    if (!admin) {
       return res.status(404).json({
         success: false,
-        message: 'Agence introuvable'
+        message: 'Admin introuvable'
       });
     }
 
     return res.status(200).json({
       success: true,
-      isConnected: agency.googleCalendar?.isConnected || false,
-      email: agency.googleCalendar?.email || null,
-      connectedAt: agency.googleCalendar?.connectedAt || null,
-      lastSync: agency.googleCalendar?.lastSync || null
+      isConnected: admin.googleCalendar?.isConnected || false,
+      email: admin.googleCalendar?.email || null,
+      connectedAt: admin.googleCalendar?.connectedAt || null,
+      lastSync: admin.googleCalendar?.lastSync || null,
+      hasAccess: admin.aAccesGoogleCalendar()
     });
   } catch (err) {
     console.error('Erreur getStatus:', err);
@@ -151,25 +174,25 @@ exports.getStatus = async (req, res) => {
  */
 exports.disconnect = async (req, res) => {
   try {
-    const agencyId = req.agence?._id;
+    const adminId = req.user?.id;
 
-    if (!agencyId) {
+    if (!adminId) {
       return res.status(401).json({
         success: false,
-        message: 'Agence non authentifiée'
+        message: 'Admin non authentifié'
       });
     }
 
-    const agency = await Agency.findById(agencyId);
+    const admin = await Admin.findById(adminId);
 
-    if (!agency) {
+    if (!admin) {
       return res.status(404).json({
         success: false,
-        message: 'Agence introuvable'
+        message: 'Admin introuvable'
       });
     }
 
-    await agency.disconnectGoogleCalendar();
+    await admin.disconnectGoogleCalendar();
 
     return res.status(200).json({
       success: true,
@@ -189,27 +212,35 @@ exports.disconnect = async (req, res) => {
  */
 exports.createEvent = async (req, res) => {
   try {
-    const agencyId = req.agence?._id;
+    const adminId = req.user?.id;
     const { title, description, location, startDateTime, endDateTime, attendees } = req.body;
 
-    if (!agencyId) {
+    if (!adminId) {
       return res.status(401).json({
         success: false,
-        message: 'Agence non authentifiée'
+        message: 'Admin non authentifié'
       });
     }
 
-    // Récupérer l'agence avec les tokens
-    const agency = await Agency.findById(agencyId).select('+googleCalendar.accessToken +googleCalendar.refreshToken');
+    // Récupérer l'admin avec les tokens
+    const admin = await Admin.findById(adminId).select('+googleCalendar.accessToken +googleCalendar.refreshToken');
 
-    if (!agency) {
+    if (!admin) {
       return res.status(404).json({
         success: false,
-        message: 'Agence introuvable'
+        message: 'Admin introuvable'
       });
     }
 
-    if (!agency.googleCalendar?.isConnected) {
+    // Vérifier l'accès à Google Calendar
+    if (!admin.aAccesGoogleCalendar()) {
+      return res.status(403).json({
+        success: false,
+        message: 'Accès refusé. Vous devez acheter l\'option Google Calendar ou disposer du Pack Évolutions.'
+      });
+    }
+
+    if (!admin.googleCalendar?.isConnected) {
       return res.status(403).json({
         success: false,
         message: 'Google Calendar n\'est pas connecté. Veuillez vous connecter d\'abord.'
@@ -219,22 +250,22 @@ exports.createEvent = async (req, res) => {
     // Configurer OAuth2 avec les tokens
     const oauth2Client = getOAuth2Client();
     oauth2Client.setCredentials({
-      access_token: agency.googleCalendar.accessToken,
-      refresh_token: agency.googleCalendar.refreshToken
+      access_token: admin.googleCalendar.accessToken,
+      refresh_token: admin.googleCalendar.refreshToken
     });
 
     // Vérifier si le token est expiré et le rafraîchir si nécessaire
-    if (agency.isGoogleTokenExpired()) {
+    if (admin.isGoogleTokenExpired()) {
       console.log('🔄 Token expiré, rafraîchissement...');
       const { credentials } = await oauth2Client.refreshAccessToken();
       oauth2Client.setCredentials(credentials);
 
       // Mettre à jour les tokens dans la base
-      await agency.connectGoogleCalendar({
+      await admin.connectGoogleCalendar({
         accessToken: credentials.access_token,
-        refreshToken: credentials.refresh_token || agency.googleCalendar.refreshToken,
+        refreshToken: credentials.refresh_token || admin.googleCalendar.refreshToken,
         tokenExpiry: credentials.expiry_date,
-        email: agency.googleCalendar.email
+        email: admin.googleCalendar.email
       });
     }
 
@@ -270,8 +301,8 @@ exports.createEvent = async (req, res) => {
     });
 
     // Mettre à jour lastSync
-    agency.googleCalendar.lastSync = new Date();
-    await agency.save();
+    admin.googleCalendar.lastSync = new Date();
+    await admin.save();
 
     console.log(`✅ Événement créé dans Google Calendar: ${response.data.htmlLink}`);
 

@@ -101,8 +101,41 @@ const AdminSchema = new Schema({
   historiqueCreditsIA: {
     type: [CreditsHistoriqueSchema],
     default: []
+  },
+
+  // 📅 Intégration Google Calendar
+  googleCalendar: {
+    isConnected: { type: Boolean, default: false },
+    accessToken: { type: String, default: null, select: false }, // Masqué par défaut pour sécurité
+    refreshToken: { type: String, default: null, select: false },
+    tokenExpiry: { type: Date, default: null },
+    email: { type: String, default: null }, // Email du compte Google connecté
+    connectedAt: { type: Date, default: null },
+    lastSync: { type: Date, default: null }
+  },
+
+  // 💼 Options payantes achetées
+  optionsAchetees: {
+    googleCalendar: {
+      actif: { type: Boolean, default: false },
+      dateAchat: { type: Date, default: null },
+      dateExpiration: { type: Date, default: null }, // null = illimité
+      prixPaye: { type: Number, default: 0 }
+    }
+  },
+
+  // 📄 Contrat de maintenance
+  contratMaintenance: {
+    actif: { type: Boolean, default: false },
+    type: {
+      type: String,
+      enum: ['serenite', 'evolution', 'aucun'],
+      default: 'aucun'
+    },
+    dateDebut: { type: Date, default: null },
+    dateExpiration: { type: Date, default: null }
   }
-}, 
+},
 
 {
   timestamps: true // createdAt, updatedAt
@@ -172,6 +205,85 @@ AdminSchema.methods.ajouterCreditsIA = async function({
  */
 AdminSchema.methods.aAssezDeCredits = function(nombreRequis = 1) {
   return this.creditsIA >= nombreRequis;
+};
+
+/**
+ * 🔹 Méthode pour vérifier l'accès à Google Calendar
+ * Retourne true si :
+ * - L'option Google Calendar est achetée ET active
+ * OU
+ * - Le contrat de maintenance est "Pack Evolutions"
+ */
+AdminSchema.methods.aAccesGoogleCalendar = function() {
+  // Option 1 : Option Google Calendar achetée
+  const optionActive = this.optionsAchetees?.googleCalendar?.actif === true;
+
+  // Vérifier expiration si date définie
+  if (optionActive && this.optionsAchetees.googleCalendar.dateExpiration) {
+    const maintenant = new Date();
+    if (maintenant > new Date(this.optionsAchetees.googleCalendar.dateExpiration)) {
+      return false; // Option expirée
+    }
+  }
+
+  // Option 2 : Contrat Pack Evolutions
+  const packEvolution = this.contratMaintenance?.actif &&
+                       this.contratMaintenance?.type === 'evolution';
+
+  return optionActive || packEvolution;
+};
+
+/**
+ * 🔹 Méthodes Google Calendar
+ */
+AdminSchema.methods.connectGoogleCalendar = async function({
+  accessToken,
+  refreshToken,
+  tokenExpiry,
+  email
+}) {
+  try {
+    this.googleCalendar = {
+      isConnected: true,
+      accessToken,
+      refreshToken,
+      tokenExpiry: tokenExpiry ? new Date(tokenExpiry) : null,
+      email,
+      connectedAt: new Date(),
+      lastSync: null
+    };
+
+    await this.save();
+    return this;
+  } catch (error) {
+    console.error("Erreur connectGoogleCalendar:", error);
+    throw error;
+  }
+};
+
+AdminSchema.methods.disconnectGoogleCalendar = async function() {
+  try {
+    this.googleCalendar = {
+      isConnected: false,
+      accessToken: null,
+      refreshToken: null,
+      tokenExpiry: null,
+      email: null,
+      connectedAt: null,
+      lastSync: null
+    };
+
+    await this.save();
+    return this;
+  } catch (error) {
+    console.error("Erreur disconnectGoogleCalendar:", error);
+    throw error;
+  }
+};
+
+AdminSchema.methods.isGoogleTokenExpired = function() {
+  if (!this.googleCalendar.tokenExpiry) return true;
+  return new Date() >= new Date(this.googleCalendar.tokenExpiry);
 };
 
 module.exports = mongoose.model('Admin', AdminSchema);
