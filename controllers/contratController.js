@@ -3,7 +3,7 @@ const ContratTransfert = require('../models/ContratTransfert');
 const Admin = require('../models/Admin');
 const sendEmail = require('../utils/sendEmails');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
-const puppeteer = require('puppeteer');
+const PDFDocument = require('pdfkit');
 
 // Définition des packs de maintenance
 const PACKS_MAINTENANCE = {
@@ -652,117 +652,173 @@ exports.telechargerPDF = async (req, res) => {
       });
     }
 
-    // Générer le HTML du contrat
-    const html = `
-    <!DOCTYPE html>
-    <html lang="fr">
-    <head>
-      <meta charset="UTF-8">
-      <style>
-        body { font-family: Arial, sans-serif; margin: 40px; color: #333; }
-        .header { text-align: center; border-bottom: 3px solid #ed891a; padding-bottom: 20px; margin-bottom: 30px; }
-        .header h1 { color: #ed891a; margin: 0; }
-        .section { margin-bottom: 25px; }
-        .section h2 { color: #ed891a; font-size: 16px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
-        .info-table { width: 100%; border-collapse: collapse; margin: 15px 0; }
-        .info-table td { padding: 8px; border: 1px solid #ddd; }
-        .info-table td:first-child { font-weight: bold; background: #f8f9fa; width: 30%; }
-        .signature-box { border: 2px solid #ed891a; padding: 15px; margin-top: 30px; background: #fff3e0; }
-        .signature-img { max-width: 300px; height: auto; border: 1px solid #ddd; background: white; padding: 10px; }
-        .footer { text-align: center; margin-top: 50px; font-size: 12px; color: #666; border-top: 1px solid #ddd; padding-top: 20px; }
-      </style>
-    </head>
-    <body>
-      <div class="header">
-        <h1>CONTRAT DE TRANSFERT ET LIVRAISON</h1>
-        <p><strong>Application Web Dimotec</strong></p>
-        <p>Contrat n° ${contrat._id}</p>
-      </div>
-
-      <div class="section">
-        <h2>1. Informations du Contractant</h2>
-        <table class="info-table">
-          <tr><td>Nom complet</td><td>${contrat.signature.prenom} ${contrat.signature.nom}</td></tr>
-          <tr><td>Email</td><td>${contrat.adminId.email}</td></tr>
-          <tr><td>Téléphone</td><td>${contrat.informationsLegales?.telephoneContact || 'Non renseigné'}</td></tr>
-          <tr><td>Entreprise</td><td>${contrat.adminId.entreprise?.name || 'Non spécifié'}</td></tr>
-          <tr><td>Adresse</td><td>${contrat.informationsLegales?.adresseComplete || 'Non renseigné'}</td></tr>
-        </table>
-      </div>
-
-      <div class="section">
-        <h2>2. Pack de Maintenance Sélectionné</h2>
-        <table class="info-table">
-          <tr><td>Offre choisie</td><td><strong>${contrat.detailsPack.nom}</strong></td></tr>
-          <tr><td>Tarif mensuel</td><td><strong>${contrat.detailsPack.prixMensuel}€ HT / mois</strong></td></tr>
-          <tr><td>Engagement</td><td>12 mois - Préavis de résiliation: 1 mois</td></tr>
-        </table>
-
-        <p><strong>Fonctionnalités incluses:</strong></p>
-        <ul>
-          ${contrat.detailsPack.fonctionnalites.map(f => `<li>${f}</li>`).join('')}
-        </ul>
-      </div>
-
-      <div class="section">
-        <h2>3. Informations de Signature</h2>
-        <table class="info-table">
-          <tr><td>Date de signature</td><td>${new Date(contrat.dateSignature).toLocaleString('fr-FR')}</td></tr>
-          <tr><td>Adresse IP</td><td>${contrat.informationsLegales?.ipSignature || 'N/A'}</td></tr>
-          <tr><td>Navigateur</td><td>${contrat.informationsLegales?.navigateur || 'N/A'}</td></tr>
-          <tr><td>Système d'exploitation</td><td>${contrat.informationsLegales?.systemeExploitation || 'N/A'}</td></tr>
-          <tr><td>Horodatage complet</td><td>${new Date(contrat.informationsLegales?.horodatageComplet).toLocaleString('fr-FR')}</td></tr>
-        </table>
-      </div>
-
-      <div class="signature-box">
-        <p><strong>Signature électronique manuscrite:</strong></p>
-        ${contrat.signature.signatureCanvas ? `<img src="${contrat.signature.signatureCanvas}" class="signature-img" alt="Signature" />` : '<p>Signature non disponible</p>'}
-        <p style="margin-top: 15px;"><em>Je soussigné(e) ${contrat.signature.prenom} ${contrat.signature.nom}, certifie avoir lu et accepté les conditions générales du présent contrat.</em></p>
-      </div>
-
-      <div class="section" style="margin-top: 30px;">
-        <h2>4. Conditions Générales</h2>
-        <p><strong>Garantie technique:</strong> 3 mois à compter de la signature initiale.</p>
-        <p><strong>Propriété intellectuelle:</strong> DATAFUSE reste propriétaire du moteur logiciel. Le Client bénéficie d'un droit d'usage exclusif.</p>
-        <p><strong>Données:</strong> Les données restent la propriété exclusive du Client.</p>
-        <p><strong>Engagement:</strong> Durée de 12 mois avec reconduction tacite. Résiliation sur préavis d'1 mois.</p>
-        <p><strong>Droit applicable:</strong> Droit français - Tribunal de Commerce de Paris.</p>
-      </div>
-
-      <div class="footer">
-        <p>Document généré le ${new Date().toLocaleDateString('fr-FR')} - Contrat légalement valide</p>
-        <p><strong>DATAFUSE</strong> - Service Dimotec</p>
-        <p>Version du contrat: ${contrat.versionContrat}</p>
-      </div>
-    </body>
-    </html>
-    `;
-
-    // Générer le PDF avec puppeteer
-    const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+    // Créer un nouveau document PDF
+    const doc = new PDFDocument({
+      size: 'A4',
+      margins: { top: 50, bottom: 50, left: 50, right: 50 }
     });
-    const page = await browser.newPage();
-    await page.setContent(html, { waitUntil: 'networkidle0' });
-    const pdfBuffer = await page.pdf({
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '20px', bottom: '20px', left: '20px', right: '20px' }
-    });
-    await browser.close();
 
-    // Envoyer le PDF
+    // Configuration des headers pour le téléchargement
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="Contrat_Dimotec_${contrat._id}.pdf"`);
-    res.send(pdfBuffer);
+
+    // Pipe le PDF vers la réponse HTTP
+    doc.pipe(res);
+
+    // Couleur principale
+    const orangeColor = '#ed891a';
+
+    // ========== EN-TÊTE ==========
+    doc.fontSize(24).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('CONTRAT DE TRANSFERT ET LIVRAISON', { align: 'center' });
+
+    doc.fontSize(14).fillColor('#333').font('Helvetica')
+       .text('Application Web Dimotec', { align: 'center' })
+       .moveDown(0.3);
+
+    doc.fontSize(10).fillColor('#666')
+       .text(`Contrat n° ${contrat._id}`, { align: 'center' })
+       .moveDown(1);
+
+    // Ligne de séparation
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor(orangeColor).lineWidth(2).stroke();
+    doc.moveDown(1.5);
+
+    // ========== 1. INFORMATIONS DU CONTRACTANT ==========
+    doc.fontSize(14).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('1. Informations du Contractant', { underline: true })
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica');
+    const infoY = doc.y;
+    doc.text(`Nom complet:`, 70, infoY, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.signature.prenom} ${contrat.signature.nom}`);
+    doc.font('Helvetica').text(`Email:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.adminId.email}`);
+    doc.font('Helvetica').text(`Téléphone:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.informationsLegales?.telephoneContact || 'Non renseigné'}`);
+    doc.font('Helvetica').text(`Entreprise:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.adminId.entreprise?.name || 'Non spécifié'}`);
+    doc.font('Helvetica').text(`Adresse:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.informationsLegales?.adresseComplete || 'Non renseigné'}`, { width: 450 });
+
+    doc.moveDown(1.5);
+
+    // ========== 2. PACK DE MAINTENANCE ==========
+    doc.fontSize(14).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('2. Pack de Maintenance Sélectionné', { underline: true })
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica');
+    doc.text(`Offre choisie:`, 70, doc.y, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.detailsPack.nom}`);
+    doc.font('Helvetica').text(`Tarif mensuel:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.detailsPack.prixMensuel}€ HT / mois`);
+    doc.font('Helvetica').text(`Engagement:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` 12 mois - Préavis de résiliation: 1 mois`);
+
+    doc.moveDown(0.8);
+    doc.font('Helvetica-Bold').text('Fonctionnalités incluses:', 70);
+    doc.font('Helvetica').fontSize(9);
+    contrat.detailsPack.fonctionnalites.forEach(f => {
+      doc.text(`• ${f}`, 90, doc.y + 3, { width: 470 });
+    });
+
+    doc.moveDown(1.5);
+
+    // ========== 3. INFORMATIONS DE SIGNATURE ==========
+    doc.fontSize(14).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('3. Informations de Signature', { underline: true })
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica');
+    doc.text(`Date de signature:`, 70, doc.y, { continued: true })
+       .font('Helvetica-Bold').text(` ${new Date(contrat.dateSignature).toLocaleString('fr-FR')}`);
+    doc.font('Helvetica').text(`Adresse IP:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.informationsLegales?.ipSignature || 'N/A'}`);
+    doc.font('Helvetica').text(`Navigateur:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.informationsLegales?.navigateur || 'N/A'}`);
+    doc.font('Helvetica').text(`Système d'exploitation:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${contrat.informationsLegales?.systemeExploitation || 'N/A'}`);
+    doc.font('Helvetica').text(`Horodatage complet:`, 70, doc.y + 5, { continued: true })
+       .font('Helvetica-Bold').text(` ${new Date(contrat.informationsLegales?.horodatageComplet).toLocaleString('fr-FR')}`);
+
+    doc.moveDown(1.5);
+
+    // ========== SIGNATURE CANVAS ==========
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('Signature électronique manuscrite:', 70)
+       .moveDown(0.5);
+
+    if (contrat.signature.signatureCanvas) {
+      try {
+        // Extraire l'image base64 (enlever le préfixe data:image/png;base64,)
+        const base64Data = contrat.signature.signatureCanvas.replace(/^data:image\/\w+;base64,/, '');
+        const imageBuffer = Buffer.from(base64Data, 'base64');
+
+        // Ajouter l'image de la signature
+        doc.image(imageBuffer, 70, doc.y, {
+          fit: [300, 100],
+          align: 'left'
+        });
+        doc.moveDown(6);
+      } catch (err) {
+        console.error('Erreur ajout signature:', err);
+        doc.fontSize(10).fillColor('#666').font('Helvetica-Oblique')
+           .text('Signature non disponible', 70);
+        doc.moveDown(1);
+      }
+    } else {
+      doc.fontSize(10).fillColor('#666').font('Helvetica-Oblique')
+         .text('Signature non disponible', 70);
+      doc.moveDown(1);
+    }
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica-Oblique')
+       .text(`Je soussigné(e) ${contrat.signature.prenom} ${contrat.signature.nom}, certifie avoir lu et accepté les conditions générales du présent contrat.`, 70, doc.y, { width: 470 });
+
+    doc.moveDown(1.5);
+
+    // ========== 4. CONDITIONS GÉNÉRALES ==========
+    doc.fontSize(14).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('4. Conditions Générales', { underline: true })
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica');
+    doc.text(`Garantie technique: `, 70, doc.y, { continued: true })
+       .text('3 mois à compter de la signature initiale.');
+    doc.text(`Propriété intellectuelle: `, 70, doc.y + 5, { continued: true })
+       .text('DATAFUSE reste propriétaire du moteur logiciel. Le Client bénéficie d\'un droit d\'usage exclusif.', { width: 470 });
+    doc.text(`Données: `, 70, doc.y + 5, { continued: true })
+       .text('Les données restent la propriété exclusive du Client.');
+    doc.text(`Engagement: `, 70, doc.y + 5, { continued: true })
+       .text('Durée de 12 mois avec reconduction tacite. Résiliation sur préavis d\'1 mois.');
+    doc.text(`Droit applicable: `, 70, doc.y + 5, { continued: true })
+       .text('Droit français - Tribunal de Commerce de Paris.');
+
+    doc.moveDown(2);
+
+    // ========== FOOTER ==========
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#ddd').lineWidth(1).stroke();
+    doc.moveDown(0.8);
+
+    doc.fontSize(9).fillColor('#666').font('Helvetica')
+       .text(`Document généré le ${new Date().toLocaleDateString('fr-FR')} - Contrat légalement valide`, { align: 'center' });
+    doc.font('Helvetica-Bold')
+       .text('DATAFUSE - Service Dimotec', { align: 'center' });
+    doc.font('Helvetica')
+       .text(`Version du contrat: ${contrat.versionContrat}`, { align: 'center' });
+
+    // Finaliser le PDF
+    doc.end();
 
   } catch (error) {
     console.error('Erreur telechargerPDF:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Erreur lors de la génération du PDF'
-    });
+    if (!res.headersSent) {
+      res.status(500).json({
+        success: false,
+        message: 'Erreur lors de la génération du PDF'
+      });
+    }
   }
 };
