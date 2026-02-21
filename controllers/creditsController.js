@@ -55,24 +55,24 @@ exports.getBalance = async (req, res) => {
       });
     }
 
-    // 🔹 Sinon, vérifier si c'est une Agence
-    const agencyId = req.agence?._id;
+    // 🔹 Sinon, chercher une Agence par l'email de l'utilisateur
+    const userEmail = req.user?.email;
 
-    if (!agencyId) {
+    if (!userEmail) {
       return res.status(401).json({
         success: false,
-        message: 'Utilisateur non trouvé'
+        message: 'Email utilisateur manquant'
       });
     }
 
-    const agency = await Agency.findById(agencyId)
+    const agency = await Agency.findOne({ 'admin.email': userEmail })
       .select('creditsIA historiqueCreditsIA')
       .lean();
 
     if (!agency) {
       return res.status(404).json({
         success: false,
-        message: 'Agence introuvable'
+        message: 'Utilisateur non trouvé (ni Admin ni Agence)'
       });
     }
 
@@ -166,22 +166,22 @@ exports.createCheckoutSession = async (req, res) => {
       });
     }
 
-    // 🔹 Sinon, c'est une Agence
-    const agencyId = req.agence?._id;
+    // 🔹 Sinon, chercher une Agence par l'email de l'utilisateur
+    const userEmail = req.user?.email;
 
-    if (!agencyId) {
+    if (!userEmail) {
       return res.status(401).json({
         success: false,
-        message: 'Utilisateur non trouvé'
+        message: 'Email utilisateur manquant'
       });
     }
 
-    const agency = await Agency.findById(agencyId);
+    const agency = await Agency.findOne({ 'admin.email': userEmail });
 
     if (!agency) {
       return res.status(404).json({
         success: false,
-        message: 'Agence introuvable'
+        message: 'Utilisateur non trouvé (ni Admin ni Agence)'
       });
     }
 
@@ -204,7 +204,7 @@ exports.createCheckoutSession = async (req, res) => {
         },
       ],
       metadata: {
-        agencyId: agencyId.toString(),
+        agencyId: agency._id.toString(),
         packId: packId.toString(),
         nombreCredits: pack.nombreCredits.toString(),
         type: 'credit_pack_purchase'

@@ -383,31 +383,54 @@ exports.generateDevisAI = async (req, res) => {
   try {
     console.log("📌 Requête reçue pour génération de devis AI");
 
-    // 🤖 Vérifier les crédits IA disponibles
-    const agenceId = req.agence?._id;
-    if (!agenceId) {
+    // 🤖 Vérifier les crédits IA disponibles (Admin ou Agence)
+    const userId = req.user?.id;
+
+    if (!userId) {
       return res.status(401).json({
         success: false,
-        message: "Agence non authentifiée"
+        message: "Utilisateur non authentifié"
       });
     }
 
-    const Agency = require('../models/Agency');
-    const agence = await Agency.findById(agenceId);
+    // 🔹 Vérifier si c'est un Admin
+    let userEntity = await Admin.findById(userId);
+    let isAdmin = !!userEntity;
 
-    if (!agence) {
+    // 🔹 Si ce n'est pas un Admin, chercher une Agence par l'email de l'utilisateur
+    if (!userEntity) {
+      const userEmail = req.user?.email;
+      if (!userEmail) {
+        return res.status(401).json({
+          success: false,
+          message: "Email utilisateur manquant"
+        });
+      }
+
+      // Chercher une agence dont l'admin a cet email
+      userEntity = await Agence.findOne({ 'admin.email': userEmail });
+
+      if (!userEntity) {
+        return res.status(404).json({
+          success: false,
+          message: "Utilisateur non trouvé (ni Admin ni Agence)"
+        });
+      }
+    }
+
+    if (!userEntity) {
       return res.status(404).json({
         success: false,
-        message: "Agence introuvable"
+        message: "Utilisateur introuvable"
       });
     }
 
-    // Vérifier si l'agence a au moins 1 crédit
-    if (!agence.aAssezDeCredits(1)) {
+    // Vérifier si l'utilisateur a au moins 1 crédit
+    if (!userEntity.aAssezDeCredits(1)) {
       return res.status(403).json({
         success: false,
         message: "Crédits IA insuffisants. Veuillez acheter un pack de crédits dans les paramètres.",
-        creditsRestants: agence.creditsIA || 0
+        creditsRestants: userEntity.creditsIA || 0
       });
     }
 
@@ -591,20 +614,20 @@ Propose un devis recommandé en listant :
 
     // 🤖 Déduire 1 crédit après génération réussie
     try {
-      await agence.ajouterCreditsIA({
+      await userEntity.ajouterCreditsIA({
         type: 'utilisation',
         nombreCredits: 1,
         description: 'Génération de devis par IA',
-        par: agence.admin?.email || 'système'
+        par: isAdmin ? userEntity.email : (userEntity.admin?.email || 'système')
       });
-      console.log(`✅ 1 crédit IA déduit. Reste: ${agence.creditsIA} crédits`);
+      console.log(`✅ 1 crédit IA déduit. Reste: ${userEntity.creditsIA} crédits`);
     } catch (creditError) {
       console.error('Erreur déduction crédit:', creditError);
       // On continue quand même, car le devis a été généré
     }
 
     // Ajouter le nombre de crédits restants dans la réponse
-    responseJSON.creditsRestants = agence.creditsIA;
+    responseJSON.creditsRestants = userEntity.creditsIA;
 
     return res.status(200).json(responseJSON);
 
