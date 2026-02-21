@@ -1,5 +1,5 @@
+// controllers/contratController.js
 const ContratTransfert = require('../models/ContratTransfert');
-const Agency = require('../models/Agency');
 
 // Définition des packs de maintenance
 const PACKS_MAINTENANCE = {
@@ -46,19 +46,9 @@ const PACKS_MAINTENANCE = {
 // Vérifie si le contrat est signé
 exports.getStatus = async (req, res) => {
   try {
-    const adminId = req.user.id; // ID de l'admin depuis le token
+    const adminId = req.user.id; // ID du SuperAdmin depuis le token
 
-    // Trouver l'agence qui contient cet admin
-    const agency = await Agency.findOne({ 'admin._id': adminId });
-
-    if (!agency) {
-      return res.status(404).json({
-        success: false,
-        message: 'Agence non trouvée pour cet admin'
-      });
-    }
-
-    const contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agency._id);
+    const contrat = await ContratTransfert.getOrCreateForAdmin(adminId);
 
     res.json({
       success: true,
@@ -81,9 +71,9 @@ exports.getStatus = async (req, res) => {
 // Récupère la liste des packs disponibles
 exports.getPacks = async (req, res) => {
   try {
-    const adminId = req.user.id; // ID de l'admin depuis le token
+    const adminId = req.user.id; 
 
-    // Vérifier si l'admin a déjà un contrat
+    // Vérifier si l'admin a déjà un contrat pour adapter les prix
     const contrat = await ContratTransfert.findOne({ adminId });
     const tarifPreferentiel = contrat ? contrat.tarifPreferentiel : true;
 
@@ -118,7 +108,7 @@ exports.getPacks = async (req, res) => {
 // Signe le contrat avec le pack choisi
 exports.signerContrat = async (req, res) => {
   try {
-    const adminId = req.user.id; // ID de l'admin depuis le token
+    const adminId = req.user.id; 
     const { packMaintenance, signature } = req.body;
 
     // Validation
@@ -136,20 +126,10 @@ exports.signerContrat = async (req, res) => {
       });
     }
 
-    // Trouver l'agence qui contient cet admin
-    const agency = await Agency.findOne({ 'admin._id': adminId });
+    // Récupérer ou créer le contrat pour cet Admin
+    let contrat = await ContratTransfert.getOrCreateForAdmin(adminId);
 
-    if (!agency) {
-      return res.status(404).json({
-        success: false,
-        message: 'Agence non trouvée pour cet admin'
-      });
-    }
-
-    // Récupérer ou créer le contrat
-    let contrat = await ContratTransfert.getOrCreateForAdmin(adminId, agency._id);
-
-    // Si déjà signé, ne pas permettre de re-signer
+    // Si déjà signé, on bloque
     if (contrat.isValide) {
       return res.status(400).json({
         success: false,
@@ -160,7 +140,7 @@ exports.signerContrat = async (req, res) => {
     // Mettre à jour le pack choisi
     contrat.packMaintenance = packMaintenance;
 
-    // Récupérer les détails du pack
+    // Récupérer les détails du pack pour les figer dans le contrat
     const packDetails = PACKS_MAINTENANCE[packMaintenance];
     contrat.detailsPack = {
       nom: packDetails.nom,
@@ -170,11 +150,11 @@ exports.signerContrat = async (req, res) => {
       fonctionnalites: packDetails.fonctionnalites
     };
 
-    // Récupérer l'IP de la requête
+    // Récupérer l'IP de la requête pour la valeur légale
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
-    // Valider le contrat
-    await contrat.valider(signature, ip, agency._id);
+    // Valider le contrat via la méthode du modèle
+    await contrat.valider(signature, ip);
 
     res.json({
       success: true,
@@ -199,24 +179,14 @@ exports.signerContrat = async (req, res) => {
 // Récupère les détails complets du contrat signé
 exports.getDetails = async (req, res) => {
   try {
-    const adminId = req.user.id; // ID de l'admin depuis le token
+    const adminId = req.user.id; 
 
-    // Trouver l'agence qui contient cet admin
-    const agency = await Agency.findOne({ 'admin._id': adminId });
-
-    if (!agency) {
-      return res.status(404).json({
-        success: false,
-        message: 'Agence non trouvée pour cet admin'
-      });
-    }
-
-    const contrat = await ContratTransfert.findOne({ adminId });
+    const contrat = await ContratTransfert.findOne({ adminId }).populate('adminId', 'nom prenom email telephone entreprise');
 
     if (!contrat || !contrat.isValide) {
       return res.status(404).json({
         success: false,
-        message: 'Aucun contrat signé trouvé'
+        message: 'Aucun contrat signé trouvé pour cet administrateur'
       });
     }
 
@@ -231,11 +201,13 @@ exports.getDetails = async (req, res) => {
           prenom: contrat.signature.prenom,
           fonction: contrat.signature.fonction
         },
-        agence: {
-          nomAgence: agency.nom_commercial,
-          email: agency.admin?.email,
-          telephone: agency.admin?.telephone_portable
-        },
+        // Informations de l'Admin remontées via populate
+        admin: contrat.adminId ? {
+          nom: contrat.adminId.nom,
+          prenom: contrat.adminId.prenom,
+          email: contrat.adminId.email,
+          entreprise: contrat.adminId.entreprise?.name || 'Non spécifié'
+        } : null,
         versionContrat: contrat.versionContrat
       }
     });
@@ -244,32 +216,22 @@ exports.getDetails = async (req, res) => {
     console.error('Erreur getDetails:', error);
     res.status(500).json({
       success: false,
-      message: 'Erreur lors de la récupération des détails'
+      message: 'Erreur lors de la récupération des détails du contrat'
     });
   }
 };
 
 // PUT /api/admin/contrat/changer-pack
-// Permet de changer de pack après signature (tarif normal)
+// Permet de changer de pack après signature (passage au tarif normal)
 exports.changerPack = async (req, res) => {
   try {
-    const adminId = req.user.id; // ID de l'admin depuis le token
+    const adminId = req.user.id; 
     const { nouveauPack } = req.body;
 
     if (!['serenite', 'evolution', 'aucun'].includes(nouveauPack)) {
       return res.status(400).json({
         success: false,
         message: 'Pack invalide'
-      });
-    }
-
-    // Trouver l'agence qui contient cet admin
-    const agency = await Agency.findOne({ 'admin._id': adminId });
-
-    if (!agency) {
-      return res.status(404).json({
-        success: false,
-        message: 'Agence non trouvée pour cet admin'
       });
     }
 
@@ -282,7 +244,7 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    // Changement de pack = tarif normal (plus de préférentiel)
+    // Changement de pack = perte du tarif préférentiel
     contrat.packMaintenance = nouveauPack;
     contrat.tarifPreferentiel = false;
 
@@ -295,14 +257,9 @@ exports.changerPack = async (req, res) => {
 
     await contrat.save();
 
-    // Mettre à jour l'agence
-    await Agency.findByIdAndUpdate(agency._id, {
-      'contratTransfert.packMaintenance': nouveauPack
-    });
-
     res.json({
       success: true,
-      message: 'Pack de maintenance modifié',
+      message: 'Pack de maintenance modifié avec succès',
       nouveauPack: contrat.detailsPack
     });
 

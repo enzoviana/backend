@@ -1,115 +1,66 @@
+// models/ContratTransfert.js
 const mongoose = require('mongoose');
 const Schema = mongoose.Schema;
 
 const ContratTransfertSchema = new Schema({
   adminId: {
     type: Schema.Types.ObjectId,
+    ref: 'Admin',
     required: true,
-    unique: true
+    unique: true // Un seul contrat par compte SuperAdmin
   },
 
-  agence: {
-    type: Schema.Types.ObjectId,
-    ref: 'Agency',
-    required: true
-  },
+  // État du contrat
+  isValide: { type: Boolean, default: false },
+  dateSignature: { type: Date, default: null },
 
-  // Informations de signature
-  dateSignature: {
-    type: Date,
-    default: null
-  },
-
-  isValide: {
-    type: Boolean,
-    default: false
-  },
-
-  // Choix du pack de maintenance
+  // Maintenance & Offre
   packMaintenance: {
     type: String,
     enum: ['serenite', 'evolution', 'aucun'],
     required: true
   },
-
-  // Tarif préférentiel si signé directement
-  tarifPreferentiel: {
-    type: Boolean,
-    default: true
-  },
-
-  // Détails des packs
+  tarifPreferentiel: { type: Boolean, default: true },
+  
   detailsPack: {
     nom: String,
     prixMensuel: Number,
     fonctionnalites: [String]
   },
 
-  // Signature électronique
+  // Données de signature (Valeur légale)
   signature: {
     nom: String,
     prenom: String,
     fonction: String,
-    accepteConditions: {
-      type: Boolean,
-      default: false
-    }
+    accepteConditions: { type: Boolean, default: false }
   },
-
-  // Conditions générales
-  conditionsAcceptees: {
-    type: Boolean,
-    default: false
-  },
-
-  // IP de signature
   ipSignature: String,
-
-  // Version du contrat
-  versionContrat: {
-    type: String,
-    default: '1.0'
-  }
+  versionContrat: { type: String, default: '1.0' }
 
 }, { timestamps: true });
 
-// Méthode pour valider le contrat
-ContratTransfertSchema.methods.valider = async function(signatureData, ip, agenceId) {
+// Méthode de validation
+ContratTransfertSchema.methods.valider = async function(signatureData, ip) {
   this.isValide = true;
   this.dateSignature = new Date();
-  this.signature = signatureData;
+  this.signature = { ...signatureData, accepteConditions: true };
   this.ipSignature = ip;
-  this.conditionsAcceptees = true;
-
-  await this.save();
-
-  // Mettre à jour l'agence
-  const Agency = mongoose.model('Agency');
-  const updateAgenceId = agenceId || this.agence;
-  await Agency.findByIdAndUpdate(updateAgenceId, {
-    'contratTransfert.signe': true,
-    'contratTransfert.dateSignature': this.dateSignature,
-    'contratTransfert.packMaintenance': this.packMaintenance
-  });
-
-  return this;
+  
+  return await this.save();
 };
 
-// Méthode statique pour récupérer ou créer un contrat pour un admin
-ContratTransfertSchema.statics.getOrCreateForAdmin = async function(adminId, agenceId) {
+// Récupération automatique
+ContratTransfertSchema.statics.getOrCreateForAdmin = async function(adminId) {
   let contrat = await this.findOne({ adminId });
-
   if (!contrat) {
     contrat = new this({
       adminId,
-      agence: agenceId,
-      packMaintenance: 'aucun',
-      tarifPreferentiel: true,
-      isValide: false
+      packMaintenance: 'serenite', // Par défaut sur le pack recommandé
+      tarifPreferentiel: true
     });
     await contrat.save();
   }
-
   return contrat;
 };
 
