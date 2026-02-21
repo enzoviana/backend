@@ -4,8 +4,6 @@ const Admin = require('../models/Admin');
 const sendEmail = require('../utils/sendEmails');
 const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const puppeteer = require('puppeteer');
-const fs = require('fs');
-const path = require('path');
 
 // Définition des packs de maintenance
 const PACKS_MAINTENANCE = {
@@ -297,6 +295,14 @@ exports.signerContrat = async (req, res) => {
     // Valider le contrat via la méthode du modèle
     await contrat.valider(contrat.signature, informationsLegales);
 
+    // Définir le statut de paiement
+    if (contrat.packMaintenance !== 'aucun') {
+      contrat.statutPaiement = 'en_attente';
+    } else {
+      contrat.statutPaiement = 'actif'; // Pas de paiement requis pour le pack sans maintenance
+    }
+    await contrat.save();
+
     // 📧 Envoyer email de confirmation
     await sendEmail({
       to: admin.email,
@@ -354,9 +360,12 @@ exports.getDetails = async (req, res) => {
     res.json({
       success: true,
       contrat: {
+        _id: contrat._id,
         dateSignature: contrat.dateSignature,
         packMaintenance: contrat.packMaintenance,
         detailsPack: contrat.detailsPack,
+        tarifPreferentiel: contrat.tarifPreferentiel,
+        isValide: contrat.isValide,
         signature: {
           nom: contrat.signature.nom,
           prenom: contrat.signature.prenom,
@@ -369,6 +378,13 @@ exports.getDetails = async (req, res) => {
           email: contrat.adminId.email,
           entreprise: contrat.adminId.entreprise?.name || 'Non spécifié'
         } : null,
+        // Informations Stripe et paiement
+        statutPaiement: contrat.statutPaiement,
+        stripeSubscriptionId: contrat.stripeSubscriptionId,
+        stripeCustomerId: contrat.stripeCustomerId,
+        dateDebutAbonnement: contrat.dateDebutAbonnement,
+        dateProchaineFacture: contrat.dateProchaineFacture,
+        dateFinEngagement: contrat.dateFinEngagement,
         versionContrat: contrat.versionContrat
       }
     });
