@@ -524,14 +524,31 @@ exports.handleContratStripeWebhook = async (session) => {
     // Récupérer l'abonnement Stripe
     const subscription = await stripe.subscriptions.retrieve(session.subscription);
 
+    // Vérifier que les timestamps sont valides
+    if (!subscription.current_period_start || !subscription.current_period_end) {
+      console.error('Timestamps Stripe invalides:', subscription);
+      throw new Error('Timestamps Stripe manquants');
+    }
+
     // Mettre à jour le contrat
     contrat.stripeSubscriptionId = subscription.id;
     contrat.statutPaiement = 'actif';
-    contrat.dateDebutAbonnement = new Date(subscription.current_period_start * 1000);
-    contrat.dateProchaineFacture = new Date(subscription.current_period_end * 1000);
+
+    // Les timestamps Stripe sont en secondes, on les convertit en millisecondes
+    const dateDebut = new Date(subscription.current_period_start * 1000);
+    const dateFin = new Date(subscription.current_period_end * 1000);
+
+    // Vérifier que les dates sont valides
+    if (isNaN(dateDebut.getTime()) || isNaN(dateFin.getTime())) {
+      console.error('Dates invalides après conversion:', { dateDebut, dateFin });
+      throw new Error('Conversion de dates échouée');
+    }
+
+    contrat.dateDebutAbonnement = dateDebut;
+    contrat.dateProchaineFacture = dateFin;
 
     // Engagement 1 an à partir de la date de début
-    const dateFinEngagement = new Date(subscription.current_period_start * 1000);
+    const dateFinEngagement = new Date(dateDebut);
     dateFinEngagement.setFullYear(dateFinEngagement.getFullYear() + 1);
     contrat.dateFinEngagement = dateFinEngagement;
 
@@ -779,24 +796,139 @@ exports.telechargerPDF = async (req, res) => {
 
     doc.moveDown(1.5);
 
-    // ========== 4. CONDITIONS GÉNÉRALES ==========
-    doc.fontSize(14).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('4. Conditions Générales', { underline: true })
+    // ========== CONDITIONS GÉNÉRALES COMPLÈTES ==========
+    doc.addPage();
+
+    doc.fontSize(18).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('CONDITIONS GÉNÉRALES', { align: 'center' })
        .moveDown(0.5);
 
-    doc.fontSize(10).fillColor('#333').font('Helvetica');
-    doc.text(`Garantie technique: `, 70, doc.y, { continued: true })
-       .text('3 mois à compter de la signature initiale.');
-    doc.text(`Propriété intellectuelle: `, 70, doc.y + 5, { continued: true })
-       .text('DATAFUSE reste propriétaire du moteur logiciel. Le Client bénéficie d\'un droit d\'usage exclusif.', { width: 470 });
-    doc.text(`Données: `, 70, doc.y + 5, { continued: true })
-       .text('Les données restent la propriété exclusive du Client.');
-    doc.text(`Engagement: `, 70, doc.y + 5, { continued: true })
-       .text('Durée de 12 mois avec reconduction tacite. Résiliation sur préavis d\'1 mois.');
-    doc.text(`Droit applicable: `, 70, doc.y + 5, { continued: true })
-       .text('Droit français - Tribunal de Commerce de Paris.');
+    doc.fontSize(10).fillColor('#666').font('Helvetica')
+       .text('de Livraison & Maintenance', { align: 'center' })
+       .moveDown(1.5);
 
-    doc.moveDown(2);
+    doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor(orangeColor).lineWidth(1).stroke();
+    doc.moveDown(1.5);
+
+    // CLAUSE 1
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('1. Objet du contrat & Livraison')
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica')
+       .text(`Le présent contrat acte la livraison de l'application web « ${contrat.adminId.entreprise?.name || 'Dimotec'} ». Le Prestataire (DATAFUSE) confirme avoir transféré le code source spécifique, le nom de domaine et les accès administrateurs nécessaires. Le Client reconnaît la conformité fonctionnelle de la Web App à la date de signature.`, 70, doc.y, { width: 470, align: 'justify' })
+       .moveDown(1.2);
+
+    // CLAUSE 2
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('2. Garantie Technique', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica')
+       .text('Le Prestataire accorde une garantie de 3 mois à compter de la signature initiale. Cette garantie couvre exclusivement les bugs bloquants et les dysfonctionnements des fonctionnalités existantes. Sont exclus : les modifications graphiques, les évolutions fonctionnelles et les modifications de la logique métier.', 70, doc.y, { width: 470, align: 'justify' })
+       .moveDown(1.2);
+
+    // CLAUSE 3
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('3. Propriété Intellectuelle', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica-Bold')
+       .text('Droits du Prestataire : ', 70, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('DATAFUSE demeure propriétaire exclusif du Moteur Logiciel (architecture, algorithmes, modules génériques, savoir-faire technique et logique métier non spécifique).', { width: 470, align: 'justify' });
+
+    doc.moveDown(0.5);
+
+    doc.font('Helvetica-Bold')
+       .text('Droits du Client : ', 70, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('Le Client bénéficie d\'un droit d\'usage exclusif de la Web App pour ses besoins propres, sans droit de revente, de duplication ou de commercialisation du moteur.', { width: 470, align: 'justify' })
+       .moveDown(1.2);
+
+    // CLAUSE 4
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('4. Extensions & Applications Tierces', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica')
+       .text('Le Prestataire est autorisé à développer des extensions (IA, automatisations, modules mobiles) et à les proposer directement aux utilisateurs finaux via API. Deux modèles de commercialisation sont possibles : la vente directe par DATAFUSE ou un modèle de partenariat (80% Prestataire / 20% Client).', 70, doc.y, { width: 470, align: 'justify' })
+       .moveDown(1.2);
+
+    // CLAUSE 5
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('5. Confidentialité & Non-Exclusivité', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica-Bold')
+       .text('Exclusivité : ', 70, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('Le présent contrat n\'instaure aucune exclusivité. DATAFUSE peut proposer des technologies similaires à d\'autres clients.', { width: 470, align: 'justify' });
+
+    doc.moveDown(0.5);
+
+    doc.font('Helvetica-Bold')
+       .text('Données : ', 70, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('Les données du Client et de ses utilisateurs restent sa propriété exclusive. DATAFUSE s\'engage à ne jamais copier, réutiliser ou commercialiser ces données.', { width: 470, align: 'justify' })
+       .moveDown(1.2);
+
+    // CLAUSE 6
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('6. Maintenance Évolutive (Options)', 70)
+       .moveDown(0.5);
+
+    // Pack Sérénité
+    doc.fontSize(10).fillColor('#ed891a').font('Helvetica-Bold')
+       .text('PACK 1 - SÉRÉNITÉ', 90)
+       .moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica')
+       .text('Maintenance corrective (48h), mises à jour techniques (Serveur, MongoDB, API IA), sauvegardes quotidiennes et support prioritaire.', 90, doc.y, { width: 450, align: 'justify' });
+
+    doc.font('Helvetica-Bold').fillColor('#059669')
+       .text('250 € HT / mois', 90, doc.y + 3, { continued: true })
+       .font('Helvetica').fillColor('#94a3b8')
+       .text(' (345 € HT sans tarif fondateur)')
+       .moveDown(0.8);
+
+    // Pack Évolution
+    doc.fontSize(10).fillColor('#ed891a').font('Helvetica-Bold')
+       .text('PACK 2 - ÉVOLUTION', 90)
+       .moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica')
+       .text('Inclus Pack 1 + Frais d\'hébergement + 1 journée/mois dédiée aux optimisations UX, graphiques et ajustements de logique serveur.', 90, doc.y, { width: 450, align: 'justify' });
+
+    doc.font('Helvetica-Bold').fillColor('#059669')
+       .text('400 € HT / mois', 90, doc.y + 3, { continued: true })
+       .font('Helvetica').fillColor('#94a3b8')
+       .text(' (552 € HT sans tarif fondateur)')
+       .moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#666').font('Helvetica-Oblique')
+       .text('En l\'absence de souscription, le Prestataire n\'est tenu à aucune obligation de maintenance ou d\'intervention hors devis ponctuel.', 90, doc.y, { width: 450, align: 'justify' })
+       .moveDown(1.2);
+
+    // CLAUSE 7
+    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
+       .text('7. Droit applicable & Litiges', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica')
+       .text('Le contrat est soumis au droit français. Compétence exclusive : ', 70, doc.y, { continued: true })
+       .font('Helvetica-Bold')
+       .text('Tribunal de Commerce de Paris.')
+       .moveDown(2);
+
+    // ENGAGEMENT
+    doc.fontSize(11).fillColor('#ed891a').font('Helvetica-Bold')
+       .text('Durée d\'engagement', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica')
+       .text('Le présent contrat de maintenance est conclu pour une durée de 12 mois à compter de la date de signature. Le contrat se renouvelle par tacite reconduction pour des périodes successives de 12 mois. Chaque partie peut résilier le contrat moyennant un préavis écrit de 1 mois avant la fin de la période en cours.', 70, doc.y, { width: 470, align: 'justify' })
+       .moveDown(2);
 
     // ========== FOOTER ==========
     doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#ddd').lineWidth(1).stroke();
