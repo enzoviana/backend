@@ -32,22 +32,75 @@ const ContratTransfertSchema = new Schema({
   signature: {
     nom: String,
     prenom: String,
-    fonction: String,
-    accepteConditions: { type: Boolean, default: false }
+    accepteConditions: { type: Boolean, default: false },
+    signatureCanvas: String, // Image base64 de la signature manuscrite
+    dateSignature: Date
   },
-  ipSignature: String,
+
+  // 📧 Vérification par email
+  codeVerification: { type: String, select: false },
+  dateCodeEnvoye: Date,
+  codeVerifie: { type: Boolean, default: false },
+  dateCodeVerifie: Date,
+
+  // 🔒 Informations légales obligatoires (France - Article 1316-1 du Code civil)
+  informationsLegales: {
+    ipSignature: String,
+    userAgent: String,
+    navigateur: String,
+    systemeExploitation: String,
+    horodatageComplet: Date,
+    emailContact: String,
+    telephoneContact: String,
+    adresseComplete: String
+  },
+
   versionContrat: { type: String, default: '1.0' }
 
 }, { timestamps: true });
 
 // Méthode de validation
-ContratTransfertSchema.methods.valider = async function(signatureData, ip) {
+ContratTransfertSchema.methods.valider = async function(signatureData, informationsLegales) {
   this.isValide = true;
   this.dateSignature = new Date();
-  this.signature = { ...signatureData, accepteConditions: true };
-  this.ipSignature = ip;
-  
+  this.signature = {
+    ...signatureData,
+    accepteConditions: true,
+    dateSignature: new Date()
+  };
+  this.codeVerifie = true;
+  this.dateCodeVerifie = new Date();
+  this.informationsLegales = informationsLegales;
+
   return await this.save();
+};
+
+// Méthode pour générer un code de vérification
+ContratTransfertSchema.methods.genererCodeVerification = function() {
+  // Générer un code à 6 chiffres
+  const code = Math.floor(100000 + Math.random() * 900000).toString();
+  this.codeVerification = code;
+  this.dateCodeEnvoye = new Date();
+  this.codeVerifie = false;
+  return code;
+};
+
+// Méthode pour vérifier le code
+ContratTransfertSchema.methods.verifierCode = function(code) {
+  // Vérifier que le code n'a pas expiré (10 minutes)
+  const maintenant = new Date();
+  const expiration = new Date(this.dateCodeEnvoye);
+  expiration.setMinutes(expiration.getMinutes() + 10);
+
+  if (maintenant > expiration) {
+    return { valide: false, message: 'Code expiré. Veuillez en demander un nouveau.' };
+  }
+
+  if (this.codeVerification !== code) {
+    return { valide: false, message: 'Code de vérification incorrect.' };
+  }
+
+  return { valide: true };
 };
 
 // Récupération automatique

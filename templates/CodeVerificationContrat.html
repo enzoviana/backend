@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Code de vérification - Dimotec</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #ed891a;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .code-box {
+            background-color: #f8f9fa;
+            border: 2px dashed #ed891a;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+            margin: 25px 0;
+        }
+        .code {
+            font-size: 36px;
+            font-weight: bold;
+            color: #ed891a;
+            letter-spacing: 8px;
+            font-family: 'Courier New', monospace;
+        }
+        .warning {
+            background-color: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
+            border-top: 1px solid #eeeeee;
+        }
+        .highlight {
+            color: #ed891a;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            🔐 Code de Vérification
+        </div>
+
+        <div class="content">
+            <p>Bonjour <strong>{{prenom}} {{nom}}</strong>,</p>
+
+            <p>Vous êtes sur le point de signer le <strong>Contrat de Transfert et Livraison</strong> de votre application Dimotec avec le <span class="highlight">{{packChoisi}}</span>.</p>
+
+            <p>Pour finaliser votre signature électronique, veuillez entrer le code de vérification suivant :</p>
+
+            <div class="code-box">
+                <div style="font-size: 14px; color: #666; margin-bottom: 10px;">Votre code de vérification :</div>
+                <div class="code">{{code}}</div>
+                <div style="font-size: 12px; color: #999; margin-top: 10px;">Valable pendant 10 minutes</div>
+            </div>
+
+            <div class="warning">
+                <strong>⚠️ Sécurité :</strong> Ce code est personnel et confidentiel. Ne le communiquez à personne.
+                Si vous n'êtes pas à l'origine de cette demande, ignorez cet email.
+            </div>
+
+            <p style="margin-top: 25px; font-size: 14px; color: #666;">
+                Une fois le code validé, votre contrat sera officiellement signé et vous recevrez un email de confirmation.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>Cet email a été envoyé par <strong>Dimotec</strong></p>
+            <p style="color: #999; margin-top: 10px;">Si vous avez des questions, contactez notre support.</p>
+        </div>
+    </div>
+</body>
+</html>

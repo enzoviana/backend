@@ -132,6 +132,7 @@ router.post('/google/checkout', authMiddleware, googleCalendarController.createG
 // ---------------------- CONTRAT DE TRANSFERT ----------------------
 router.get('/contrat/status', authMiddleware, contratController.getStatus);
 router.get('/contrat/packs', authMiddleware, contratController.getPacks);
+router.post('/contrat/envoyer-code', authMiddleware, contratController.envoyerCodeVerification);
 router.post('/contrat/signer', authMiddleware, contratController.signerContrat);
 router.get('/contrat/details', authMiddleware, contratController.getDetails);
 router.put('/contrat/changer-pack', authMiddleware, contratController.changerPack);

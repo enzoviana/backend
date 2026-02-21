@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Contrat signé - Dimotec</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #10b981;
+            color: #ffffff;
+            text-align: center;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .success-box {
+            background-color: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        .info-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        .info-table td:first-child {
+            font-weight: bold;
+            color: #666;
+            width: 40%;
+        }
+        .info-table tr:last-child td {
+            border-bottom: none;
+        }
+        .button {
+            display: inline-block;
+            background-color: #ed891a;
+            color: #ffffff !important;
+            text-decoration: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
+            border-top: 1px solid #eeeeee;
+        }
+        .highlight {
+            color: #ed891a;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            ✅ Contrat Signé avec Succès
+        </div>
+
+        <div class="content">
+            <p>Bonjour <strong>{{prenom}} {{nom}}</strong>,</p>
+
+            <div class="success-box">
+                <strong>🎉 Félicitations !</strong> Votre contrat de transfert a été signé électroniquement avec succès.
+            </div>
+
+            <p>Voici un récapitulatif de votre signature :</p>
+
+            <table class="info-table">
+                <tr>
+                    <td>Pack de maintenance</td>
+                    <td><strong class="highlight">{{packChoisi}}</strong></td>
+                </tr>
+                <tr>
+                    <td>Tarif mensuel</td>
+                    <td><strong>{{prixMensuel}}€ HT/mois</strong></td>
+                </tr>
+                <tr>
+                    <td>Date de signature</td>
+                    <td>{{dateSignature}}</td>
+                </tr>
+            </table>
+
+            <p style="margin-top: 25px;">
+                <strong>Prochaines étapes :</strong>
+            </p>
+            <ul style="color: #666; line-height: 1.8;">
+                <li>Votre contrat est maintenant activé</li>
+                <li>Vous pouvez accéder à votre espace Dimotec</li>
+                <li>Un conseiller prendra contact avec vous sous 48h pour finaliser la mise en place</li>
+            </ul>
+
+            <div style="text-align: center; margin-top: 30px;">
+                <a href="https://dimotec-e6595d1ca374.herokuapp.com" class="button">Accéder à mon espace</a>
+            </div>
+
+            <p style="margin-top: 30px; font-size: 14px; color: #999;">
+                <strong>Note :</strong> Une copie de votre contrat signé a été archivée de manière sécurisée dans nos serveurs conformément à la réglementation française.
+            </p>
+        </div>
+
+        <div class="footer">
+            <p>Cet email a été envoyé par <strong>Dimotec</strong></p>
+            <p style="color: #999; margin-top: 10px;">Pour toute question, contactez notre support : support@dimotec.fr</p>
+        </div>
+    </div>
+</body>
+</html>

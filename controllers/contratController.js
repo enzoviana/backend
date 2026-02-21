@@ -1,12 +1,14 @@
 // controllers/contratController.js
 const ContratTransfert = require('../models/ContratTransfert');
+const Admin = require('../models/Admin');
+const sendEmail = require('../utils/sendEmails');
 
 // Définition des packs de maintenance
 const PACKS_MAINTENANCE = {
   serenite: {
     nom: 'Pack Sérénité',
-    prixMensuelPreferentiel: 49,
-    prixMensuelNormal: 79,
+    prixMensuelPreferentiel: 250,
+    prixMensuelNormal: 345, // 250 * 1.38
     fonctionnalites: [
       'Hébergement inclus',
       'Mises à jour de sécurité',
@@ -18,8 +20,8 @@ const PACKS_MAINTENANCE = {
   },
   evolution: {
     nom: 'Pack Evolution',
-    prixMensuelPreferentiel: 99,
-    prixMensuelNormal: 149,
+    prixMensuelPreferentiel: 400,
+    prixMensuelNormal: 552, // 400 * 1.38
     fonctionnalites: [
       'Tout le Pack Sérénité',
       'Nouvelles fonctionnalités incluses',
@@ -104,11 +106,11 @@ exports.getPacks = async (req, res) => {
   }
 };
 
-// POST /api/admin/contrat/signer
-// Signe le contrat avec le pack choisi
-exports.signerContrat = async (req, res) => {
+// POST /api/admin/contrat/envoyer-code
+// Envoie un code de vérification par email avant la signature
+exports.envoyerCodeVerification = async (req, res) => {
   try {
-    const adminId = req.user.id; 
+    const adminId = req.user.id;
     const { packMaintenance, signature } = req.body;
 
     // Validation
@@ -119,17 +121,26 @@ exports.signerContrat = async (req, res) => {
       });
     }
 
-    if (!signature || !signature.nom || !signature.prenom || !signature.accepteConditions) {
+    if (!signature || !signature.nom || !signature.prenom || !signature.signatureCanvas) {
       return res.status(400).json({
         success: false,
         message: 'Informations de signature incomplètes'
       });
     }
 
-    // Récupérer ou créer le contrat pour cet Admin
+    // Récupérer l'admin pour avoir son email
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Administrateur introuvable'
+      });
+    }
+
+    // Récupérer ou créer le contrat
     let contrat = await ContratTransfert.getOrCreateForAdmin(adminId);
 
-    // Si déjà signé, on bloque
+    // Si déjà signé, bloquer
     if (contrat.isValide) {
       return res.status(400).json({
         success: false,
@@ -137,11 +148,108 @@ exports.signerContrat = async (req, res) => {
       });
     }
 
-    // Mettre à jour le pack choisi
+    // Mettre à jour le pack choisi (pour appliquer la tarification)
     contrat.packMaintenance = packMaintenance;
 
+    // 💰 LOGIQUE DE TARIFICATION : Si pas de maintenance, augmenter de 38%
+    if (packMaintenance === 'aucun') {
+      contrat.tarifPreferentiel = false; // Perte du tarif préférentiel
+    }
+
+    // Stocker temporairement les données de signature
+    contrat.signature = {
+      nom: signature.nom,
+      prenom: signature.prenom,
+      signatureCanvas: signature.signatureCanvas,
+      accepteConditions: false // Pas encore validé
+    };
+
+    // Générer le code de vérification
+    const code = contrat.genererCodeVerification();
+
+    await contrat.save();
+
+    // Envoyer l'email avec le code
+    await sendEmail({
+      to: admin.email,
+      subject: '🔐 Code de vérification - Signature du contrat Dimotec',
+      template: 'CodeVerificationContrat.html',
+      variables: {
+        nom: signature.nom,
+        prenom: signature.prenom,
+        code: code,
+        packChoisi: PACKS_MAINTENANCE[packMaintenance].nom
+      }
+    });
+
+    res.json({
+      success: true,
+      message: 'Code de vérification envoyé par email',
+      emailEnvoye: admin.email
+    });
+
+  } catch (error) {
+    console.error('Erreur envoyerCodeVerification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'envoi du code de vérification'
+    });
+  }
+};
+
+// POST /api/admin/contrat/signer
+// Signe le contrat après vérification du code
+exports.signerContrat = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { codeVerification } = req.body;
+
+    // Validation
+    if (!codeVerification) {
+      return res.status(400).json({
+        success: false,
+        message: 'Code de vérification requis'
+      });
+    }
+
+    // Récupérer le contrat
+    let contrat = await ContratTransfert.findOne({ adminId }).select('+codeVerification');
+
+    if (!contrat) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucune demande de signature en cours'
+      });
+    }
+
+    // Si déjà signé, bloquer
+    if (contrat.isValide) {
+      return res.status(400).json({
+        success: false,
+        message: 'Le contrat a déjà été signé'
+      });
+    }
+
+    // Vérifier le code
+    const verification = contrat.verifierCode(codeVerification);
+    if (!verification.valide) {
+      return res.status(400).json({
+        success: false,
+        message: verification.message
+      });
+    }
+
+    // Récupérer l'admin pour les informations légales
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Administrateur introuvable'
+      });
+    }
+
     // Récupérer les détails du pack pour les figer dans le contrat
-    const packDetails = PACKS_MAINTENANCE[packMaintenance];
+    const packDetails = PACKS_MAINTENANCE[contrat.packMaintenance];
     contrat.detailsPack = {
       nom: packDetails.nom,
       prixMensuel: contrat.tarifPreferentiel
@@ -150,11 +258,60 @@ exports.signerContrat = async (req, res) => {
       fonctionnalites: packDetails.fonctionnalites
     };
 
-    // Récupérer l'IP de la requête pour la valeur légale
+    // Collecter les informations légales
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'] || '';
+
+    // Parser le user agent pour extraire navigateur et OS
+    let navigateur = 'Inconnu';
+    let systemeExploitation = 'Inconnu';
+
+    if (userAgent.includes('Chrome')) navigateur = 'Google Chrome';
+    else if (userAgent.includes('Firefox')) navigateur = 'Mozilla Firefox';
+    else if (userAgent.includes('Safari')) navigateur = 'Safari';
+    else if (userAgent.includes('Edge')) navigateur = 'Microsoft Edge';
+
+    if (userAgent.includes('Windows')) systemeExploitation = 'Windows';
+    else if (userAgent.includes('Mac')) systemeExploitation = 'macOS';
+    else if (userAgent.includes('Linux')) systemeExploitation = 'Linux';
+    else if (userAgent.includes('Android')) systemeExploitation = 'Android';
+    else if (userAgent.includes('iOS')) systemeExploitation = 'iOS';
+
+    const informationsLegales = {
+      ipSignature: ip,
+      userAgent: userAgent,
+      navigateur: navigateur,
+      systemeExploitation: systemeExploitation,
+      horodatageComplet: new Date(),
+      emailContact: admin.email,
+      telephoneContact: admin.telephone || 'Non renseigné',
+      adresseComplete: admin.entreprise?.adresse
+        ? `${admin.entreprise.adresse.rue || ''}, ${admin.entreprise.adresse.codePostal || ''} ${admin.entreprise.adresse.ville || ''}, ${admin.entreprise.adresse.pays || 'France'}`
+        : 'Non renseigné'
+    };
 
     // Valider le contrat via la méthode du modèle
-    await contrat.valider(signature, ip);
+    await contrat.valider(contrat.signature, informationsLegales);
+
+    // 📧 Envoyer email de confirmation
+    await sendEmail({
+      to: admin.email,
+      subject: '✅ Contrat de transfert signé - Dimotec',
+      template: 'ConfirmationSignatureContrat.html',
+      variables: {
+        nom: contrat.signature.nom,
+        prenom: contrat.signature.prenom,
+        packChoisi: contrat.detailsPack.nom,
+        prixMensuel: contrat.detailsPack.prixMensuel,
+        dateSignature: contrat.dateSignature.toLocaleDateString('fr-FR', {
+          year: 'numeric',
+          month: 'long',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })
+      }
+    });
 
     res.json({
       success: true,
