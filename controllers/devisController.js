@@ -717,6 +717,10 @@ exports.generateDevisAI = async (req, res) => {
 
     console.log("🏗️ Suppléments finaux sélectionnés:", supplements.filter(s => s.selected).map(s => s.nom));
 
+    // Filtrer les suppléments pour ne garder que ceux du type de bien actuel
+    const supplementsFiltres = supplements.filter(s => s.typeBien === bien.bien);
+    console.log(`🔍 Suppléments filtrés pour typeBien="${bien.bien}":`, supplementsFiltres.map(s => `${s.nom} (selected=${s.selected})`));
+
     // 6. DEUXIÈME APPEL : Recommandation de Devis (Le conseil métier)
     const conseilPrompt = `
       Basé sur un(e) ${bien.bien} de la période ${trancheAnnee} en ${bien.transaction}.
@@ -820,8 +824,8 @@ exports.generateDevisAI = async (req, res) => {
           selected: true
         };
       }) : [],
-      supplements: Array.isArray(supplements) && supplements.length > 0
-        ? supplements.map(s => ({
+      supplements: Array.isArray(supplementsFiltres) && supplementsFiltres.length > 0
+        ? supplementsFiltres.map(s => ({
             _id: s._id,
             id: s._id,
             nom: s.nom,
