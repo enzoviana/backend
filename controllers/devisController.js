@@ -450,10 +450,19 @@ exports.generateDevisAI = async (req, res) => {
         - Surface : extrais le nombre en m2 (ex: "120m2" → "120")
         - Pour appartement, extrais le type si mentionné (ex: "T2", "T3", "F2")
         - ProductMode : si le message mentionne explicitement des diagnostics spécifiques (DPE, Amiante, Plomb, Termites, Gaz, Électricité, ERP, ERNMT), retourne "diagnostic". Sinon "pack".
-        - Diagnostics demandés : liste les noms exacts des diagnostics mentionnés (ex: ["ERP", "Termites"])
+          ATTENTION : Ne retourne "diagnostic" que si des diagnostics SPÉCIFIQUES sont mentionnés. Ne pas inclure "DPE" ou "AUDIT DPE" sauf si explicitement demandé.
+        - Diagnostics demandés : liste UNIQUEMENT les noms exacts des diagnostics EXPLICITEMENT mentionnés (ex: ["ERP", "Termites"]). NE PAS inclure "DPE" ou "AUDIT" s'ils ne sont pas mentionnés.
         - Installation gaz : true si le message mentionne "gaz", "installation gaz", "chauffage gaz", etc.
         - Copropriété : true si le message mentionne "copropriété", "copro", etc.
-        - Suppléments : liste les suppléments mentionnés (cave, garage, parking, jardin, terrasse, etc.)
+        - Suppléments : détecte TOUS les suppléments mentionnés avec leurs variations de langage :
+          * Cave : "cave", "avec une cave", "présence de cave", "il y a une cave", "possède une cave"
+          * Garage : "garage", "avec un garage", "présence de garage", "il y a un garage", "possède un garage"
+          * Parking : "parking", "avec parking", "place de parking", "stationnement"
+          * Jardin : "jardin", "avec jardin", "présence d'un jardin", "espace extérieur", "terrain"
+          * Terrasse : "terrasse", "avec terrasse", "présence d'une terrasse", "balcon"
+          * Piscine : "piscine", "avec piscine", "présence d'une piscine"
+          * Dépendance : "dépendance", "annexe", "bâtiment annexe"
+          Retourne la liste normalisée : ["Cave", "Garage", "Parking", "Jardin", "Terrasse", "Piscine", "Dépendance"]
 
         RETOURNE UNIQUEMENT CE JSON :
         {
@@ -479,6 +488,19 @@ exports.generateDevisAI = async (req, res) => {
           "diagnostics_demandes": [],
           "supplements_demandes": []
         }
+
+        EXEMPLES DE RETOUR :
+        - Prompt: "Devis pour Jean Dupont avec maison de 120m2 avec ERP et Termites, possède un garage et une cave"
+          → diagnostics_demandes: ["ERP", "Termites"]
+          → supplements_demandes: ["Garage", "Cave"]
+
+        - Prompt: "Appartement T3 en vente, présence de parking et terrasse"
+          → diagnostics_demandes: []
+          → supplements_demandes: ["Parking", "Terrasse"]
+
+        - Prompt: "Maison avec jardin et piscine"
+          → diagnostics_demandes: []
+          → supplements_demandes: ["Jardin", "Piscine"]
       `;
 
       const completion = await openai.chat.completions.create({
@@ -535,15 +557,39 @@ exports.generateDevisAI = async (req, res) => {
       typeOperation: bien.transaction
     });
 
-    // Si des diagnostics spécifiques sont demandés, les filtrer
+    console.log("📋 Diagnostics demandés par IA:", diagnosticsSpecifiques);
+    console.log("🗄️ Diagnostics disponibles en base:", diagnosticsFiltres.map(d => d.nom));
+
+    // Si des diagnostics spécifiques sont demandés, les filtrer strictement
     if (diagnosticsSpecifiques.length > 0 && productMode === "diagnostic") {
-      diagnosticsFiltres = diagnosticsFiltres.filter(d =>
-        diagnosticsSpecifiques.some(nom =>
-          d.nom.toLowerCase().includes(nom.toLowerCase()) ||
-          nom.toLowerCase().includes(d.nom.toLowerCase())
-        )
-      );
+      diagnosticsFiltres = diagnosticsFiltres.filter(d => {
+        const nomDiag = d.nom.toLowerCase();
+        // Exclure AUDIT DPE si pas explicitement demandé
+        if ((nomDiag.includes('audit') || nomDiag.includes('dpe')) &&
+            !diagnosticsSpecifiques.some(nom =>
+              nom.toLowerCase().includes('audit') ||
+              nom.toLowerCase().includes('dpe')
+            )) {
+          console.log(`❌ Diagnostic "${d.nom}" exclu (AUDIT/DPE non demandé)`);
+          return false;
+        }
+        // Vérifier si le diagnostic correspond à un diagnostic demandé
+        const match = diagnosticsSpecifiques.some(nom =>
+          nomDiag.includes(nom.toLowerCase()) ||
+          nom.toLowerCase().includes(nomDiag)
+        );
+        if (match) {
+          console.log(`✅ Diagnostic "${d.nom}" retenu`);
+        } else {
+          console.log(`❌ Diagnostic "${d.nom}" exclu (ne correspond à aucune demande)`);
+        }
+        return match;
+      });
       console.log("🎯 Diagnostics filtrés selon demande:", diagnosticsFiltres.map(d => d.nom));
+    } else if (productMode === "diagnostic" && diagnosticsSpecifiques.length === 0) {
+      // Si mode diagnostic mais aucun diagnostic spécifique, ne rien retourner
+      diagnosticsFiltres = [];
+      console.log("⚠️ Mode diagnostic mais aucun diagnostic spécifique demandé");
     }
 
     // Ajouter diagnostic gaz si installation gaz détectée
@@ -573,17 +619,29 @@ exports.generateDevisAI = async (req, res) => {
     let supplements = await Supplement.find({ typeBien: bien.bien });
 
     // Mapper tous les suppléments avec la propriété selected
-    supplements = supplements.map(s => ({
-      ...s.toObject(),
-      selected: supplementsSpecifiques.length > 0 && supplementsSpecifiques.some(nom =>
+    console.log("📋 Suppléments demandés par IA:", supplementsSpecifiques);
+    console.log("🗄️ Suppléments disponibles en base:", supplements.map(s => s.nom));
+
+    supplements = supplements.map(s => {
+      const isSelected = supplementsSpecifiques.length > 0 && supplementsSpecifiques.some(nom =>
         s.nom.toLowerCase().includes(nom.toLowerCase()) ||
         nom.toLowerCase().includes(s.nom.toLowerCase())
-      )
-    }));
+      );
 
-    if (supplementsSpecifiques.length > 0) {
-      console.log("🏗️ Suppléments sélectionnés:", supplements.filter(s => s.selected).map(s => s.nom));
-    }
+      if (isSelected) {
+        console.log(`✅ Supplément "${s.nom}" coché car correspond à:`, supplementsSpecifiques.filter(nom =>
+          s.nom.toLowerCase().includes(nom.toLowerCase()) ||
+          nom.toLowerCase().includes(s.nom.toLowerCase())
+        ));
+      }
+
+      return {
+        ...s.toObject(),
+        selected: isSelected
+      };
+    });
+
+    console.log("🏗️ Suppléments finaux sélectionnés:", supplements.filter(s => s.selected).map(s => s.nom));
 
     // 6. DEUXIÈME APPEL : Recommandation de Devis (Le conseil métier)
     const conseilPrompt = `
