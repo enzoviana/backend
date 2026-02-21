@@ -64,13 +64,13 @@ exports.handleCallback = async (req, res) => {
     const { code, state } = req.query;
 
     if (!code) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?google_error=no_code`);
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080/settings?google_error=no_code`);
     }
 
     const agencyId = state;
 
     if (!agencyId) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?google_error=no_state`);
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080/settings?google_error=no_state`);
     }
 
     const oauth2Client = getOAuth2Client();
@@ -87,7 +87,7 @@ exports.handleCallback = async (req, res) => {
     const agency = await Agency.findById(agencyId).select('+googleCalendar.accessToken +googleCalendar.refreshToken');
 
     if (!agency) {
-      return res.redirect(`${process.env.FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?google_error=agency_not_found`);
+      return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080/settings?google_error=agency_not_found`);
     }
 
     await agency.connectGoogleCalendar({
@@ -100,10 +100,10 @@ exports.handleCallback = async (req, res) => {
     console.log(`✅ Google Calendar connecté pour ${agency.nom_commercial}`);
 
     // Rediriger vers le frontend avec succès
-    return res.redirect(`${process.env.FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?google_success=true`);
+    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080/settings?google_success=true`);
   } catch (err) {
     console.error('Erreur handleCallback:', err);
-    return res.redirect(`${process.env.FRONTEND_URL || 'https://dimotec-admin.web.app'}/settings?google_error=callback_failed`);
+    return res.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8080/settings?google_error=callback_failed`);
   }
 };
 
