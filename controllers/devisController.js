@@ -462,16 +462,25 @@ exports.generateDevisAI = async (req, res) => {
           IMPORTANT : Retourne les noms EXACTS tels qu'ils apparaissent dans cette liste.
         - Installation gaz : true si le message mentionne "gaz", "installation gaz", "chauffage gaz", etc.
         - Copropriété : true si le message mentionne "copropriété", "copro", etc.
-        - Suppléments : DÉTECTE ET LISTE TOUS les suppléments mentionnés dans le prompt. Analyse ATTENTIVEMENT toutes les variations de formulation :
-          * Si le prompt contient "cave", "une cave", "avec cave", "avec une cave", "présence de cave", "il y a une cave", "possède une cave", "comporte une cave" → ajoute "Cave"
-          * Si le prompt contient "garage", "un garage", "avec garage", "avec un garage", "présence de garage", "il y a un garage", "possède un garage" → ajoute "Garage"
-          * Si le prompt contient "parking", "place de parking", "avec parking", "stationnement", "place de stationnement" → ajoute "Parking"
-          * Si le prompt contient "jardin", "un jardin", "avec jardin", "espace extérieur", "terrain", "espace vert" → ajoute "Jardin"
-          * Si le prompt contient "terrasse", "une terrasse", "avec terrasse", "balcon" → ajoute "Terrasse"
-          * Si le prompt contient "piscine", "une piscine", "avec piscine" → ajoute "Piscine"
-          * Si le prompt contient "dépendance", "annexe", "bâtiment annexe", "construction annexe" → ajoute "Dépendance"
-          RETOURNE UNIQUEMENT les noms normalisés : ["Cave", "Garage", "Parking", "Jardin", "Terrasse", "Piscine", "Dépendance"]
-          EXEMPLE : "maison avec un garage et une cave" → supplements_demandes: ["Garage", "Cave"]
+        - Suppléments : DÉTECTE ET LISTE TOUS les suppléments mentionnés dans le prompt. Analyse ATTENTIVEMENT toutes les variations de formulation ET les mots composés :
+          * CAVE : "cave", "une cave", "avec cave", "avec une cave", "présence de cave", "il y a une cave", "possède une cave", "comporte une cave" → ajoute "Cave"
+          * GARAGE : "garage", "un garage", "avec garage", "avec un garage", "présence de garage", "il y a un garage", "possède un garage", "box garage" → ajoute "Garage"
+          * PARKING : "parking", "place de parking", "avec parking", "stationnement", "place de stationnement", "box" → ajoute "Parking"
+          * JARDIN : "jardin", "un jardin", "avec jardin", "espace extérieur", "terrain", "espace vert" → ajoute "Jardin"
+          * TERRASSE : "terrasse", "une terrasse", "avec terrasse", "balcon" → ajoute "Terrasse"
+          * PISCINE : "piscine", "une piscine", "avec piscine", "local piscine", "local technique piscine" → ajoute "Piscine"
+          * DÉPENDANCE : "dépendance", "annexe", "bâtiment annexe", "construction annexe" → ajoute "Dépendance"
+          * LOCAL : "local", "local technique" → ajoute "Local"
+
+          ATTENTION : Si tu vois "local piscine", retourne ["Local", "Piscine"] (les DEUX suppléments)
+          Si tu vois "box garage", retourne ["Garage"]
+
+          RETOURNE les noms normalisés possibles : ["Cave", "Garage", "Parking", "Jardin", "Terrasse", "Piscine", "Dépendance", "Local"]
+
+          EXEMPLES :
+          - "maison avec un garage et une cave" → supplements_demandes: ["Garage", "Cave"]
+          - "bien avec local piscine" → supplements_demandes: ["Local Piscine"]
+          - "appartement avec parking et terrasse" → supplements_demandes: ["Parking", "Terrasse"]
 
         RETOURNE UNIQUEMENT CE JSON :
         {
@@ -510,6 +519,10 @@ exports.generateDevisAI = async (req, res) => {
         - Prompt: "Maison avec jardin et piscine, diagnostics Plomb et Amiante"
           → diagnostics_demandes: ["Plomb", "Amiante"]
           → supplements_demandes: ["Jardin", "Piscine"]
+
+        - Prompt: "Maison avec local piscine et garage"
+          → diagnostics_demandes: []
+          → supplements_demandes: ["Local", "Piscine", "Garage"]
 
         - Prompt: "Bien avec une cave"
           → diagnostics_demandes: []
@@ -645,16 +658,40 @@ exports.generateDevisAI = async (req, res) => {
     console.log("🗄️ Suppléments disponibles en base:", supplements.map(s => s.nom));
 
     supplements = supplements.map(s => {
-      const isSelected = supplementsSpecifiques.length > 0 && supplementsSpecifiques.some(nom =>
-        s.nom.toLowerCase().includes(nom.toLowerCase()) ||
-        nom.toLowerCase().includes(s.nom.toLowerCase())
-      );
+      const nomSupplementBase = s.nom.toLowerCase();
+
+      const isSelected = supplementsSpecifiques.length > 0 && supplementsSpecifiques.some(nomIA => {
+        const nomIALower = nomIA.toLowerCase();
+
+        // Match exact ou inclusion
+        if (nomSupplementBase.includes(nomIALower) || nomIALower.includes(nomSupplementBase)) {
+          return true;
+        }
+
+        // Match par mots individuels pour gérer "Local piscine" vs "Piscine"
+        const motsBase = nomSupplementBase.split(/\s+/);
+        const motsIA = nomIALower.split(/\s+/);
+
+        // Si un mot de l'IA correspond à un mot du supplément en base
+        return motsIA.some(motIA => motsBase.some(motBase =>
+          motBase.includes(motIA) || motIA.includes(motBase)
+        ));
+      });
 
       if (isSelected) {
-        console.log(`✅ Supplément "${s.nom}" coché car correspond à:`, supplementsSpecifiques.filter(nom =>
-          s.nom.toLowerCase().includes(nom.toLowerCase()) ||
-          nom.toLowerCase().includes(s.nom.toLowerCase())
-        ));
+        console.log(`✅ Supplément "${s.nom}" coché car correspond à:`, supplementsSpecifiques.filter(nomIA => {
+          const nomIALower = nomIA.toLowerCase();
+          if (nomSupplementBase.includes(nomIALower) || nomIALower.includes(nomSupplementBase)) {
+            return true;
+          }
+          const motsBase = nomSupplementBase.split(/\s+/);
+          const motsIA = nomIALower.split(/\s+/);
+          return motsIA.some(motIA => motsBase.some(motBase =>
+            motBase.includes(motIA) || motIA.includes(motBase)
+          ));
+        }));
+      } else {
+        console.log(`❌ Supplément "${s.nom}" NON coché - ne correspond à aucun mot-clé IA`);
       }
 
       return {
