@@ -199,7 +199,15 @@ async function handleCheckoutCompleted(session) {
  */
 async function handleSubscriptionUpdated(subscription) {
   try {
-    // Trouver le diagnostiqueur par subscriptionId
+    // Vérifier si c'est un abonnement de contrat de maintenance
+    if (subscription.metadata && subscription.metadata.type === 'contrat_maintenance') {
+      console.log('📄 Mise à jour abonnement contrat de maintenance');
+      const contratController = require('../controllers/contratController');
+      await contratController.handleContratSubscriptionUpdated(subscription);
+      return;
+    }
+
+    // Sinon, c'est un abonnement diagnostiqueur
     const diagnostiqueur = await Diagnostiqueur.findOne({ stripeSubscriptionId: subscription.id });
 
     if (!diagnostiqueur) {

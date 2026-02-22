@@ -298,10 +298,28 @@ exports.signerContrat = async (req, res) => {
     // Définir le statut de paiement
     if (contrat.packMaintenance !== 'aucun') {
       contrat.statutPaiement = 'en_attente';
+
+      // Mettre à jour le contrat de maintenance dans Admin (en attente jusqu'au paiement)
+      admin.contratMaintenance = {
+        actif: false, // Sera activé après le paiement
+        type: contrat.packMaintenance,
+        dateDebut: null,
+        dateExpiration: null
+      };
     } else {
       contrat.statutPaiement = 'actif'; // Pas de paiement requis pour le pack sans maintenance
+
+      // Pas de contrat de maintenance
+      admin.contratMaintenance = {
+        actif: false,
+        type: 'aucun',
+        dateDebut: null,
+        dateExpiration: null
+      };
     }
+
     await contrat.save();
+    await admin.save();
 
     // 📧 Envoyer email de confirmation
     await sendEmail({
@@ -476,7 +494,8 @@ exports.creerAbonnementStripe = async (req, res) => {
         metadata: {
           adminId: adminId.toString(),
           contratId: contrat._id.toString(),
-          packMaintenance: contrat.packMaintenance
+          packMaintenance: contrat.packMaintenance,
+          type: 'contrat_maintenance'
         }
       },
       metadata: {
@@ -560,11 +579,77 @@ exports.handleContratStripeWebhook = async (session) => {
 
     await contrat.save();
 
+    // ✅ Mettre à jour le champ contratMaintenance dans Admin pour débloquer les fonctionnalités
+    const admin = await Admin.findById(adminId);
+    if (admin) {
+      admin.contratMaintenance = {
+        actif: true,
+        type: contrat.packMaintenance, // 'serenite' ou 'evolution'
+        dateDebut: dateDebut,
+        dateExpiration: dateFinEngagement
+      };
+      await admin.save();
+      console.log(`✅ Contrat de maintenance synchronisé dans Admin ${adminId}`);
+    }
+
     console.log(`✅ Abonnement Stripe activé pour le contrat ${contratId}`);
 
   } catch (error) {
     console.error('Erreur handleContratStripeWebhook:', error);
     // On re-throw pour que Stripe sache que le webhook a échoué et réessaie plus tard
+    throw error;
+  }
+};
+
+// Webhook handler pour les mises à jour d'abonnement Stripe (annulation, suspension, etc.)
+exports.handleContratSubscriptionUpdated = async (subscription) => {
+  try {
+    const { adminId, contratId } = subscription.metadata || {};
+
+    if (!adminId || !contratId) {
+      console.warn('Métadonnées manquantes pour subscription.updated, probablement pas un contrat de maintenance');
+      return;
+    }
+
+    const contrat = await ContratTransfert.findById(contratId);
+    if (!contrat) {
+      console.error('Contrat introuvable:', contratId);
+      return;
+    }
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      console.error('Admin introuvable:', adminId);
+      return;
+    }
+
+    // Mettre à jour le statut selon le statut Stripe
+    if (subscription.status === 'active') {
+      contrat.statutPaiement = 'actif';
+      admin.contratMaintenance.actif = true;
+    } else if (subscription.status === 'canceled' || subscription.status === 'incomplete_expired') {
+      contrat.statutPaiement = 'annule';
+      admin.contratMaintenance.actif = false;
+      admin.contratMaintenance.type = 'aucun';
+      console.log(`🚫 Abonnement annulé pour le contrat ${contratId}`);
+    } else if (subscription.status === 'past_due' || subscription.status === 'unpaid') {
+      contrat.statutPaiement = 'suspendu';
+      admin.contratMaintenance.actif = false;
+      console.log(`⚠️ Abonnement suspendu pour le contrat ${contratId}`);
+    }
+
+    // Mettre à jour les dates si disponibles
+    if (subscription.current_period_end) {
+      contrat.dateProchaineFacture = new Date(subscription.current_period_end * 1000);
+    }
+
+    await contrat.save();
+    await admin.save();
+
+    console.log(`✅ Abonnement mis à jour pour le contrat ${contratId}, statut: ${subscription.status}`);
+
+  } catch (error) {
+    console.error('Erreur handleContratSubscriptionUpdated:', error);
     throw error;
   }
 };
@@ -644,6 +729,19 @@ exports.changerPack = async (req, res) => {
     }
 
     await contrat.save();
+
+    // Mettre à jour le champ contratMaintenance dans Admin
+    const admin = await Admin.findById(adminId);
+    if (admin && contrat.statutPaiement === 'actif') {
+      admin.contratMaintenance = {
+        actif: true,
+        type: nouveauPack,
+        dateDebut: contrat.dateDebutAbonnement,
+        dateExpiration: contrat.dateFinEngagement
+      };
+      await admin.save();
+      console.log(`✅ Contrat de maintenance mis à jour dans Admin ${adminId}`);
+    }
 
     res.json({
       success: true,
