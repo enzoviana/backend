@@ -126,11 +126,16 @@ exports.getAdminDetails = async (req, res) => {
     const adminId = req.user?.id || req.admin?.id;
 
     // Récupère l'admin et populate l'agence si c'est un ObjectId
-    let admin = await Admin.findById(adminId)
-      .populate({ path: 'entreprise', model: 'Agence' })
-      .lean();
+    let adminDoc = await Admin.findById(adminId)
+      .populate({ path: 'entreprise', model: 'Agence' });
 
-    if (!admin) return res.status(404).json({ message: 'Admin non trouvé.' });
+    if (!adminDoc) return res.status(404).json({ message: 'Admin non trouvé.' });
+
+    // Vérifier l'accès à Google Calendar AVANT de convertir en lean
+    const aAccesGoogleCalendar = adminDoc.aAccesGoogleCalendar();
+
+    // Convertir en objet plain
+    const admin = adminDoc.toObject();
 
     // Détermine l'agence
     const agence = admin.entreprise
@@ -150,6 +155,7 @@ exports.getAdminDetails = async (req, res) => {
       admin: {
         ...admin,
         entreprise: undefined, // supprime le champ original pour éviter doublon
+        aAccesGoogleCalendar, // Ajouter le boolean pour l'accès Google Calendar
       },
       agence,
       configuration,

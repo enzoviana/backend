@@ -138,6 +138,7 @@ router.get('/contrat/details', authMiddleware, contratController.getDetails);
 router.put('/contrat/changer-pack', authMiddleware, contratController.changerPack);
 router.post('/contrat/creer-abonnement', authMiddleware, contratController.creerAbonnementStripe);
 router.get('/contrat/telecharger-pdf', authMiddleware, contratController.telechargerPDF);
+router.get('/contrat/sync', authMiddleware, contratController.syncContratToAdmin);
 
 // ---------------------- DIAGNOSTIQUEURS ----------------------
 

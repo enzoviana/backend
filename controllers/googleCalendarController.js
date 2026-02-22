@@ -157,6 +157,14 @@ exports.getStatus = async (req, res) => {
     const optionAchetee = admin.optionsAchetees?.googleCalendar?.actif || false;
     const packEvolution = admin.contratMaintenance?.actif && admin.contratMaintenance?.type === 'evolution';
 
+    // Log pour debug
+    console.log(`🔍 Google Calendar Status pour admin ${adminId}:`, {
+      contratMaintenance: admin.contratMaintenance,
+      hasAccess,
+      optionAchetee,
+      packEvolution
+    });
+
     return res.status(200).json({
       success: true,
       isConnected: admin.googleCalendar?.isConnected || false,

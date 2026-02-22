@@ -759,6 +759,71 @@ exports.changerPack = async (req, res) => {
   }
 };
 
+// GET /api/admin/contrat/sync
+// Force la synchronisation du contrat vers Admin.contratMaintenance
+exports.syncContratToAdmin = async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const contrat = await ContratTransfert.findOne({ adminId });
+
+    if (!contrat || !contrat.isValide) {
+      return res.status(404).json({
+        success: false,
+        message: 'Aucun contrat signé trouvé'
+      });
+    }
+
+    const admin = await Admin.findById(adminId);
+
+    if (!admin) {
+      return res.status(404).json({
+        success: false,
+        message: 'Admin introuvable'
+      });
+    }
+
+    // Synchroniser le contrat de maintenance
+    if (contrat.statutPaiement === 'actif' && contrat.packMaintenance !== 'aucun') {
+      admin.contratMaintenance = {
+        actif: true,
+        type: contrat.packMaintenance,
+        dateDebut: contrat.dateDebutAbonnement,
+        dateExpiration: contrat.dateFinEngagement
+      };
+    } else if (contrat.packMaintenance !== 'aucun') {
+      admin.contratMaintenance = {
+        actif: false,
+        type: contrat.packMaintenance,
+        dateDebut: null,
+        dateExpiration: null
+      };
+    } else {
+      admin.contratMaintenance = {
+        actif: false,
+        type: 'aucun',
+        dateDebut: null,
+        dateExpiration: null
+      };
+    }
+
+    await admin.save();
+
+    res.json({
+      success: true,
+      message: 'Synchronisation effectuée',
+      contratMaintenance: admin.contratMaintenance
+    });
+
+  } catch (error) {
+    console.error('Erreur syncContratToAdmin:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la synchronisation'
+    });
+  }
+};
+
 // GET /api/admin/contrat/telecharger-pdf
 // Génère et télécharge le PDF du contrat signé
 exports.telechargerPDF = async (req, res) => {
