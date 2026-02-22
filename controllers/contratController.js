@@ -375,6 +375,30 @@ exports.getDetails = async (req, res) => {
       });
     }
 
+    // 🔍 CORRECTION AUTOMATIQUE : Si le contrat est "actif" mais n'a pas de subscriptionId,
+    // c'est une incohérence (bug ancien), on le remet en "en_attente"
+    if (contrat.statutPaiement === 'actif' && !contrat.stripeSubscriptionId && contrat.packMaintenance !== 'aucun') {
+      console.log(`⚠️ Incohérence détectée pour contrat ${contrat._id}: actif sans subscriptionId. Correction...`);
+      contrat.statutPaiement = 'en_attente';
+      contrat.dateDebutAbonnement = null;
+      contrat.dateProchaineFacture = null;
+      contrat.dateFinEngagement = null;
+      await contrat.save();
+
+      // Mettre à jour Admin aussi
+      const admin = await Admin.findById(adminId);
+      if (admin) {
+        admin.contratMaintenance = {
+          actif: false,
+          type: contrat.packMaintenance,
+          dateDebut: null,
+          dateExpiration: null
+        };
+        await admin.save();
+      }
+      console.log(`✅ Contrat corrigé et remis en attente de paiement`);
+    }
+
     res.json({
       success: true,
       contrat: {
@@ -700,12 +724,14 @@ exports.changerPack = async (req, res) => {
       fonctionnalites: packDetails.fonctionnalites
     };
 
-    // Mettre à jour l'abonnement Stripe si actif
-    if (contrat.stripeSubscriptionId && nouveauPack !== 'aucun') {
+    await contrat.save();
+
+    // Si l'abonnement est déjà ACTIF avec paiement Stripe, on met à jour l'abonnement
+    if (contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif' && nouveauPack !== 'aucun') {
       try {
         const subscription = await stripe.subscriptions.retrieve(contrat.stripeSubscriptionId);
 
-        // Mettre à jour le montant de l'abonnement
+        // Mettre à jour le montant de l'abonnement avec proration
         await stripe.subscriptions.update(contrat.stripeSubscriptionId, {
           items: [{
             id: subscription.items.data[0].id,
@@ -723,31 +749,45 @@ exports.changerPack = async (req, res) => {
           }],
           proration_behavior: 'create_prorations'
         });
+
+        console.log(`✅ Abonnement Stripe mis à jour avec proration`);
       } catch (stripeError) {
         console.error('Erreur mise à jour Stripe:', stripeError);
       }
     }
 
-    await contrat.save();
-
     // Mettre à jour le champ contratMaintenance dans Admin
     const admin = await Admin.findById(adminId);
-    if (admin && contrat.statutPaiement === 'actif') {
-      admin.contratMaintenance = {
-        actif: true,
-        type: nouveauPack,
-        dateDebut: contrat.dateDebutAbonnement,
-        dateExpiration: contrat.dateFinEngagement
-      };
+    if (admin) {
+      // IMPORTANT : Ne mettre actif QUE si le paiement est déjà actif
+      if (contrat.statutPaiement === 'actif') {
+        admin.contratMaintenance = {
+          actif: true,
+          type: nouveauPack,
+          dateDebut: contrat.dateDebutAbonnement,
+          dateExpiration: contrat.dateFinEngagement
+        };
+        console.log(`✅ Contrat de maintenance activé dans Admin ${adminId}`);
+      } else {
+        // Si paiement en attente, mettre le contrat en attente
+        admin.contratMaintenance = {
+          actif: false,
+          type: nouveauPack,
+          dateDebut: null,
+          dateExpiration: null
+        };
+        console.log(`⏳ Contrat de maintenance en attente dans Admin ${adminId}`);
+      }
       await admin.save();
-      console.log(`✅ Contrat de maintenance mis à jour dans Admin ${adminId}`);
     }
 
     res.json({
       success: true,
       message: 'Pack de maintenance modifié avec succès',
       nouveauPack: contrat.detailsPack,
-      avertissement: 'Le tarif préférentiel a été perdu. Nouveau tarif: ' + contrat.detailsPack.prixMensuel + '€/mois'
+      avertissement: 'Le tarif préférentiel a été perdu. Nouveau tarif: ' + contrat.detailsPack.prixMensuel + '€/mois',
+      statutPaiement: contrat.statutPaiement,
+      needsPayment: contrat.statutPaiement === 'en_attente'
     });
 
   } catch (error) {
