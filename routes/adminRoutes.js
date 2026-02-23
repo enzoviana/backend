@@ -212,24 +212,15 @@ router.post('/diagnostic-mapping/initialiser', authMiddleware, adminDiagnosticMa
 // Récupérer la liste des diagnostics et domaines pour l'interface
 router.get('/diagnostic-mapping/data/liste', authMiddleware, adminDiagnosticMappingController.getDiagnosticsEtDomaines);
 
-// ========== GESTION DES PLANS D'ABONNEMENT ==========
+// ========== PLANS D'ABONNEMENT (HARDCODÉS) ==========
 
-// Récupérer tous les plans
+// Récupérer tous les plans (STANDARD et PRO)
 router.get('/plans-abonnement', authMiddleware, adminPlanAbonnementController.getAllPlans);
 
-// Récupérer un plan par ID
-router.get('/plans-abonnement/:planId', authMiddleware, adminPlanAbonnementController.getPlanById);
+// Récupérer un plan par nom (STANDARD ou PRO)
+router.get('/plans-abonnement/:planName', authMiddleware, adminPlanAbonnementController.getPlanByName);
 
-// Créer un nouveau plan
-router.post('/plans-abonnement', authMiddleware, adminPlanAbonnementController.createPlan);
-
-// Mettre à jour un plan
-router.put('/plans-abonnement/:planId', authMiddleware, adminPlanAbonnementController.updatePlan);
-
-// Supprimer un plan
-router.delete('/plans-abonnement/:planId', authMiddleware, adminPlanAbonnementController.deletePlan);
-
-// Initialiser les plans par défaut (STANDARD et PRO)
-router.post('/plans-abonnement/initialiser', authMiddleware, adminPlanAbonnementController.initialiserPlansParDefaut);
+// Vérifier les limites d'un plan
+router.post('/plans-abonnement/verifier-limites', authMiddleware, adminPlanAbonnementController.verifierLimitesPlan);
 
 module.exports = router;
