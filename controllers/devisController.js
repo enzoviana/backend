@@ -1579,9 +1579,12 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       }
     }
 
-    // ✅ Si le payeur est l’agence
-    // ✅ Si le payeur est l’agence
+    // ✅ Si le payeur est l'agence
+    // ✅ Si le payeur est l'agence
     if (data.payer === "agence") {
+      // Récupérer le diagnostiqueur par défaut de l'agence
+      const agenceData = await Agence.findById(devis.agenceId);
+      const diagnostiqueurId = agenceData?.diagnostiqueurParDefaut || null;
 
       const ordre = new OrdreMission({
         devisId: devis._id,
@@ -1590,7 +1593,9 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
         clientId: client._id,
         description: `Ordre de mission pour le devis ${devis.numero}`,
         statut: "Commande",
-        creePar
+        creePar,
+        diagnostiqueur: diagnostiqueurId,
+        statutAcceptation: diagnostiqueurId ? 'en_attente' : null
       });
 
       if (req.file) {
@@ -1603,6 +1608,37 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       }
 
       await ordre.save();
+
+      // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
+      if (diagnostiqueurId) {
+        devis.diagnostiqueurAssigne = diagnostiqueurId;
+        await devis.save();
+
+        // Incrémenter le compteur d'utilisation dans l'agence
+        const Diagnostiqueur = require('../models/Diagnostiqueur');
+        const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+        if (diagnostiqueur && agenceData) {
+          const diagUtilise = agenceData.diagnostiqueursUtilises?.find(
+            d => d.diagnostiqueur.toString() === diagnostiqueurId.toString()
+          );
+
+          if (diagUtilise) {
+            diagUtilise.nombreCommandes += 1;
+            diagUtilise.derniereCommande = new Date();
+          } else {
+            if (!agenceData.diagnostiqueursUtilises) {
+              agenceData.diagnostiqueursUtilises = [];
+            }
+            agenceData.diagnostiqueursUtilises.push({
+              diagnostiqueur: diagnostiqueurId,
+              nombreCommandes: 1,
+              derniereCommande: new Date()
+            });
+          }
+
+          await agenceData.save();
+        }
+      }
 
       // ✅ Emails
       const agence = await Agence.findById(devis.agenceId);
@@ -1884,6 +1920,10 @@ exports.uploadPdfDevis = async (req, res) => {
       clientId = client?._id;
     }
 
+    // Récupérer le diagnostiqueur par défaut de l'agence
+    const agenceData = await Agence.findById(devis.agenceId);
+    const diagnostiqueurId = agenceData?.diagnostiqueurParDefaut || null;
+
     const ordre = new OrdreMission({
       devisId: devis._id,
       agenceId: devis.agenceId,
@@ -1892,9 +1932,42 @@ exports.uploadPdfDevis = async (req, res) => {
       description: `Ordre de mission automatique pour le devis ${devis.numero}`,
       statut: "Commande",
       creePar: devis.creePar,
+      diagnostiqueur: diagnostiqueurId,
+      statutAcceptation: diagnostiqueurId ? 'en_attente' : null
     });
     await ordre.save();
     console.log("✅ [UPLOAD-PDF] Ordre de mission créé:", ordre.numero);
+
+    // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
+    if (diagnostiqueurId) {
+      devis.diagnostiqueurAssigne = diagnostiqueurId;
+      await devis.save();
+
+      // Incrémenter le compteur d'utilisation dans l'agence
+      const Diagnostiqueur = require('../models/Diagnostiqueur');
+      const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+      if (diagnostiqueur && agenceData) {
+        const diagUtilise = agenceData.diagnostiqueursUtilises?.find(
+          d => d.diagnostiqueur.toString() === diagnostiqueurId.toString()
+        );
+
+        if (diagUtilise) {
+          diagUtilise.nombreCommandes += 1;
+          diagUtilise.derniereCommande = new Date();
+        } else {
+          if (!agenceData.diagnostiqueursUtilises) {
+            agenceData.diagnostiqueursUtilises = [];
+          }
+          agenceData.diagnostiqueursUtilises.push({
+            diagnostiqueur: diagnostiqueurId,
+            nombreCommandes: 1,
+            derniereCommande: new Date()
+          });
+        }
+
+        await agenceData.save();
+      }
+    }
 
     // 5️⃣ GESTION DE LA CAGNOTTE
     const agence = await Agence.findById(devis.agenceId);
@@ -2570,6 +2643,10 @@ exports.updateDevisInfos = async (req, res) => {
             await devis.save();
           }
 
+          // Récupérer le diagnostiqueur par défaut de l'agence
+          const agenceData = await Agence.findById(devis.agenceId);
+          const diagnostiqueurId = agenceData?.diagnostiqueurParDefaut || null;
+
           const nouvelOrdreMission = new OrdreMission({
             devisId: devis._id,
             agenceId: devis.agenceId || null,
@@ -2580,11 +2657,44 @@ exports.updateDevisInfos = async (req, res) => {
             creePar: devis.creePar || {
               id: req.user._id,
               type: req.user.role === "admin" ? "Admin" : req.user.role === "agence" ? "Agence" : "Employe"
-            }
+            },
+            diagnostiqueur: diagnostiqueurId,
+            statutAcceptation: diagnostiqueurId ? 'en_attente' : null
           });
 
           await nouvelOrdreMission.save();
           console.log(`✅ Ordre de mission ${nouvelOrdreMission.numero} créé automatiquement`);
+
+          // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
+          if (diagnostiqueurId) {
+            devis.diagnostiqueurAssigne = diagnostiqueurId;
+            await devis.save();
+
+            // Incrémenter le compteur d'utilisation dans l'agence
+            const Diagnostiqueur = require('../models/Diagnostiqueur');
+            const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
+            if (diagnostiqueur && agenceData) {
+              const diagUtilise = agenceData.diagnostiqueursUtilises?.find(
+                d => d.diagnostiqueur.toString() === diagnostiqueurId.toString()
+              );
+
+              if (diagUtilise) {
+                diagUtilise.nombreCommandes += 1;
+                diagUtilise.derniereCommande = new Date();
+              } else {
+                if (!agenceData.diagnostiqueursUtilises) {
+                  agenceData.diagnostiqueursUtilises = [];
+                }
+                agenceData.diagnostiqueursUtilises.push({
+                  diagnostiqueur: diagnostiqueurId,
+                  nombreCommandes: 1,
+                  derniereCommande: new Date()
+                });
+              }
+
+              await agenceData.save();
+            }
+          }
         }
       } catch (errorOM) {
         console.error("❌ Erreur lors de la création de l'ordre de mission :", errorOM);

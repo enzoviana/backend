@@ -117,7 +117,41 @@ const DiagnostiqueurSchema = new Schema({
   dateValidation: { type: Date, default: null },
 
   // Historique utilisation par agences
-  historiqueUtilisation: [DiagnostiqueurUtiliseSchema]
+  historiqueUtilisation: [DiagnostiqueurUtiliseSchema],
+
+  // Informations bancaires
+  informationsBancaires: {
+    iban: { type: String, default: null },
+    bic: { type: String, default: null },
+    titulaire: { type: String, default: null },
+    banque: { type: String, default: null },
+    verifie: { type: Boolean, default: false },
+    dateVerification: { type: Date, default: null }
+  },
+
+  // Zone géographique d'intervention
+  zoneIntervention: {
+    departements: [{ type: String }],
+    villes: [{ type: String }],
+    rayonKm: { type: Number, default: 50 },
+    preferences: { type: String, default: null }
+  },
+
+  // Certifications détaillées (méta-données supplémentaires)
+  detailsCertifications: {
+    niveauxExpertise: [{
+      domaine: { type: Schema.Types.ObjectId, ref: 'DomaineActivite' },
+      niveau: { type: String, enum: ['debutant', 'intermediaire', 'expert'], default: 'intermediaire' },
+      anneesExperience: { type: Number, default: 0 },
+      specialites: [{ type: String }]
+    }],
+    formationsContinues: [{
+      nom: String,
+      organisme: String,
+      dateFormation: Date,
+      dureeHeures: Number
+    }]
+  }
 
 }, { timestamps: true });
 

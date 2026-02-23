@@ -3,12 +3,15 @@ const JournalEligibilite = require('../models/JournalEligibilite');
 
 /**
  * Middleware pour vérifier l'éligibilité avant acceptation de commande
- * Doit être après diagnostiqueurAuth
+ * Doit être après diagnostiqueurAuth ou authMiddleware (admin)
  */
 const checkEligibilite = async (req, res, next) => {
   try {
-    // Vérifie que req.diagnostiqueur existe
-    if (!req.diagnostiqueur) {
+    // Déterminer l'ID utilisateur (admin ou diagnostiqueur)
+    const userId = req.diagnostiqueur?._id || req.user?.id;
+    const userType = req.diagnostiqueur ? 'diagnostiqueur' : 'admin';
+
+    if (!userId) {
       return res.status(401).json({ message: 'Authentification requise.' });
     }
 
@@ -19,14 +22,22 @@ const checkEligibilite = async (req, res, next) => {
       return res.status(400).json({ message: 'devisId manquant.' });
     }
 
-    console.log(`🔍 Vérification éligibilité: diagnostiqueur ${req.diagnostiqueur._id} pour devis ${devisId}`);
+    console.log(`🔍 Vérification éligibilité: ${userType} ${userId} pour devis ${devisId}`);
 
-    // Vérifier l'éligibilité
-    const resultat = await eligibiliteService.verifierEligibilite(req.diagnostiqueur._id, devisId);
+    // Vérifier l'éligibilité (avec bypass automatique pour admin)
+    const resultat = await eligibiliteService.verifierEligibilite(userId, devisId);
 
-    // Enregistrer dans le journal
+    // Bypass admin - passer directement
+    if (resultat.bypassAdmin) {
+      console.log('✅ Admin bypass - Éligibilité automatique');
+      req.eligibiliteVerifiee = true;
+      req.resultatEligibilite = resultat;
+      return next();
+    }
+
+    // Enregistrer dans le journal (seulement pour diagnostiqueurs)
     await JournalEligibilite.create({
-      diagnostiqueur: req.diagnostiqueur._id,
+      diagnostiqueur: userId,
       devis: devisId,
       eligible: resultat.eligible,
       diagnosticsVerifies: resultat.diagnosticsVerifies,
@@ -44,7 +55,8 @@ const checkEligibilite = async (req, res, next) => {
         eligible: false,
         raisons: resultat.raisonsIneligibilite,
         certificationsManquantes: resultat.certificationsManquantes,
-        assurances: resultat.assurancesVerifiees
+        assurances: resultat.assurancesVerifiees,
+        actionRequise: 'Veuillez ajouter les certifications manquantes et vous assurer que vos assurances sont à jour.'
       });
     }
 

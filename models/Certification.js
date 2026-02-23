@@ -47,12 +47,38 @@ const CertificationSchema = new Schema({
   // Statut calculé automatiquement
   statut: {
     type: String,
-    enum: ['valide', 'expire', 'a_renouveler'],
+    enum: ['valide', 'expire', 'a_renouveler', 'en_attente', 'rejete'],
     default: 'valide'
   },
 
   // Notes
-  notes: { type: String, default: '' }
+  notes: { type: String, default: '' },
+
+  // Système d'approbation manuelle
+  approbation: {
+    statutApprobation: {
+      type: String,
+      enum: ['en_attente', 'approuve', 'rejete'],
+      default: 'en_attente'
+    },
+    approuvePar: {
+      type: Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null
+    },
+    dateApprobation: {
+      type: Date,
+      default: null
+    },
+    raisonRejet: {
+      type: String,
+      default: null
+    },
+    commentaireAdmin: {
+      type: String,
+      default: null
+    }
+  }
 
 }, { timestamps: true });
 
@@ -60,20 +86,35 @@ const CertificationSchema = new Schema({
 CertificationSchema.index({ diagnostiqueur: 1, domaine: 1, statut: 1 });
 CertificationSchema.index({ technicien: 1, statut: 1 });
 CertificationSchema.index({ dateExpiration: 1 });
+CertificationSchema.index({ 'approbation.statutApprobation': 1 });
 
 /**
- * Méthode pour calculer le statut en fonction de la date d'expiration
+ * Méthode pour calculer le statut en fonction de la date d'expiration et de l'approbation
  */
 CertificationSchema.methods.calculerStatut = function() {
-  const maintenant = new Date();
-  const joursRestants = Math.ceil((this.dateExpiration - maintenant) / (1000 * 60 * 60 * 24));
+  // Si pas encore approuvée, le statut dépend de l'approbation
+  if (this.approbation.statutApprobation === 'en_attente') {
+    this.statut = 'en_attente';
+    return this.statut;
+  }
 
-  if (joursRestants < 0) {
-    this.statut = 'expire';
-  } else if (joursRestants <= 30) {
-    this.statut = 'a_renouveler';
-  } else {
-    this.statut = 'valide';
+  if (this.approbation.statutApprobation === 'rejete') {
+    this.statut = 'rejete';
+    return this.statut;
+  }
+
+  // Si approuvée, calculer le statut basé sur la date d'expiration
+  if (this.approbation.statutApprobation === 'approuve') {
+    const maintenant = new Date();
+    const joursRestants = Math.ceil((this.dateExpiration - maintenant) / (1000 * 60 * 60 * 24));
+
+    if (joursRestants < 0) {
+      this.statut = 'expire';
+    } else if (joursRestants <= 30) {
+      this.statut = 'a_renouveler';
+    } else {
+      this.statut = 'valide';
+    }
   }
 
   return this.statut;

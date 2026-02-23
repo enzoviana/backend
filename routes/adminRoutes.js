@@ -7,6 +7,9 @@ const missionController = require("../controllers/missionController");
 const agencyController = require('../controllers/agencyController');
 const devisController = require('../controllers/devisController');
 const adminDiagnostiqueurController = require('../controllers/adminDiagnostiqueurController');
+const adminCertificationController = require('../controllers/adminCertificationController');
+const adminStripeController = require('../controllers/adminStripeController');
+const adminDiagnosticMappingController = require('../controllers/adminDiagnosticMappingController');
 const creditsController = require('../controllers/creditsController');
 const googleCalendarController = require('../controllers/googleCalendarController');
 const contratController = require('../controllers/contratController');
@@ -162,5 +165,50 @@ router.post('/diagnostiqueurs/:id/eligibilite', authMiddleware, adminDiagnostiqu
 router.get('/domaines', authMiddleware, adminDiagnostiqueurController.getAllDomaines);
 router.post('/domaines', authMiddleware, adminDiagnostiqueurController.createDomaine);
 router.put('/domaines/:id', authMiddleware, adminDiagnostiqueurController.updateDomaine);
+
+// ---------------------- GESTION DES CERTIFICATIONS ----------------------
+
+// Liste des certifications en attente d'approbation
+router.get('/certifications/en-attente', authMiddleware, adminCertificationController.getCertificationsEnAttente);
+
+// Toutes les certifications avec filtres
+router.get('/certifications', authMiddleware, adminCertificationController.getToutesCertifications);
+
+// Approuver une certification
+router.put('/certifications/:certificationId/approuver', authMiddleware, adminCertificationController.approuverCertification);
+
+// Rejeter une certification
+router.put('/certifications/:certificationId/rejeter', authMiddleware, adminCertificationController.rejeterCertification);
+
+// ---------------------- GESTION STRIPE DES DIAGNOSTIQUEURS ----------------------
+
+// Créer un abonnement PRO pour un diagnostiqueur
+router.post('/diagnostiqueurs/:diagnostiqueurId/abonnement/creer', authMiddleware, adminStripeController.creerAbonnementDiagnostiqueur);
+
+// Annuler un abonnement (downgrade vers STANDARD)
+router.post('/diagnostiqueurs/:diagnostiqueurId/abonnement/annuler', authMiddleware, adminStripeController.annulerAbonnementDiagnostiqueur);
+
+// Modifier les fonctionnalités/limites d'un diagnostiqueur
+router.put('/diagnostiqueurs/:diagnostiqueurId/fonctionnalites', authMiddleware, adminStripeController.modifierFonctionnalites);
+
+// ---------------------- MAPPING DIAGNOSTICS <-> CERTIFICATIONS ----------------------
+
+// Récupérer tous les mappings
+router.get('/diagnostic-mapping', authMiddleware, adminDiagnosticMappingController.getMappings);
+
+// Récupérer un mapping par diagnostic
+router.get('/diagnostic-mapping/:diagnosticId', authMiddleware, adminDiagnosticMappingController.getMappingByDiagnostic);
+
+// Créer ou mettre à jour un mapping
+router.post('/diagnostic-mapping', authMiddleware, adminDiagnosticMappingController.createOrUpdateMapping);
+
+// Supprimer un mapping
+router.delete('/diagnostic-mapping/:mappingId', authMiddleware, adminDiagnosticMappingController.deleteMapping);
+
+// Initialiser les mappings par défaut
+router.post('/diagnostic-mapping/initialiser', authMiddleware, adminDiagnosticMappingController.initialiserMappingsParDefaut);
+
+// Récupérer la liste des diagnostics et domaines pour l'interface
+router.get('/diagnostic-mapping/data/liste', authMiddleware, adminDiagnosticMappingController.getDiagnosticsEtDomaines);
 
 module.exports = router;

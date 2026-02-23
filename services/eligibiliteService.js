@@ -6,6 +6,7 @@ const Pack = require('../models/Pack');
 const Diagnostic = require('../models/Diagnostic');
 const Devis = require('../models/Devis');
 const JournalEligibilite = require('../models/JournalEligibilite');
+const DiagnosticCertificationMapping = require('../models/DiagnosticCertificationMapping');
 
 /**
  * Service d'éligibilité
@@ -19,6 +20,26 @@ async function verifierEligibilite(diagnostiqueurId, devisId) {
   const startTime = Date.now();
 
   try {
+    // Vérifier si c'est un Admin - Bypass automatique
+    const Admin = require('../models/Admin');
+    const isAdmin = await Admin.findById(diagnostiqueurId);
+
+    if (isAdmin) {
+      console.log('✅ Admin détecté - Bypass éligibilité automatique');
+      return {
+        eligible: true,
+        bypassAdmin: true,
+        raisonsIneligibilite: [],
+        diagnosticsVerifies: [],
+        packsVerifies: [],
+        certificationsManquantes: [],
+        assurancesVerifiees: {
+          rc: { valide: true },
+          decennale: { valide: true }
+        }
+      };
+    }
+
     // Récupérer le diagnostiqueur
     const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
     if (!diagnostiqueur) {
@@ -223,7 +244,66 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
       throw new Error('Diagnostic non trouvé');
     }
 
-    // Mapper le diagnostic vers un domaine d'activité
+    // Chercher le mapping configuré pour ce diagnostic
+    const mapping = await DiagnosticCertificationMapping.findOne({
+      diagnostic: diagnosticId,
+      actif: true
+    }).populate('domainesCertification.domaine');
+
+    if (mapping && mapping.domainesCertification.length > 0) {
+      // Utiliser le mapping configuré
+      const certificationsManquantes = [];
+
+      for (const domaineCertif of mapping.domainesCertification) {
+        if (!domaineCertif.obligatoire) continue;
+
+        const query = {
+          diagnostiqueur: diagnostiqueur._id,
+          domaine: domaineCertif.domaine._id,
+          'approbation.statutApprobation': 'approuve',
+          statut: 'valide',
+          dateExpiration: { $gt: new Date() }
+        };
+
+        if (domaineCertif.mentionSpecialeRequise) {
+          query.mentionSpeciale = domaineCertif.mentionSpecialeRequise;
+        }
+
+        const cert = await Certification.findOne(query);
+
+        if (!cert) {
+          certificationsManquantes.push({
+            domaineCode: domaineCertif.domaine.code,
+            nomDomaine: domaineCertif.domaine.nom,
+            mentionSpeciale: domaineCertif.mentionSpecialeRequise
+          });
+        }
+      }
+
+      // Si des certifications manquent
+      if (certificationsManquantes.length > 0) {
+        return {
+          eligible: false,
+          raison: `Certifications manquantes pour ${diagnostic.nom}: ${certificationsManquantes.map(c => c.nomDomaine).join(', ')}`,
+          domaineCode: certificationsManquantes[0].domaineCode,
+          nomDomaine: certificationsManquantes[0].nomDomaine,
+          certificationTrouvee: false,
+          certificationsManquantes
+        };
+      }
+
+      return {
+        eligible: true,
+        raison: null,
+        domaineCode: mapping.domainesCertification[0].domaine.code,
+        nomDomaine: mapping.domainesCertification[0].domaine.nom,
+        certificationTrouvee: true
+      };
+    }
+
+    // Fallback vers ancien système si pas de mapping
+    console.log(`⚠️ Aucun mapping trouvé pour le diagnostic ${diagnostic.nom}, utilisation du système par défaut`);
+
     const domaine = await mapperDiagnosticVersDomaine(diagnostic.nom);
 
     if (!domaine) {
@@ -317,10 +397,11 @@ async function mapperDiagnosticVersDomaine(nomDiagnostic) {
  */
 async function aCertificationValide(diagnostiqueurId, domaineId) {
   try {
-    // Rechercher une certification valide pour ce diagnostiqueur et ce domaine
+    // Rechercher une certification valide ET approuvée pour ce diagnostiqueur et ce domaine
     const certification = await Certification.findOne({
       diagnostiqueur: diagnostiqueurId,
       domaine: domaineId,
+      'approbation.statutApprobation': 'approuve',
       statut: 'valide',
       dateExpiration: { $gt: new Date() }
     });

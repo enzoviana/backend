@@ -562,7 +562,7 @@ exports.addCertification = async (req, res) => {
       resource_type: 'auto'
     });
 
-    // Créer la certification
+    // Créer la certification en attente d'approbation
     const certification = await Certification.create({
       technicien: technicienId,
       diagnostiqueur: diagnostiqueur._id,
@@ -579,7 +579,14 @@ exports.addCertification = async (req, res) => {
         public_id: result.public_id,
         dateDepot: new Date()
       },
-      statut: 'valide'
+      statut: 'en_attente',
+      approbation: {
+        statutApprobation: 'en_attente',
+        approuvePar: null,
+        dateApprobation: null,
+        raisonRejet: null,
+        commentaireAdmin: null
+      }
     });
 
     // Ajouter la certification au technicien
@@ -591,7 +598,7 @@ exports.addCertification = async (req, res) => {
       .populate('domaine');
 
     res.status(201).json({
-      message: 'Certification ajoutée avec succès.',
+      message: 'Certification ajoutée et en attente d\'approbation par l\'administrateur.',
       certification: certificationPopulated
     });
 
@@ -639,6 +646,19 @@ exports.updateCertification = async (req, res) => {
 
     if (!certification) {
       return res.status(404).json({ message: 'Certification non trouvée.' });
+    }
+
+    // Vérifier si des champs critiques sont modifiés
+    const champsModifies = ['numeroCertification', 'organisme', 'dateObtention', 'dateExpiration'];
+    const aDesModificationsCritiques = champsModifies.some(champ => updates[champ] !== undefined);
+
+    // Si certification approuvée et modifications critiques, remettre en attente
+    if (aDesModificationsCritiques && certification.approbation.statutApprobation === 'approuve') {
+      certification.approbation.statutApprobation = 'en_attente';
+      certification.approbation.dateApprobation = null;
+      certification.approbation.approuvePar = null;
+      certification.approbation.commentaireAdmin = 'Remise en attente suite à modification';
+      certification.statut = 'en_attente';
     }
 
     const allowedUpdates = ['numeroCertification', 'organisme', 'dateObtention', 'dateExpiration', 'mentionSpeciale'];
@@ -1187,5 +1207,152 @@ exports.getDomaines = async (req, res) => {
   } catch (error) {
     console.error('Erreur getDomaines:', error);
     res.status(500).json({ message: 'Erreur lors de la récupération des domaines.' });
+  }
+};
+
+/**
+ * INFORMATIONS BANCAIRES - Mettre à jour
+ */
+exports.updateInformationsBancaires = async (req, res) => {
+  try {
+    const diagnostiqueur = req.diagnostiqueur;
+    const { iban, bic, titulaire, banque } = req.body;
+
+    // Validation basique IBAN (format FR)
+    if (iban && !iban.match(/^FR\d{2}[A-Z0-9]{23}$/)) {
+      return res.status(400).json({ message: 'Format IBAN invalide. Format attendu: FR + 2 chiffres + 23 caractères alphanumériques.' });
+    }
+
+    diagnostiqueur.informationsBancaires = {
+      iban: iban || diagnostiqueur.informationsBancaires?.iban || null,
+      bic: bic || diagnostiqueur.informationsBancaires?.bic || null,
+      titulaire: titulaire || diagnostiqueur.informationsBancaires?.titulaire || null,
+      banque: banque || diagnostiqueur.informationsBancaires?.banque || null,
+      verifie: false,
+      dateVerification: null
+    };
+
+    await diagnostiqueur.save();
+
+    res.json({
+      message: 'Informations bancaires mises à jour avec succès',
+      informationsBancaires: diagnostiqueur.informationsBancaires
+    });
+  } catch (error) {
+    console.error('Erreur updateInformationsBancaires:', error);
+    res.status(500).json({ message: 'Erreur lors de la mise à jour des informations bancaires.' });
+  }
+};
+
+/**
+ * ZONE INTERVENTION - Mettre à jour
+ */
+exports.updateZoneIntervention = async (req, res) => {
+  try {
+    const diagnostiqueur = req.diagnostiqueur;
+    const { departements, villes, rayonKm, preferences } = req.body;
+
+    diagnostiqueur.zoneIntervention = {
+      departements: departements || [],
+      villes: villes || [],
+      rayonKm: rayonKm || 50,
+      preferences: preferences || null
+    };
+
+    await diagnostiqueur.save();
+
+    res.json({
+      message: 'Zone d\'intervention mise à jour avec succès',
+      zoneIntervention: diagnostiqueur.zoneIntervention
+    });
+  } catch (error) {
+    console.error('Erreur updateZoneIntervention:', error);
+    res.status(500).json({ message: 'Erreur lors de la mise à jour de la zone d\'intervention.' });
+  }
+};
+
+/**
+ * NIVEAU EXPERTISE - Ajouter ou mettre à jour
+ */
+exports.addNiveauExpertise = async (req, res) => {
+  try {
+    const diagnostiqueur = req.diagnostiqueur;
+    const { domaineId, niveau, anneesExperience, specialites } = req.body;
+
+    if (!domaineId || !niveau) {
+      return res.status(400).json({ message: 'Domaine et niveau requis' });
+    }
+
+    // Vérifier que le domaine existe
+    const domaine = await DomaineActivite.findById(domaineId);
+    if (!domaine) {
+      return res.status(404).json({ message: 'Domaine non trouvé' });
+    }
+
+    // Initialiser detailsCertifications si nécessaire
+    if (!diagnostiqueur.detailsCertifications) {
+      diagnostiqueur.detailsCertifications = { niveauxExpertise: [], formationsContinues: [] };
+    }
+
+    // Vérifier si niveau d'expertise existe déjà pour ce domaine
+    const existant = diagnostiqueur.detailsCertifications.niveauxExpertise.find(
+      n => n.domaine.toString() === domaineId
+    );
+
+    if (existant) {
+      // Mettre à jour
+      existant.niveau = niveau;
+      existant.anneesExperience = anneesExperience || 0;
+      existant.specialites = specialites || [];
+    } else {
+      // Ajouter
+      diagnostiqueur.detailsCertifications.niveauxExpertise.push({
+        domaine: domaineId,
+        niveau,
+        anneesExperience: anneesExperience || 0,
+        specialites: specialites || []
+      });
+    }
+
+    await diagnostiqueur.save();
+
+    // Repopuler pour retourner les infos complètes
+    await diagnostiqueur.populate('detailsCertifications.niveauxExpertise.domaine');
+
+    res.json({
+      message: 'Niveau d\'expertise ajouté/mis à jour avec succès',
+      niveauxExpertise: diagnostiqueur.detailsCertifications.niveauxExpertise
+    });
+  } catch (error) {
+    console.error('Erreur addNiveauExpertise:', error);
+    res.status(500).json({ message: 'Erreur lors de l\'ajout du niveau d\'expertise.' });
+  }
+};
+
+/**
+ * DEVIS - Récupérer tous les devis assignés au diagnostiqueur
+ */
+exports.getMesDevis = async (req, res) => {
+  try {
+    const diagnostiqueur = req.diagnostiqueur;
+    const { statut } = req.query;
+
+    const query = { diagnostiqueurAssigne: diagnostiqueur._id };
+    if (statut) {
+      query.statut = statut;
+    }
+
+    const devis = await Devis.find(query)
+      .populate('agenceId', 'nom email')
+      .populate('clientId')
+      .populate('diagnosticsSelectionnes')
+      .populate('pack')
+      .sort({ createdAt: -1 })
+      .limit(100);
+
+    res.json({ devis });
+  } catch (error) {
+    console.error('Erreur getMesDevis:', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération des devis.' });
   }
 };

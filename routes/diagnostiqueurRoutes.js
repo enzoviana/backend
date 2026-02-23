@@ -87,4 +87,16 @@ router.get('/statistiques', diagnostiqueurAuth, diagnostiqueurController.getStat
 // Domaines
 router.get('/domaines', diagnostiqueurAuth, diagnostiqueurController.getDomaines);
 
+// Informations bancaires
+router.put('/informations-bancaires', diagnostiqueurAuth, diagnostiqueurController.updateInformationsBancaires);
+
+// Zone d'intervention
+router.put('/zone-intervention', diagnostiqueurAuth, diagnostiqueurController.updateZoneIntervention);
+
+// Niveaux d'expertise
+router.post('/niveaux-expertise', diagnostiqueurAuth, diagnostiqueurController.addNiveauExpertise);
+
+// Mes devis
+router.get('/mes-devis', diagnostiqueurAuth, diagnostiqueurController.getMesDevis);
+
 module.exports = router;
