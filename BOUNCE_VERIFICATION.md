@@ -38,7 +38,7 @@ Quand un bounce est détecté :
 # SMTP (envoi)
 SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=587
-SMTP_USER=support@votre-devis-diagnostics.fr
+SMTP_USER=support@datafuse.fr
 SMTP_PASS=votre_mot_de_passe
 
 # IMAP (lecture des bounces)

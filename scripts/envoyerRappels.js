@@ -93,7 +93,7 @@ async function checkBounces() {
                   numeroDevis: devis.numero,
                   nomClient: `${devis.client.prenom} ${devis.client.nom}`,
                   emailErrone: to,
-                  link: "https://agence.votre-devis-diagnostics.fr/billing"
+                  link: "https://client-dimotec.datafuse.fr/billing"
                 }
               });
             } catch (mailErr) {

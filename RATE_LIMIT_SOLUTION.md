@@ -55,7 +55,7 @@ const isRateLimit = error.message?.includes('451') ||
 ```env
 SMTP_HOST=smtp.hostinger.com
 SMTP_PORT=587
-SMTP_USER=support@votre-devis-diagnostics.fr
+SMTP_USER=support@datafuse.fr
 SMTP_PASS=kRfUQ>Q$2
 
 IMAP_HOST=imap.hostinger.com

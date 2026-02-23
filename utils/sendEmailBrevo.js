@@ -51,7 +51,7 @@ async function sendEmailBrevo({ to, subject, template, variables = {}, html }) {
       body: JSON.stringify({
         sender: {
           name: process.env.EMAIL_SENDER_NAME || 'Dimotec Diagnostic',
-          email: process.env.SMTP_USER || 'support@votre-devis-diagnostics.fr'
+          email: process.env.SMTP_USER || 'support@datafuse.fr'
         },
         to: [{ email: to }],
         subject: subject,

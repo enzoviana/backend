@@ -713,16 +713,33 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    // ✅ Changement de pack = perte du tarif préférentiel
+    // ✅ Changement de pack = perte du tarif préférentiel (sauf si on passe à "aucun")
     contrat.packMaintenance = nouveauPack;
-    contrat.tarifPreferentiel = false;
+    if (nouveauPack !== 'aucun') {
+      contrat.tarifPreferentiel = false;
+    }
 
     const packDetails = PACKS_MAINTENANCE[nouveauPack];
     contrat.detailsPack = {
       nom: packDetails.nom,
-      prixMensuel: packDetails.prixMensuelNormal,
+      prixMensuel: nouveauPack === 'aucun' ? 0 : packDetails.prixMensuelNormal,
       fonctionnalites: packDetails.fonctionnalites
     };
+
+    // 🔄 Gérer le changement de statut de paiement
+    if (nouveauPack === 'aucun') {
+      // Si on passe à "aucun", on annule le paiement en attente
+      contrat.statutPaiement = 'actif'; // Pas de paiement requis
+      contrat.stripeSubscriptionId = null; // Réinitialiser l'abonnement
+    } else if (contrat.statutPaiement === 'en_attente') {
+      // Si on change de pack alors qu'on est en attente de paiement,
+      // on réinitialise stripeSubscriptionId pour permettre de créer un nouveau lien
+      contrat.stripeSubscriptionId = null;
+      contrat.statutPaiement = 'en_attente';
+    } else if (!contrat.stripeSubscriptionId) {
+      // Si pas d'abonnement actif, mettre en attente de paiement
+      contrat.statutPaiement = 'en_attente';
+    }
 
     await contrat.save();
 
@@ -759,8 +776,17 @@ exports.changerPack = async (req, res) => {
     // Mettre à jour le champ contratMaintenance dans Admin
     const admin = await Admin.findById(adminId);
     if (admin) {
-      // IMPORTANT : Ne mettre actif QUE si le paiement est déjà actif
-      if (contrat.statutPaiement === 'actif') {
+      if (nouveauPack === 'aucun') {
+        // Sans maintenance
+        admin.contratMaintenance = {
+          actif: false,
+          type: 'aucun',
+          dateDebut: null,
+          dateExpiration: null
+        };
+        console.log(`❌ Contrat de maintenance désactivé dans Admin ${adminId}`);
+      } else if (contrat.statutPaiement === 'actif') {
+        // Avec maintenance active
         admin.contratMaintenance = {
           actif: true,
           type: nouveauPack,
@@ -769,7 +795,7 @@ exports.changerPack = async (req, res) => {
         };
         console.log(`✅ Contrat de maintenance activé dans Admin ${adminId}`);
       } else {
-        // Si paiement en attente, mettre le contrat en attente
+        // Avec maintenance en attente de paiement
         admin.contratMaintenance = {
           actif: false,
           type: nouveauPack,
@@ -785,9 +811,9 @@ exports.changerPack = async (req, res) => {
       success: true,
       message: 'Pack de maintenance modifié avec succès',
       nouveauPack: contrat.detailsPack,
-      avertissement: 'Le tarif préférentiel a été perdu. Nouveau tarif: ' + contrat.detailsPack.prixMensuel + '€/mois',
+      avertissement: nouveauPack !== 'aucun' ? 'Le tarif préférentiel a été perdu. Nouveau tarif: ' + contrat.detailsPack.prixMensuel + '€/mois' : null,
       statutPaiement: contrat.statutPaiement,
-      needsPayment: contrat.statutPaiement === 'en_attente'
+      needsPayment: contrat.statutPaiement === 'en_attente' && nouveauPack !== 'aucun'
     });
 
   } catch (error) {
@@ -1118,7 +1144,43 @@ exports.telechargerPDF = async (req, res) => {
 
     doc.fontSize(9).fillColor('#666').font('Helvetica-Oblique')
        .text('En l\'absence de souscription, le Prestataire n\'est tenu à aucune obligation de maintenance ou d\'intervention hors devis ponctuel.', 90, doc.y, { width: 450, align: 'justify' })
-       .moveDown(1.2);
+       .moveDown(0.8);
+
+    // ⚠️ AVERTISSEMENT IMPORTANT - Absence de maintenance
+    doc.rect(70, doc.y, 470, 2).fillColor('#dc2626').fill();
+    doc.moveDown(0.5);
+
+    doc.fontSize(11).fillColor('#dc2626').font('Helvetica-Bold')
+       .text('⚠️ IMPORTANT : Absence de souscription à une maintenance', 70)
+       .moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica-Bold')
+       .text('Sans souscription à un pack de maintenance, ', 70, doc.y, { continued: true })
+       .fillColor('#dc2626')
+       .text('le serveur et la base de données ne sont plus pris en charge par DATAFUSE ', { continued: true })
+       .fillColor('#333')
+       .text('après la période de garantie de 3 mois.', { width: 470, align: 'justify' });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica')
+       .text('Un agent technique de DATAFUSE contactera le Client pour organiser le transfert complet de l\'infrastructure (serveur, base de données, accès techniques). Le Client deviendra responsable de :', 70, doc.y, { width: 470, align: 'justify' });
+
+    doc.moveDown(0.3);
+
+    const responsabilites = [
+      'L\'hébergement et la disponibilité du serveur',
+      'Les sauvegardes et la sécurité des données',
+      'Les mises à jour techniques et de sécurité',
+      'La résolution des incidents techniques'
+    ];
+
+    responsabilites.forEach(resp => {
+      doc.fontSize(9).fillColor('#666').font('Helvetica')
+         .text(`• ${resp}`, 90, doc.y + 3, { width: 450 });
+    });
+
+    doc.moveDown(1.5);
 
     // CLAUSE 7
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
