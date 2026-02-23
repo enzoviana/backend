@@ -241,11 +241,4 @@ exports.initialiserPlansParDefaut = async (req, res) => {
   }
 };
 
-module.exports = {
-  getAllPlans,
-  getPlanById,
-  createPlan,
-  updatePlan,
-  deletePlan,
-  initialiserPlansParDefaut
-};
+module.exports = exports;
