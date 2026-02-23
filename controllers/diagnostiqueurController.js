@@ -416,6 +416,28 @@ exports.addTechnicien = async (req, res) => {
     const { nom, prenom, email, telephone } = req.body;
     const diagnostiqueur = req.diagnostiqueur;
 
+    // Vérifier les limites du plan
+    const nombreTechniciensActuels = await TechnicienDiagnostiqueur.countDocuments({
+      diagnostiqueur: diagnostiqueur._id
+    });
+
+    // Limites selon le plan
+    const limitesTechnicians = {
+      'STANDARD': 1,
+      'PRO': 5
+    };
+
+    const limite = limitesTechnicians[diagnostiqueur.typeAbonnement] || 1;
+
+    if (nombreTechniciensActuels >= limite) {
+      return res.status(403).json({
+        message: `Limite de techniciens atteinte pour le plan ${diagnostiqueur.typeAbonnement}. Vous pouvez ajouter jusqu'à ${limite} technicien(s).`,
+        limite,
+        actuel: nombreTechniciensActuels,
+        planActuel: diagnostiqueur.typeAbonnement
+      });
+    }
+
     const technicien = await TechnicienDiagnostiqueur.create({
       diagnostiqueur: diagnostiqueur._id,
       nom,
