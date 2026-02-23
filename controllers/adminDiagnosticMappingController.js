@@ -202,11 +202,4 @@ exports.getDiagnosticsEtDomaines = async (req, res) => {
   }
 };
 
-module.exports = {
-  getMappings,
-  getMappingByDiagnostic,
-  createOrUpdateMapping,
-  deleteMapping,
-  initialiserMappingsParDefaut,
-  getDiagnosticsEtDomaines
-};
+module.exports = exports;

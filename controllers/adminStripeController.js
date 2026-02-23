@@ -80,8 +80,4 @@ exports.modifierFonctionnalites = async (req, res) => {
   }
 };
 
-module.exports = {
-  creerAbonnementDiagnostiqueur,
-  annulerAbonnementDiagnostiqueur,
-  modifierFonctionnalites
-};
+module.exports = exports;
