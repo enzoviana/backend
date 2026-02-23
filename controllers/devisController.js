@@ -1673,7 +1673,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
           variables: {
             nomClient: `${client.prenom} ${client.nom}`,
             lienDevis,
-            "[Adresse email]": req.agence?.email || "support@datafuse.fr",
+            "[Adresse email]": req.agence?.email || "support@.votre-devis-diagnostics.fr",
             "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
           },
         });
@@ -1794,7 +1794,7 @@ exports.corrigerEmailDevis = async (req, res) => {
       variables: {
         nomClient: `${devis.client.prenom} ${devis.client.nom}`,
         lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
-        "[Adresse email]": req.agence?.email || "support@datafuse.fr",
+        "[Adresse email]": req.agence?.email || "support@.votre-devis-diagnostics.fr",
         "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
       },
     });
@@ -2761,7 +2761,7 @@ exports.notifyNewAgency = async (req, res) => {
 
     <div class="footer">
       <p><strong>Votre Devis Diagnostics</strong> - La solution professionnelle pour vos diagnostics</p>
-      <p>Besoin d'aide ? <a href="mailto:support@datafuse.fr" style="color: #ed891a;">Contactez le support</a></p>
+      <p>Besoin d'aide ? <a href="mailto:support@.votre-devis-diagnostics.fr" style="color: #ed891a;">Contactez le support</a></p>
       <p>© ${new Date().getFullYear()} Votre Devis Diagnostics</p>
     </div>
   </div>
@@ -2994,7 +2994,7 @@ exports.notifyExistingAgency = async (req, res) => {
         Plateforme de gestion de diagnostics immobiliers
       </p>
       <p style="margin-top: 15px;">
-        Besoin d'aide ? <a href="mailto:support@datafuse.fr">support@datafuse.fr</a>
+        Besoin d'aide ? <a href="mailto:support@.votre-devis-diagnostics.fr">support@.votre-devis-diagnostics.fr</a>
       </p>
       <p style="margin-top: 10px; color: #94a3b8;">
         © ${new Date().getFullYear()} Votre Devis Diagnostics - Tous droits réservés
