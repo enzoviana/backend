@@ -1391,7 +1391,7 @@ exports.forgotPassword = async (req, res) => {
     await user.save();
 
     // 🔹 Lien de réinitialisation
-    const resetUrl = `https://client-dimotec.datafuse.fr/reset-password/${resetToken}`;
+    const resetUrl = `https://agence.votre-devis-diagnostics.fr/reset-password/${resetToken}`;
 
     // 🔹 Envoi de l'email
     await sendEmail({
@@ -1544,7 +1544,7 @@ exports.addEmploye = async (req, res) => {
     await employe.save();
 
     // ✅ Envoi de l'e-mail avec les identifiants
-    const loginUrl = `https://client-dimotec.datafuse.fr/login`; // lien vers la page de connexion
+    const loginUrl = `https://agence.votre-devis-diagnostics.fr/login`; // lien vers la page de connexion
 
     await sendEmail({
       to: emailCleaned,

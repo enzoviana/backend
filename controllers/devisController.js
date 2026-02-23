@@ -341,7 +341,7 @@ exports.envoyerRappelDevis = async (req, res) => {
     }
 
     // 🔗 Lien client
-    const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+    const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
     console.log("🔗 Lien du devis envoyé au client :", lienDevis);
 
     // 💌 Envoi e-mail
@@ -889,7 +889,7 @@ exports.envoyerRappelsAutomatiques = async () => {
     console.log(`🔍 ${devisArelancer.length} devis à relancer (Statuts: Envoyé/Ouvert)`);
 
     for (const devis of devisArelancer) {
-      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+      const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
       await sendEmail({
         to: devis.client.email,
@@ -1627,7 +1627,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
           template: "OrdreMission.html",
           variables: {
             ...baseVariables,
-            lienMission: `https://client-dimotec.datafuse.fr/ordre-mission` // Lien spécifique Agence
+            lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Agence
           }
         });
 
@@ -1642,7 +1642,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
         template: "OrdreMission.html",
         variables: {
           ...baseVariables,
-          lienMission: `https://dimotec.datafuse.fr/ordre-mission` // Lien spécifique Admin
+          lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission` // Lien spécifique Admin
         }
       });
 
@@ -1660,7 +1660,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
     // 💌 Envoi de l'e-mail si le payeur est le client
     // 💌 Envoi de l'e-mail si le payeur est le client
     if (data.payer === "client") {
-      const lienDevis = `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`;
+      const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
       try {
         console.log("📤 Tentative d'envoi e-mail au client :", client.email);
@@ -1703,7 +1703,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
               typeDevis: typeAffichage,
               numero: devis.numero,
               montant: devis.montantTTC,
-              lienDevis: "https://client-dimotec.datafuse.fr/billing"
+              lienDevis: "https://agence.votre-devis-diagnostics.fr/billing"
             },
           });
           console.log("✅ Notification envoyée à l'agence");
@@ -1793,7 +1793,7 @@ exports.corrigerEmailDevis = async (req, res) => {
       template: "devis.html",
       variables: {
         nomClient: `${devis.client.prenom} ${devis.client.nom}`,
-        lienDevis: `https://dimotec.datafuse.fr/client-Devis/${devis.accesClientKey}`,
+        lienDevis: `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`,
         "[Adresse email]": req.agence?.email || "support@datafuse.fr",
         "[Numéro de téléphone]": req.agence?.telephone || "06 00 00 00 00",
       },
@@ -1967,7 +1967,7 @@ exports.uploadPdfDevis = async (req, res) => {
         template: "OrdreMission.html",
         variables: {
           ...variablesEmailBase,
-          lienMission: `https://client-dimotec.datafuse.fr/ordre-mission`
+          lienMission: `https://agence.votre-devis-diagnostics.fr/ordre-mission`
         }
       });
       console.log("✅ [UPLOAD-PDF] Email agence envoyé");
@@ -1981,7 +1981,7 @@ exports.uploadPdfDevis = async (req, res) => {
       template: "OrdreMission.html",
       variables: {
         ...variablesEmailBase,
-        lienMission: `https://dimotec.datafuse.fr/ordre-mission`
+        lienMission: `https://admin.votre-devis-diagnostics.fr/ordre-mission`
       }
     });
     console.log("✅ [UPLOAD-PDF] Email Dimotec envoyé");
@@ -2753,7 +2753,7 @@ exports.notifyNewAgency = async (req, res) => {
       </div>
 
       <center>
-        <a href="https://client-dimotec.datafuse.fr/login" class="cta-button">
+        <a href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
           Accéder à mon espace gratuit
         </a>
       </center>
@@ -2978,7 +2978,7 @@ exports.notifyExistingAgency = async (req, res) => {
       </div>
 
       <center>
-        <a href="https://client-dimotec.datafuse.fr/login" class="cta-button">
+        <a href="https://agence.votre-devis-diagnostics.fr/login" class="cta-button">
           Accéder à mon espace
         </a>
       </center>

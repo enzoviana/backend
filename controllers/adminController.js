@@ -1130,7 +1130,7 @@ exports.forgotPasswordAdmin = async (req, res) => {
     await admin.save();
 
     // Lien de réinitialisation
-    const resetUrl = `https://dimotec.datafuse.fr/admin/reset-password/${resetToken}`;
+    const resetUrl = `https://admin.votre-devis-diagnostics.fr/admin/reset-password/${resetToken}`;
 
     await sendEmail({
       to: admin.email,

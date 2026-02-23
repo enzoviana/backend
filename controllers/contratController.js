@@ -937,6 +937,23 @@ exports.telechargerPDF = async (req, res) => {
     doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor(orangeColor).lineWidth(2).stroke();
     doc.moveDown(1.5);
 
+    // ========== INFORMATIONS DU PRESTATAIRE ==========
+    doc.rect(50, doc.y, 495, 70).fillAndStroke('#fff7ed', '#fed7aa');
+    doc.moveDown(0.5);
+
+    doc.fontSize(12).fillColor('#c2410c').font('Helvetica-Bold')
+       .text('INFORMATIONS DU PRESTATAIRE', { align: 'center' })
+       .moveDown(0.5);
+
+    doc.fontSize(10).fillColor('#000').font('Helvetica-Bold')
+       .text('DATAFUSE', { align: 'center' });
+    doc.font('Helvetica').fontSize(9)
+       .text('CEO : ENZO VIANA', { align: 'center' });
+    doc.text('Contact@datafuse.fr', { align: 'center' });
+    doc.text('45 rue Anatole France, Saint-Prix', { align: 'center' });
+
+    doc.moveDown(1.5);
+
     // ========== 1. INFORMATIONS DU CONTRACTANT ==========
     doc.fontSize(14).fillColor(orangeColor).font('Helvetica-Bold')
        .text('1. Informations du Contractant', { underline: true })
@@ -1048,159 +1065,149 @@ exports.telechargerPDF = async (req, res) => {
 
     // CLAUSE 1
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('1. Objet du contrat & Livraison')
+       .text('1. Objet du contrat & Livraison technique')
        .moveDown(0.5);
 
     doc.fontSize(10).fillColor('#333').font('Helvetica')
-       .text(`Le présent contrat acte la livraison de l'application web « ${contrat.adminId.entreprise?.name || 'Dimotec'} ». Le Prestataire (DATAFUSE) confirme avoir transféré le code source spécifique, le nom de domaine et les accès administrateurs nécessaires. Le Client reconnaît la conformité fonctionnelle de la Web App à la date de signature.`, 70, doc.y, { width: 470, align: 'justify' })
+       .text(`Le présent contrat acte la livraison officielle et la mise en service de l'application web « ${contrat.adminId.entreprise?.name || 'Dimotec'} ». Le Prestataire (DATAFUSE) confirme avoir procédé au transfert intégral du code source spécifique, de la gestion du nom de domaine et des accès d'administration de haut niveau. Le Client reconnaît, par la signature du présent document, la conformité fonctionnelle totale de la Web App ainsi que la validation de l'ensemble des livrables à la date de livraison.`, 70, doc.y, { width: 470, align: 'justify' })
        .moveDown(1.2);
 
     // CLAUSE 2
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('2. Garantie Technique', 70)
+       .text('2. Garantie Technique & Clause d\'Intégrité', 70)
        .moveDown(0.5);
 
     doc.fontSize(10).fillColor('#333').font('Helvetica')
-       .text('Le Prestataire accorde une garantie de 3 mois à compter de la signature initiale. Cette garantie couvre exclusivement les bugs bloquants et les dysfonctionnements des fonctionnalités existantes. Sont exclus : les modifications graphiques, les évolutions fonctionnelles et les modifications de la logique métier.', 70, doc.y, { width: 470, align: 'justify' })
+       .text('Le Prestataire accorde une garantie de parfait fonctionnement d\'une durée de 3 mois à compter de la livraison. Cette garantie est strictement limitée à la correction de bugs bloquants affectant les fonctionnalités natives livrées. Toutefois, cette garantie est conditionnée au maintien de l\'exclusivité technique de DATAFUSE sur l\'environnement de production. En conséquence, toute modification du code source, toute intrusion dans l\'architecture serveur ou toute manipulation des bases de données par le Client ou un tiers mandaté entraîne la rupture immédiate et irrévocable de la garantie, le Prestataire ne pouvant plus certifier l\'origine des dysfonctionnements.', 70, doc.y, { width: 470, align: 'justify' })
        .moveDown(1.2);
 
     // CLAUSE 3
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('3. Propriété Intellectuelle', 70)
+       .text('3. Propriété Intellectuelle & Valorisation de l\'Actif', 70)
        .moveDown(0.5);
 
     doc.fontSize(10).fillColor('#333').font('Helvetica-Bold')
-       .text('Droits du Prestataire : ', 70, doc.y, { continued: true })
+       .text('Droits Commerciaux du Client : ', 70, doc.y, { continued: true })
        .font('Helvetica')
-       .text('DATAFUSE demeure propriétaire exclusif du Moteur Logiciel (architecture, algorithmes, modules génériques, savoir-faire technique et logique métier non spécifique).', { width: 470, align: 'justify' });
+       .text('DATAFUSE reconnaît au Client les droits commerciaux complets sur l\'instance spécifique de l\'application livrée. Le Client dispose du droit de revente, de duplication, de sous-licence ou de commercialisation globale de son outil sous sa propre marque commerciale.', { width: 470, align: 'justify' });
 
-    doc.moveDown(0.5);
+    doc.moveDown(0.8);
 
-    doc.font('Helvetica-Bold')
-       .text('Droits du Client : ', 70, doc.y, { continued: true })
+    // Encadré orange pour la propriété intellectuelle DATAFUSE
+    const rectY = doc.y;
+    doc.rect(70, rectY - 5, 470, 55).fillAndStroke('#fff7ed', '#f97316');
+    doc.moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#c2410c').font('Helvetica-Bold')
+       .text('⚠️ PROPRIÉTÉ INTELLECTUELLE DATAFUSE', 80, rectY)
+       .moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#334155').font('Helvetica')
+       .text('DATAFUSE conserve la pleine propriété intellectuelle sur l\'architecture logicielle, le moteur backend propriétaire, les bibliothèques de fonctions communes, les algorithmes de traitement de données et tout concept technique développé. Cette propriété intellectuelle demeure exclusive à DATAFUSE qui conserve le droit absolu de développer des projets similaires, de travailler pour des sociétés concurrentes et de réutiliser ses connaissances techniques dans tout contexte commercial sans limitation ni autorisation préalable du Client.', 80, doc.y, { width: 450, align: 'justify' });
+
+    doc.moveDown(1.5);
+
+    doc.fontSize(10).fillColor('#333').font('Helvetica-Bold')
+       .text('Licence d\'Exploitation : ', 70, doc.y, { continued: true })
        .font('Helvetica')
-       .text('Le Client bénéficie d\'un droit d\'usage exclusif de la Web App pour ses besoins propres, sans droit de revente, de duplication ou de commercialisation du moteur.', { width: 470, align: 'justify' })
+       .text('Le Client bénéficie d\'une licence d\'exploitation perpétuelle et non-exclusive de l\'instance livrée, incluant l\'utilisation du moteur logiciel sous-jacent uniquement dans le cadre de l\'application déployée.', { width: 470, align: 'justify' })
        .moveDown(1.2);
 
     // CLAUSE 4
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('4. Extensions & Applications Tierces', 70)
+       .text('4. Évolutions technologiques & Extensions', 70)
        .moveDown(0.5);
 
     doc.fontSize(10).fillColor('#333').font('Helvetica')
-       .text('Le Prestataire est autorisé à développer des extensions (IA, automatisations, modules mobiles) et à les proposer directement aux utilisateurs finaux via API. Deux modèles de commercialisation sont possibles : la vente directe par DATAFUSE ou un modèle de partenariat (80% Prestataire / 20% Client).', 70, doc.y, { width: 470, align: 'justify' })
+       .text('Dans une optique d\'amélioration continue, DATAFUSE développe régulièrement des modules d\'intelligence artificielle et des automatisations métier.', 70, doc.y, { width: 470, align: 'justify' })
+       .moveDown(0.8);
+
+    doc.font('Helvetica-Bold')
+       .text('• Mécanisme d\'accord tacite : ', 85, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('Le Client est informé par voie électronique de la disponibilité d\'une mise à jour ou d\'une extension. À défaut d\'opposition formelle sous 15 jours calendaires, le silence du Client vaut acceptation pour le déploiement technique de ladite évolution.', { width: 455, align: 'justify' });
+
+    doc.moveDown(0.6);
+
+    doc.font('Helvetica-Bold')
+       .text('• Stratégie de distribution : ', 85, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('En cas de refus ou de non reponse sous 8 jours du modèle de partenariat (intégrant une commission de 20% pour le Client et 80% pour datafuse ou de rachat de l extension par le client), DATAFUSE se réserve le droit souverain de commercialiser ces extensions en vente directe aux utilisateurs de la plateforme via ses propres interfaces de facturation API, afin de garantir la pérennité technologique de l\'écosystème.', { width: 455, align: 'justify' })
        .moveDown(1.2);
+
 
     // CLAUSE 5
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('5. Confidentialité & Non-Exclusivité', 70)
-       .moveDown(0.5);
-
-    doc.fontSize(10).fillColor('#333').font('Helvetica-Bold')
-       .text('Exclusivité : ', 70, doc.y, { continued: true })
-       .font('Helvetica')
-       .text('Le présent contrat n\'instaure aucune exclusivité. DATAFUSE peut proposer des technologies similaires à d\'autres clients.', { width: 470, align: 'justify' });
-
-    doc.moveDown(0.5);
-
-    doc.font('Helvetica-Bold')
-       .text('Données : ', 70, doc.y, { continued: true })
-       .font('Helvetica')
-       .text('Les données du Client et de ses utilisateurs restent sa propriété exclusive. DATAFUSE s\'engage à ne jamais copier, réutiliser ou commercialiser ces données.', { width: 470, align: 'justify' })
-       .moveDown(1.2);
-
-    // CLAUSE 6
-    doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('6. Maintenance Évolutive (Options)', 70)
+       .text('5. Maintenance, Engagement & Rétractation', 70)
        .moveDown(0.5);
 
     // Pack Sérénité
     doc.fontSize(10).fillColor('#ed891a').font('Helvetica-Bold')
-       .text('PACK 1 - SÉRÉNITÉ', 90)
+       .text('Pack 1 - SÉRÉNITÉ', 90)
        .moveDown(0.3);
 
     doc.fontSize(9).fillColor('#333').font('Helvetica')
-       .text('Maintenance corrective (48h), mises à jour techniques (Serveur, MongoDB, API IA), sauvegardes quotidiennes et support prioritaire.', 90, doc.y, { width: 450, align: 'justify' });
+       .text('Maintenance corrective prioritaire, surveillance des API IA, sauvegardes externalisées et mises à jour de sécurité serveur.', 90, doc.y, { width: 450, align: 'justify' });
 
     doc.font('Helvetica-Bold').fillColor('#059669')
-       .text('250 € HT / mois', 90, doc.y + 3, { continued: true })
+       .text('250€ HT / mois', 90, doc.y + 3, { continued: true })
        .font('Helvetica').fillColor('#94a3b8')
-       .text(' (345 € HT sans tarif fondateur)')
+       .text(' (345€ HT)')
        .moveDown(0.8);
 
     // Pack Évolution
     doc.fontSize(10).fillColor('#ed891a').font('Helvetica-Bold')
-       .text('PACK 2 - ÉVOLUTION', 90)
+       .text('Pack 2 - ÉVOLUTION', 90)
        .moveDown(0.3);
 
     doc.fontSize(9).fillColor('#333').font('Helvetica')
-       .text('Inclus Pack 1 + Frais d\'hébergement + 1 journée/mois dédiée aux optimisations UX, graphiques et ajustements de logique serveur.', 90, doc.y, { width: 450, align: 'justify' });
+       .text('Inclus Pack 1 + Frais d\'hébergement cloud + 1 journée par mois de conseil technique et d\'optimisation de la logique métier.', 90, doc.y, { width: 450, align: 'justify' });
 
     doc.font('Helvetica-Bold').fillColor('#059669')
-       .text('400 € HT / mois', 90, doc.y + 3, { continued: true })
+       .text('400€ HT / mois', 90, doc.y + 3, { continued: true })
        .font('Helvetica').fillColor('#94a3b8')
-       .text(' (552 € HT sans tarif fondateur)')
-       .moveDown(0.5);
-
-    doc.fontSize(9).fillColor('#666').font('Helvetica-Oblique')
-       .text('En l\'absence de souscription, le Prestataire n\'est tenu à aucune obligation de maintenance ou d\'intervention hors devis ponctuel.', 90, doc.y, { width: 450, align: 'justify' })
+       .text(' (552€ HT)')
        .moveDown(0.8);
 
-    // ⚠️ AVERTISSEMENT IMPORTANT - Absence de maintenance
-    doc.rect(70, doc.y, 470, 2).fillColor('#dc2626').fill();
-    doc.moveDown(0.5);
-
-    doc.fontSize(11).fillColor('#dc2626').font('Helvetica-Bold')
-       .text('⚠️ IMPORTANT : Absence de souscription à une maintenance', 70)
-       .moveDown(0.5);
-
-    doc.fontSize(9).fillColor('#333').font('Helvetica-Bold')
-       .text('Sans souscription à un pack de maintenance, ', 70, doc.y, { continued: true })
-       .fillColor('#dc2626')
-       .text('le serveur et la base de données ne sont plus pris en charge par DATAFUSE ', { continued: true })
-       .fillColor('#333')
-       .text('après la période de garantie de 3 mois.', { width: 470, align: 'justify' });
-
-    doc.moveDown(0.5);
-
-    doc.fontSize(9).fillColor('#333').font('Helvetica')
-       .text('Un agent technique de DATAFUSE contactera le Client pour organiser le transfert complet de l\'infrastructure (serveur, base de données, accès techniques). Le Client deviendra responsable de :', 70, doc.y, { width: 470, align: 'justify' });
-
+    // Encadré ENGAGEMENT ANNUEL
+    const engagementY = doc.y;
+    doc.rect(70, engagementY - 5, 470, 55).fillAndStroke('#eff6ff', '#3b82f6');
     doc.moveDown(0.3);
 
-    const responsabilites = [
-      'L\'hébergement et la disponibilité du serveur',
-      'Les sauvegardes et la sécurité des données',
-      'Les mises à jour techniques et de sécurité',
-      'La résolution des incidents techniques'
-    ];
+    doc.fontSize(9).fillColor('#1e3a8a').font('Helvetica-Bold')
+       .text('ENGAGEMENT ANNUEL & ABSENCE DE RÉTRACTATION', 80, engagementY)
+       .moveDown(0.5);
 
-    responsabilites.forEach(resp => {
-      doc.fontSize(9).fillColor('#666').font('Helvetica')
-         .text(`• ${resp}`, 90, doc.y + 3, { width: 450 });
-    });
+    doc.fontSize(9).fillColor('#1e40af').font('Helvetica')
+       .text('La souscription à un pack de maintenance fait l\'objet d\'un engagement ferme pour une période minimale de 12 mois. En raison de la nature du service incluant un accès immédiat aux ressources serveurs, aux bases de données et aux infrastructures logicielles sécurisées, le Client renonce expressément à tout droit de rétractation dès l\'activation du service. En cas de rupture anticipée du contrat par le Client, la totalité des mensualités restant dues jusqu\'au terme de l\'engagement annuel sera immédiatement facturée et exigible.', 80, doc.y, { width: 450, align: 'justify' });
 
     doc.moveDown(1.5);
 
-    // CLAUSE 7
+    // Encadré RESPONSABILITÉ
+    const respY = doc.y;
+    doc.rect(70, respY - 5, 470, 45).fillAndStroke('#fff1f2', '#f43f5e');
+    doc.moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#881337').font('Helvetica-Bold')
+       .text('RESPONSABILITÉ ET TRANSFERT DE RISQUES', 80, respY)
+       .moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#334155').font('Helvetica')
+       .text('Le refus ou l\'arrêt de la maintenance entraîne le transfert total des risques techniques au Client. DATAFUSE décline toute responsabilité en cas de cyberattaque, de corruption de données ou d\'obsolescence des clés API tierces. Toute demande d\'assistance ultérieure fera l\'objet d\'une tarification forfaitaire d\'urgence de 150€ HT par heure d\'intervention.', 80, doc.y, { width: 450, align: 'justify' });
+
+    doc.moveDown(1.5);
+
+    // CLAUSE 6
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
-       .text('7. Droit applicable & Litiges', 70)
+       .text('6. Dispositions Finales', 70)
        .moveDown(0.5);
 
     doc.fontSize(10).fillColor('#333').font('Helvetica')
-       .text('Le contrat est soumis au droit français. Compétence exclusive : ', 70, doc.y, { continued: true })
+       .text('Le présent contrat est régi par le droit français. Tout litige relatif à l\'interprétation ou à l\'exécution des présentes sera de la compétence exclusive du ', 70, doc.y, { continued: true, width: 470, align: 'justify' })
        .font('Helvetica-Bold')
-       .text('Tribunal de Commerce de Paris.')
-       .moveDown(2);
+       .text('Tribunal de Commerce de Paris.');
 
-    // ENGAGEMENT
-    doc.fontSize(11).fillColor('#ed891a').font('Helvetica-Bold')
-       .text('Durée d\'engagement', 70)
-       .moveDown(0.5);
-
-    doc.fontSize(10).fillColor('#333').font('Helvetica')
-       .text('Le présent contrat de maintenance est conclu pour une durée de 12 mois à compter de la date de signature. Le contrat se renouvelle par tacite reconduction pour des périodes successives de 12 mois. Chaque partie peut résilier le contrat moyennant un préavis écrit de 1 mois avant la fin de la période en cours.', 70, doc.y, { width: 470, align: 'justify' })
-       .moveDown(2);
+    doc.moveDown(2);
 
     // ========== FOOTER ==========
     doc.moveTo(50, doc.y).lineTo(545, doc.y).strokeColor('#ddd').lineWidth(1).stroke();
