@@ -759,12 +759,19 @@ exports.handleContratSubscriptionUpdated = async (subscription) => {
 exports.changerPack = async (req, res) => {
   try {
     const adminId = req.user.id;
-    const { nouveauPack } = req.body;
+    const { nouveauPack, nouveauTypeEngagement } = req.body;
 
     if (!['serenite', 'evolution', 'aucun'].includes(nouveauPack)) {
       return res.status(400).json({
         success: false,
         message: 'Pack invalide'
+      });
+    }
+
+    if (nouveauPack !== 'aucun' && (!nouveauTypeEngagement || !['annuel', 'flexible'].includes(nouveauTypeEngagement))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Type d\'engagement invalide'
       });
     }
 
@@ -777,7 +784,7 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    // 🚫 Empêcher le DOWNGRADE
+    // 🚫 Empêcher le DOWNGRADE de pack (serenite -> aucun ou evolution -> serenite/aucun)
     const hierarchie = { 'aucun': 0, 'serenite': 1, 'evolution': 2 };
     const packActuel = hierarchie[contrat.packMaintenance];
     const nouveauPackNiveau = hierarchie[nouveauPack];
@@ -789,16 +796,25 @@ exports.changerPack = async (req, res) => {
       });
     }
 
-    // ✅ Changement de pack = perte du tarif préférentiel (sauf si on passe à "aucun")
-    contrat.packMaintenance = nouveauPack;
-    if (nouveauPack !== 'aucun') {
-      contrat.tarifPreferentiel = false;
+    // Construire la clé du nouveau pack
+    let nouveauPackKey;
+    if (nouveauPack === 'aucun') {
+      nouveauPackKey = 'aucun';
+      contrat.typeEngagement = null;
+    } else {
+      nouveauPackKey = `${nouveauPack}_${nouveauTypeEngagement}`;
+      contrat.typeEngagement = nouveauTypeEngagement;
     }
 
-    const packDetails = PACKS_MAINTENANCE[nouveauPack];
+    // Mettre à jour le pack
+    contrat.packMaintenance = nouveauPack;
+
+    const packDetails = PACKS_MAINTENANCE[nouveauPackKey];
     contrat.detailsPack = {
       nom: packDetails.nom,
-      prixMensuel: nouveauPack === 'aucun' ? 0 : packDetails.prixMensuelNormal,
+      prixMensuel: packDetails.prixMensuel,
+      engagementMois: packDetails.engagementMois,
+      preavisMois: packDetails.preavisMois || null,
       fonctionnalites: packDetails.fonctionnalites
     };
 
@@ -819,33 +835,60 @@ exports.changerPack = async (req, res) => {
 
     await contrat.save();
 
-    // Si l'abonnement est déjà ACTIF avec paiement Stripe, on met à jour l'abonnement
+    // 🔄 MISE À JOUR STRIPE : Si l'abonnement est déjà ACTIF, mettre à jour le prix
     if (contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif' && nouveauPack !== 'aucun') {
       try {
         const subscription = await stripe.subscriptions.retrieve(contrat.stripeSubscriptionId);
 
-        // Mettre à jour le montant de l'abonnement avec proration
+        // Préparer la description selon le type d'engagement
+        let description;
+        if (nouveauTypeEngagement === 'annuel') {
+          description = `Abonnement de maintenance Dimotec - Engagement 12 mois`;
+        } else if (nouveauTypeEngagement === 'flexible') {
+          description = `Abonnement de maintenance Dimotec - Engagement minimum 3 mois + Préavis 2 mois`;
+        } else {
+          description = `Abonnement de maintenance Dimotec`;
+        }
+
+        // Créer un nouveau prix dans Stripe
+        const newPrice = await stripe.prices.create({
+          currency: 'eur',
+          product_data: {
+            name: packDetails.nom,
+            metadata: {
+              packMaintenance: nouveauPack,
+              typeEngagement: nouveauTypeEngagement || 'aucun'
+            }
+          },
+          unit_amount: packDetails.prixMensuel * 100, // En centimes
+          recurring: {
+            interval: 'month',
+          },
+        });
+
+        // Mettre à jour l'abonnement avec le nouveau prix et proration
         await stripe.subscriptions.update(contrat.stripeSubscriptionId, {
           items: [{
             id: subscription.items.data[0].id,
-            price_data: {
-              currency: 'eur',
-              product_data: {
-                name: packDetails.nom,
-                description: 'Abonnement de maintenance Dimotec - Engagement 1 an',
-              },
-              unit_amount: packDetails.prixMensuelNormal * 100,
-              recurring: {
-                interval: 'month',
-              },
-            },
+            price: newPrice.id,
           }],
-          proration_behavior: 'create_prorations'
+          proration_behavior: 'create_prorations', // Calcul automatique de la proration
+          metadata: {
+            adminId: adminId.toString(),
+            contratId: contrat._id.toString(),
+            packMaintenance: nouveauPack,
+            typeEngagement: nouveauTypeEngagement || 'aucun',
+            type: 'contrat_maintenance'
+          }
         });
 
-        console.log(`✅ Abonnement Stripe mis à jour avec proration`);
+        console.log(`✅ Abonnement Stripe mis à jour avec proration : ${packDetails.nom} - ${packDetails.prixMensuel}€/mois`);
       } catch (stripeError) {
         console.error('Erreur mise à jour Stripe:', stripeError);
+        return res.status(500).json({
+          success: false,
+          message: 'Erreur lors de la mise à jour de l\'abonnement Stripe: ' + stripeError.message
+        });
       }
     }
 
@@ -887,7 +930,10 @@ exports.changerPack = async (req, res) => {
       success: true,
       message: 'Pack de maintenance modifié avec succès',
       nouveauPack: contrat.detailsPack,
-      avertissement: nouveauPack !== 'aucun' ? 'Le tarif préférentiel a été perdu. Nouveau tarif: ' + contrat.detailsPack.prixMensuel + '€/mois' : null,
+      abonnementMisAJour: contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif',
+      infoProration: contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif'
+        ? 'La différence de prix sera calculée au prorata et facturée/créditée sur votre prochaine facture.'
+        : null,
       statutPaiement: contrat.statutPaiement,
       needsPayment: contrat.statutPaiement === 'en_attente' && nouveauPack !== 'aucun'
     });
