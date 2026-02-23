@@ -7,10 +7,10 @@ const PDFDocument = require('pdfkit');
 
 // Définition des packs de maintenance
 const PACKS_MAINTENANCE = {
-  serenite: {
-    nom: 'Pack Sérénité',
-    prixMensuelPreferentiel: 250,
-    prixMensuelNormal: 345, // 250 * 1.38
+  serenite_annuel: {
+    nom: 'Pack Sérénité (Engagement Annuel)',
+    prixMensuel: 250,
+    engagementMois: 12,
     fonctionnalites: [
       'Hébergement inclus',
       'Mises à jour de sécurité',
@@ -20,10 +20,38 @@ const PACKS_MAINTENANCE = {
       'Garantie de disponibilité 99.9%'
     ]
   },
-  evolution: {
-    nom: 'Pack Evolution',
-    prixMensuelPreferentiel: 400,
-    prixMensuelNormal: 552, // 400 * 1.38
+  serenite_flexible: {
+    nom: 'Pack Sérénité (Sans Engagement Annuel)',
+    prixMensuel: 345,
+    engagementMois: 3,
+    preavisMois: 2,
+    fonctionnalites: [
+      'Hébergement inclus',
+      'Mises à jour de sécurité',
+      'Support technique prioritaire',
+      'Sauvegardes quotidiennes',
+      'Monitoring 24/7',
+      'Garantie de disponibilité 99.9%'
+    ]
+  },
+  evolution_annuel: {
+    nom: 'Pack Evolution (Engagement Annuel)',
+    prixMensuel: 400,
+    engagementMois: 12,
+    fonctionnalites: [
+      'Tout le Pack Sérénité',
+      'Nouvelles fonctionnalités incluses',
+      'Personnalisations mensuelles',
+      'Optimisations de performance',
+      'Formations continues',
+      'Conseils stratégiques'
+    ]
+  },
+  evolution_flexible: {
+    nom: 'Pack Evolution (Sans Engagement Annuel)',
+    prixMensuel: 552,
+    engagementMois: 3,
+    preavisMois: 2,
     fonctionnalites: [
       'Tout le Pack Sérénité',
       'Nouvelles fonctionnalités incluses',
@@ -35,8 +63,8 @@ const PACKS_MAINTENANCE = {
   },
   aucun: {
     nom: 'Sans Maintenance',
-    prixMensuelPreferentiel: 0,
-    prixMensuelNormal: 0,
+    prixMensuel: 0,
+    engagementMois: 0,
     fonctionnalites: [
       'Accès à l\'application',
       'Support limité (email uniquement)',
@@ -75,28 +103,27 @@ exports.getStatus = async (req, res) => {
 // Récupère la liste des packs disponibles
 exports.getPacks = async (req, res) => {
   try {
-    const adminId = req.user.id; 
+    const adminId = req.user.id;
 
-    // Vérifier si l'admin a déjà un contrat pour adapter les prix
+    // Vérifier si l'admin a déjà un contrat
     const contrat = await ContratTransfert.findOne({ adminId });
-    const tarifPreferentiel = contrat ? contrat.tarifPreferentiel : true;
 
     const packs = Object.keys(PACKS_MAINTENANCE).map(key => {
       const pack = PACKS_MAINTENANCE[key];
       return {
         id: key,
         nom: pack.nom,
-        prixMensuel: tarifPreferentiel ? pack.prixMensuelPreferentiel : pack.prixMensuelNormal,
-        prixMensuelBarré: tarifPreferentiel ? pack.prixMensuelNormal : null,
+        prixMensuel: pack.prixMensuel,
+        engagementMois: pack.engagementMois,
+        preavisMois: pack.preavisMois || null,
         fonctionnalites: pack.fonctionnalites,
-        recommande: key === 'serenite'
+        recommande: key === 'serenite_annuel'
       };
     });
 
     res.json({
       success: true,
-      packs,
-      tarifPreferentiel
+      packs
     });
 
   } catch (error) {
@@ -113,13 +140,20 @@ exports.getPacks = async (req, res) => {
 exports.envoyerCodeVerification = async (req, res) => {
   try {
     const adminId = req.user.id;
-    const { packMaintenance, signature } = req.body;
+    const { packMaintenance, typeEngagement, signature } = req.body;
 
     // Validation
     if (!packMaintenance || !['serenite', 'evolution', 'aucun'].includes(packMaintenance)) {
       return res.status(400).json({
         success: false,
         message: 'Pack de maintenance invalide'
+      });
+    }
+
+    if (packMaintenance !== 'aucun' && (!typeEngagement || !['annuel', 'flexible'].includes(typeEngagement))) {
+      return res.status(400).json({
+        success: false,
+        message: 'Type d\'engagement invalide'
       });
     }
 
@@ -150,13 +184,18 @@ exports.envoyerCodeVerification = async (req, res) => {
       });
     }
 
-    // Mettre à jour le pack choisi (pour appliquer la tarification)
-    contrat.packMaintenance = packMaintenance;
-
-    // 💰 LOGIQUE DE TARIFICATION : Si pas de maintenance, augmenter de 38%
+    // Déterminer la clé du pack complet
+    let packKey;
     if (packMaintenance === 'aucun') {
-      contrat.tarifPreferentiel = false; // Perte du tarif préférentiel
+      packKey = 'aucun';
+      contrat.typeEngagement = null;
+    } else {
+      packKey = `${packMaintenance}_${typeEngagement}`;
+      contrat.typeEngagement = typeEngagement; // 'annuel' ou 'flexible'
     }
+
+    // Mettre à jour le pack choisi
+    contrat.packMaintenance = packMaintenance;
 
     // Stocker temporairement les données de signature
     contrat.signature = {
@@ -180,7 +219,7 @@ exports.envoyerCodeVerification = async (req, res) => {
         nom: signature.nom,
         prenom: signature.prenom,
         code: code,
-        packChoisi: PACKS_MAINTENANCE[packMaintenance].nom
+        packChoisi: PACKS_MAINTENANCE[packKey].nom
       }
     });
 
@@ -251,12 +290,19 @@ exports.signerContrat = async (req, res) => {
     }
 
     // Récupérer les détails du pack pour les figer dans le contrat
-    const packDetails = PACKS_MAINTENANCE[contrat.packMaintenance];
+    let packKey;
+    if (contrat.packMaintenance === 'aucun') {
+      packKey = 'aucun';
+    } else {
+      packKey = `${contrat.packMaintenance}_${contrat.typeEngagement}`;
+    }
+
+    const packDetails = PACKS_MAINTENANCE[packKey];
     contrat.detailsPack = {
       nom: packDetails.nom,
-      prixMensuel: contrat.tarifPreferentiel
-        ? packDetails.prixMensuelPreferentiel
-        : packDetails.prixMensuelNormal,
+      prixMensuel: packDetails.prixMensuel,
+      engagementMois: packDetails.engagementMois,
+      preavisMois: packDetails.preavisMois || null,
       fonctionnalites: packDetails.fonctionnalites
     };
 
@@ -405,6 +451,7 @@ exports.getDetails = async (req, res) => {
         _id: contrat._id,
         dateSignature: contrat.dateSignature,
         packMaintenance: contrat.packMaintenance,
+        typeEngagement: contrat.typeEngagement,
         detailsPack: contrat.detailsPack,
         tarifPreferentiel: contrat.tarifPreferentiel,
         isValide: contrat.isValide,
@@ -493,6 +540,16 @@ exports.creerAbonnementStripe = async (req, res) => {
       contrat.stripeCustomerId = customerId;
     }
 
+    // Préparer la description selon le type d'engagement
+    let description;
+    if (contrat.typeEngagement === 'annuel') {
+      description = `Abonnement de maintenance Dimotec - Engagement 12 mois`;
+    } else if (contrat.typeEngagement === 'flexible') {
+      description = `Abonnement de maintenance Dimotec - Engagement minimum 3 mois + Préavis 2 mois`;
+    } else {
+      description = `Abonnement de maintenance Dimotec`;
+    }
+
     // Créer la session Stripe Checkout
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
@@ -504,7 +561,7 @@ exports.creerAbonnementStripe = async (req, res) => {
             currency: 'eur',
             product_data: {
               name: contrat.detailsPack.nom,
-              description: `Abonnement de maintenance Dimotec - Engagement 1 an`,
+              description: description,
             },
             unit_amount: contrat.detailsPack.prixMensuel * 100, // En centimes
             recurring: {
@@ -519,12 +576,15 @@ exports.creerAbonnementStripe = async (req, res) => {
           adminId: adminId.toString(),
           contratId: contrat._id.toString(),
           packMaintenance: contrat.packMaintenance,
+          typeEngagement: contrat.typeEngagement || 'aucun',
           type: 'contrat_maintenance'
         }
       },
       metadata: {
         adminId: adminId.toString(),
         contratId: contrat._id.toString(),
+        packMaintenance: contrat.packMaintenance,
+        typeEngagement: contrat.typeEngagement || 'aucun',
         type: 'contrat_maintenance'
       },
       success_url: `${process.env.ADMIN_FRONTEND_URL || 'http://localhost:8080'}/settings?tab=contrat&payment=success`,
@@ -596,9 +656,18 @@ exports.handleContratStripeWebhook = async (session) => {
     contrat.dateDebutAbonnement = dateDebut;
     contrat.dateProchaineFacture = dateFin;
 
-    // Engagement 1 an à partir de la date de début
+    // Calcul de la date de fin d'engagement selon le type
     const dateFinEngagement = new Date(dateDebut);
-    dateFinEngagement.setFullYear(dateFinEngagement.getFullYear() + 1);
+    if (contrat.typeEngagement === 'annuel') {
+      // Engagement 12 mois
+      dateFinEngagement.setFullYear(dateFinEngagement.getFullYear() + 1);
+    } else if (contrat.typeEngagement === 'flexible') {
+      // Engagement minimum 3 mois
+      dateFinEngagement.setMonth(dateFinEngagement.getMonth() + 3);
+    } else {
+      // Par défaut 1 an (pour compatibilité avec anciens contrats)
+      dateFinEngagement.setFullYear(dateFinEngagement.getFullYear() + 1);
+    }
     contrat.dateFinEngagement = dateFinEngagement;
 
     await contrat.save();
@@ -1110,8 +1179,23 @@ exports.telechargerPDF = async (req, res) => {
     doc.fontSize(10).fillColor('#333').font('Helvetica-Bold')
        .text('Licence d\'Exploitation : ', 70, doc.y, { continued: true })
        .font('Helvetica')
-       .text('Le Client bénéficie d\'une licence d\'exploitation perpétuelle et non-exclusive de l\'instance livrée, incluant l\'utilisation du moteur logiciel sous-jacent uniquement dans le cadre de l\'application déployée.', { width: 470, align: 'justify' })
-       .moveDown(1.2);
+       .text('Le Client bénéficie d\'une licence d\'exploitation perpétuelle et non-exclusive de l\'instance livrée, incluant l\'utilisation du moteur logiciel sous-jacent uniquement dans le cadre de l\'application déployée.', { width: 470, align: 'justify' });
+
+    doc.moveDown(0.8);
+
+    // Encadré bleu pour la clause de réversibilité
+    const rectRevY = doc.y;
+    doc.rect(70, rectRevY - 5, 470, 50).fillAndStroke('#eff6ff', '#3b82f6');
+    doc.moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#1e3a8a').font('Helvetica-Bold')
+       .text('🔄 CLAUSE DE RÉVERSIBILITÉ', 80, rectRevY)
+       .moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#334155').font('Helvetica')
+       .text('En cas d\'arrêt du contrat de maintenance ou de cessation de collaboration, le Client peut demander la récupération d\'une version exploitable et fonctionnelle de son instance spécifique, incluant la base de données et les fichiers de configuration nécessaires au transfert vers un autre hébergeur. Ce transfert sera facturé 500€ HT et effectué sous 15 jours ouvrés. La propriété intellectuelle du moteur DATAFUSE reste inaliénable, le Client ne peut pas transmettre, vendre ou céder le code source du moteur à un tiers. Seule l\'instance compilée et fonctionnelle est transférable.', 80, doc.y, { width: 450, align: 'justify' });
+
+    doc.moveDown(1.5);
 
     // CLAUSE 4
     doc.fontSize(12).fillColor(orangeColor).font('Helvetica-Bold')
@@ -1123,16 +1207,16 @@ exports.telechargerPDF = async (req, res) => {
        .moveDown(0.8);
 
     doc.font('Helvetica-Bold')
-       .text('• Mécanisme d\'accord tacite : ', 85, doc.y, { continued: true })
+       .text('• Accord Écrit Explicite : ', 85, doc.y, { continued: true })
        .font('Helvetica')
-       .text('Le Client est informé par voie électronique de la disponibilité d\'une mise à jour ou d\'une extension. À défaut d\'opposition formelle sous 15 jours calendaires, le silence du Client vaut acceptation pour le déploiement technique de ladite évolution.', { width: 455, align: 'justify' });
+       .text('Le Client est informé par voie électronique (e-mail) de la disponibilité d\'une mise à jour ou d\'une extension. Toute évolution ou modification nécessite l\'accord écrit explicite du Client (réponse par e-mail de validation). Aucun déploiement ne sera effectué sans confirmation expresse du Client.', { width: 455, align: 'justify' });
 
     doc.moveDown(0.6);
 
     doc.font('Helvetica-Bold')
-       .text('• Stratégie de distribution : ', 85, doc.y, { continued: true })
+       .text('• Modèles de Commercialisation : ', 85, doc.y, { continued: true })
        .font('Helvetica')
-       .text('En cas de refus ou de non reponse sous 8 jours du modèle de partenariat (intégrant une commission de 20% pour le Client et 80% pour datafuse ou de rachat de l extension par le client), DATAFUSE se réserve le droit souverain de commercialiser ces extensions en vente directe aux utilisateurs de la plateforme via ses propres interfaces de facturation API, afin de garantir la pérennité technologique de l\'écosystème.', { width: 455, align: 'justify' })
+       .text('Pour chaque nouvelle extension développée, DATAFUSE propose au Client deux options : (1) un modèle de partenariat avec commission de 20% pour le Client et 80% pour DATAFUSE, ou (2) un rachat intégral de l\'extension par le Client à un tarif négocié. En cas de refus des deux options après notification écrite, DATAFUSE se réserve le droit de commercialiser ces extensions en vente directe aux utilisateurs finaux de la plateforme via ses propres interfaces de facturation API.', { width: 455, align: 'justify' })
        .moveDown(1.2);
 
 
@@ -1141,45 +1225,100 @@ exports.telechargerPDF = async (req, res) => {
        .text('5. Maintenance, Engagement & Rétractation', 70)
        .moveDown(0.5);
 
-    // Pack Sérénité
+    // Titre tarifs avec engagement
+    doc.fontSize(10).fillColor('#c2410c').font('Helvetica-Bold')
+       .text('💼 TARIFS AVEC ENGAGEMENT ANNUEL', 90)
+       .moveDown(0.5);
+
+    // Pack Sérénité - Engagement annuel
     doc.fontSize(10).fillColor('#ed891a').font('Helvetica-Bold')
-       .text('Pack 1 - SÉRÉNITÉ', 90)
+       .text('Pack 1 - SÉRÉNITÉ', 100)
        .moveDown(0.3);
 
     doc.fontSize(9).fillColor('#333').font('Helvetica')
-       .text('Maintenance corrective prioritaire, surveillance des API IA, sauvegardes externalisées et mises à jour de sécurité serveur.', 90, doc.y, { width: 450, align: 'justify' });
+       .text('Maintenance corrective prioritaire, surveillance des API IA, sauvegardes externalisées et mises à jour de sécurité serveur.', 100, doc.y, { width: 440, align: 'justify' });
 
     doc.font('Helvetica-Bold').fillColor('#059669')
-       .text('250€ HT / mois', 90, doc.y + 3, { continued: true })
+       .text('250€ HT / mois', 100, doc.y + 3, { continued: true })
        .font('Helvetica').fillColor('#94a3b8')
-       .text(' (345€ HT)')
+       .text(' (345€ HT)');
+
+    doc.font('Helvetica-Bold').fillColor('#ed891a').fontSize(8)
+       .text('Engagement 12 mois', 100, doc.y + 3)
        .moveDown(0.8);
 
-    // Pack Évolution
+    // Pack Évolution - Engagement annuel
     doc.fontSize(10).fillColor('#ed891a').font('Helvetica-Bold')
-       .text('Pack 2 - ÉVOLUTION', 90)
+       .text('Pack 2 - ÉVOLUTION', 100)
        .moveDown(0.3);
 
     doc.fontSize(9).fillColor('#333').font('Helvetica')
-       .text('Inclus Pack 1 + Frais d\'hébergement cloud + 1 journée par mois de conseil technique et d\'optimisation de la logique métier.', 90, doc.y, { width: 450, align: 'justify' });
+       .text('Inclus Pack 1 + Frais d\'hébergement cloud + 1 journée par mois de conseil technique et d\'optimisation de la logique métier.', 100, doc.y, { width: 440, align: 'justify' });
 
     doc.font('Helvetica-Bold').fillColor('#059669')
-       .text('400€ HT / mois', 90, doc.y + 3, { continued: true })
+       .text('400€ HT / mois', 100, doc.y + 3, { continued: true })
        .font('Helvetica').fillColor('#94a3b8')
-       .text(' (552€ HT)')
+       .text(' (552€ HT)');
+
+    doc.font('Helvetica-Bold').fillColor('#ed891a').fontSize(8)
+       .text('Engagement 12 mois', 100, doc.y + 3)
+       .moveDown(1);
+
+    // Titre tarifs sans engagement
+    doc.fontSize(10).fillColor('#1d4ed8').font('Helvetica-Bold')
+       .text('🔓 TARIFS SANS ENGAGEMENT ANNUEL', 90)
+       .moveDown(0.5);
+
+    // Pack Sérénité - Sans engagement
+    doc.fontSize(10).fillColor('#2563eb').font('Helvetica-Bold')
+       .text('Pack 1 - SÉRÉNITÉ', 100)
+       .moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica')
+       .text('Même contenu que le Pack Sérénité avec engagement annuel.', 100, doc.y, { width: 440, align: 'justify' });
+
+    doc.font('Helvetica-Bold').fillColor('#2563eb')
+       .text('345€ HT / mois', 100, doc.y + 3);
+
+    doc.font('Helvetica').fillColor('#475569').fontSize(8)
+       .text('Engagement minimum 3 mois + Préavis 2 mois', 100, doc.y + 3)
        .moveDown(0.8);
 
-    // Encadré ENGAGEMENT ANNUEL
+    // Pack Évolution - Sans engagement
+    doc.fontSize(10).fillColor('#2563eb').font('Helvetica-Bold')
+       .text('Pack 2 - ÉVOLUTION', 100)
+       .moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#333').font('Helvetica')
+       .text('Même contenu que le Pack Évolution avec engagement annuel.', 100, doc.y, { width: 440, align: 'justify' });
+
+    doc.font('Helvetica-Bold').fillColor('#2563eb')
+       .text('552€ HT / mois', 100, doc.y + 3);
+
+    doc.font('Helvetica').fillColor('#475569').fontSize(8)
+       .text('Engagement minimum 3 mois + Préavis 2 mois', 100, doc.y + 3)
+       .moveDown(0.8);
+
+    // Encadré CONDITIONS D'ENGAGEMENT
     const engagementY = doc.y;
-    doc.rect(70, engagementY - 5, 470, 55).fillAndStroke('#eff6ff', '#3b82f6');
+    doc.rect(70, engagementY - 5, 470, 70).fillAndStroke('#eff6ff', '#3b82f6');
     doc.moveDown(0.3);
 
     doc.fontSize(9).fillColor('#1e3a8a').font('Helvetica-Bold')
-       .text('ENGAGEMENT ANNUEL & ABSENCE DE RÉTRACTATION', 80, engagementY)
+       .text('CONDITIONS D\'ENGAGEMENT & ABSENCE DE RÉTRACTATION', 80, engagementY)
        .moveDown(0.5);
 
-    doc.fontSize(9).fillColor('#1e40af').font('Helvetica')
-       .text('La souscription à un pack de maintenance fait l\'objet d\'un engagement ferme pour une période minimale de 12 mois. En raison de la nature du service incluant un accès immédiat aux ressources serveurs, aux bases de données et aux infrastructures logicielles sécurisées, le Client renonce expressément à tout droit de rétractation dès l\'activation du service. En cas de rupture anticipée du contrat par le Client, la totalité des mensualités restant dues jusqu\'au terme de l\'engagement annuel sera immédiatement facturée et exigible.', 80, doc.y, { width: 450, align: 'justify' });
+    doc.fontSize(9).fillColor('#1e40af').font('Helvetica-Bold')
+       .text('Avec Engagement Annuel : ', 80, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('La souscription à un pack avec engagement fait l\'objet d\'un engagement ferme pour une période de 12 mois. En cas de rupture anticipée, la totalité des mensualités restant dues jusqu\'au terme de l\'engagement sera immédiatement facturée et exigible.', { width: 450, align: 'justify' });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#1e40af').font('Helvetica-Bold')
+       .text('Sans Engagement Annuel : ', 80, doc.y, { continued: true })
+       .font('Helvetica')
+       .text('Engagement minimum de 3 mois requis. La résiliation est possible après cette période minimale moyennant un préavis écrit de 2 mois. En raison de la nature du service incluant un accès immédiat aux ressources serveurs et bases de données sécurisées, le Client renonce expressément à tout droit de rétractation dès l\'activation du service.', { width: 450, align: 'justify' });
 
     doc.moveDown(1.5);
 

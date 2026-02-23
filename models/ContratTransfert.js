@@ -20,11 +20,18 @@ const ContratTransfertSchema = new Schema({
     enum: ['serenite', 'evolution', 'aucun'],
     required: true
   },
+  typeEngagement: {
+    type: String,
+    enum: ['annuel', 'flexible', null],
+    default: null // null pour 'aucun'
+  },
   tarifPreferentiel: { type: Boolean, default: true },
-  
+
   detailsPack: {
     nom: String,
     prixMensuel: Number,
+    engagementMois: Number,
+    preavisMois: Number,
     fonctionnalites: [String]
   },
 
