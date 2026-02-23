@@ -1068,10 +1068,12 @@ exports.telechargerPDF = async (req, res) => {
       });
     }
 
-    // Créer un nouveau document PDF
+    // Créer un nouveau document PDF avec meilleurs paramètres
     const doc = new PDFDocument({
       size: 'A4',
-      margins: { top: 50, bottom: 50, left: 50, right: 50 }
+      margins: { top: 40, bottom: 50, left: 50, right: 50 },
+      bufferPages: true,
+      autoFirstPage: true
     });
 
     // Configuration des headers pour le téléchargement
@@ -1310,7 +1312,7 @@ exports.telechargerPDF = async (req, res) => {
     doc.font('Helvetica-Bold')
        .text('• Modèles de Commercialisation : ', 85, doc.y, { continued: true })
        .font('Helvetica')
-       .text('Pour chaque nouvelle extension développée, DATAFUSE propose au Client deux options : (1) un modèle de partenariat avec commission de 20% pour le Client et 80% pour DATAFUSE, ou (2) un rachat intégral de l\'extension par le Client à un tarif négocié. En cas de refus des deux options après notification écrite, DATAFUSE se réserve le droit de commercialiser ces extensions en vente directe aux utilisateurs finaux de la plateforme via ses propres interfaces de facturation API.', { width: 455, align: 'justify' })
+       .text('Pour chaque nouvelle extension développée, DATAFUSE propose au Client deux options : (1) un modèle de partenariat avec commission de 20% pour le Client et 80% pour DATAFUSE, ou (2) un rachat intégral de l\'extension par le Client à un tarif négocié. Sans Réponse de la part du Client dans les 20j l\'options partenariat sera automatiquement Activé ce qui permettra l\'évolution de la platforme.', { width: 455, align: 'justify' })
        .moveDown(1.2);
 
 
