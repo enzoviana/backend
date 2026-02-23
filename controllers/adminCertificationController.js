@@ -6,7 +6,7 @@ const DomaineActivite = require('../models/DomaineActivite');
 /**
  * GET - Liste des certifications en attente d'approbation
  */
-exports.getCertificationsEnAttente = async (req, res) => {
+const getCertificationsEnAttente = async (req, res) => {
   try {
     const certifications = await Certification.find({
       'approbation.statutApprobation': 'en_attente'
@@ -26,7 +26,7 @@ exports.getCertificationsEnAttente = async (req, res) => {
 /**
  * GET - Toutes les certifications avec filtres optionnels
  */
-exports.getToutesCertifications = async (req, res) => {
+const getToutesCertifications = async (req, res) => {
   try {
     const { statutApprobation, diagnostiqueurId } = req.query;
     const query = {};
@@ -54,7 +54,7 @@ exports.getToutesCertifications = async (req, res) => {
 /**
  * PUT - Approuver une certification
  */
-exports.approuverCertification = async (req, res) => {
+const approuverCertification = async (req, res) => {
   try {
     const { certificationId } = req.params;
     const { commentaireAdmin } = req.body;
@@ -73,7 +73,9 @@ exports.approuverCertification = async (req, res) => {
     certification.approbation.raisonRejet = null;
 
     // Recalculer le statut (valide/expire/a_renouveler)
-    certification.calculerStatut();
+    if (typeof certification.calculerStatut === 'function') {
+        certification.calculerStatut();
+    }
 
     await certification.save();
 
@@ -96,7 +98,7 @@ exports.approuverCertification = async (req, res) => {
 /**
  * PUT - Rejeter une certification
  */
-exports.rejeterCertification = async (req, res) => {
+const rejeterCertification = async (req, res) => {
   try {
     const { certificationId } = req.params;
     const { raisonRejet, commentaireAdmin } = req.body;
@@ -127,8 +129,6 @@ exports.rejeterCertification = async (req, res) => {
       .populate('domaine', 'nom code')
       .populate('approbation.approuvePar', 'nom prenom');
 
-    // TODO: Envoyer une notification au diagnostiqueur
-
     res.json({
       message: 'Certification rejetée',
       certification: certificationPopulated
@@ -139,6 +139,7 @@ exports.rejeterCertification = async (req, res) => {
   }
 };
 
+// Exportation groupée de toutes les fonctions
 module.exports = {
   getCertificationsEnAttente,
   getToutesCertifications,
