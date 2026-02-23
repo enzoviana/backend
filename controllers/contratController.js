@@ -550,11 +550,18 @@ exports.creerAbonnementStripe = async (req, res) => {
       description = `Abonnement de maintenance Dimotec`;
     }
 
-    // Créer la session Stripe Checkout
+    // Créer la session Stripe Checkout avec prélèvement SEPA uniquement
     const session = await stripe.checkout.sessions.create({
       customer: customerId,
-      payment_method_types: ['card'],
+      payment_method_types: ['sepa_debit'], // Prélèvement SEPA uniquement (RIB)
       mode: 'subscription',
+      payment_method_options: {
+        sepa_debit: {
+          mandate_options: {
+            // Le mandat SEPA sera créé automatiquement
+          }
+        }
+      },
       line_items: [
         {
           price_data: {
@@ -1333,6 +1340,20 @@ exports.telechargerPDF = async (req, res) => {
 
     doc.fontSize(9).fillColor('#334155').font('Helvetica')
        .text('Le refus ou l\'arrêt de la maintenance entraîne le transfert total des risques techniques au Client. DATAFUSE décline toute responsabilité en cas de cyberattaque, de corruption de données ou d\'obsolescence des clés API tierces. Toute demande d\'assistance ultérieure fera l\'objet d\'une tarification forfaitaire d\'urgence de 150€ HT par heure d\'intervention.', 80, doc.y, { width: 450, align: 'justify' });
+
+    doc.moveDown(1.5);
+
+    // Encadré MODE DE PAIEMENT
+    const sepaY = doc.y;
+    doc.rect(70, sepaY - 5, 470, 45).fillAndStroke('#e0e7ff', '#6366f1');
+    doc.moveDown(0.3);
+
+    doc.fontSize(9).fillColor('#312e81').font('Helvetica-Bold')
+       .text('🏦 MODE DE PAIEMENT', 80, sepaY)
+       .moveDown(0.5);
+
+    doc.fontSize(9).fillColor('#334155').font('Helvetica')
+       .text('Le paiement des abonnements de maintenance s\'effectue exclusivement par prélèvement automatique SEPA (mandat de prélèvement). Le Client fournira son IBAN lors de la souscription. Le premier prélèvement interviendra sous 5 à 7 jours ouvrés après validation du mandat SEPA. Les prélèvements suivants sont effectués automatiquement chaque mois à date anniversaire.', 80, doc.y, { width: 450, align: 'justify' });
 
     doc.moveDown(1.5);
 
