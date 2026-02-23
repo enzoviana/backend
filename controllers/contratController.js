@@ -820,9 +820,40 @@ exports.changerPack = async (req, res) => {
 
     // 🔄 Gérer le changement de statut de paiement
     if (nouveauPack === 'aucun') {
-      // Si on passe à "aucun", on annule le paiement en attente
-      contrat.statutPaiement = 'actif'; // Pas de paiement requis
-      contrat.stripeSubscriptionId = null; // Réinitialiser l'abonnement
+      // 🔔 PRÉAVIS : Si l'utilisateur est en mode flexible, il doit respecter un préavis de 2 mois
+      if (contrat.typeEngagement === 'flexible' && contrat.statutPaiement === 'actif') {
+        // Calculer la date d'annulation effective (dans 2 mois)
+        const dateAnnulationEffective = new Date();
+        dateAnnulationEffective.setMonth(dateAnnulationEffective.getMonth() + 2);
+
+        // Annuler l'abonnement Stripe à la date effective (fin de période)
+        if (contrat.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.update(contrat.stripeSubscriptionId, {
+              cancel_at_period_end: true // Annulation à la fin de la période de facturation
+            });
+            console.log(`⏰ Abonnement Stripe programmé pour annulation dans 2 mois (préavis flexible)`);
+          } catch (stripeError) {
+            console.error('Erreur annulation Stripe:', stripeError);
+          }
+        }
+
+        contrat.dateFinEngagement = dateAnnulationEffective;
+        console.log(`⏰ Préavis de 2 mois enregistré. Annulation effective le ${dateAnnulationEffective.toLocaleDateString('fr-FR')}`);
+      } else {
+        // Annulation immédiate pour engagement annuel ou si pas d'abonnement actif
+        contrat.statutPaiement = 'actif'; // Pas de paiement requis
+        if (contrat.stripeSubscriptionId) {
+          try {
+            await stripe.subscriptions.cancel(contrat.stripeSubscriptionId);
+            console.log(`🚫 Abonnement Stripe annulé immédiatement`);
+          } catch (stripeError) {
+            console.error('Erreur annulation Stripe:', stripeError);
+          }
+        }
+        contrat.stripeSubscriptionId = null;
+        contrat.dateFinEngagement = null;
+      }
     } else if (contrat.statutPaiement === 'en_attente') {
       // Si on change de pack alors qu'on est en attente de paiement,
       // on réinitialise stripeSubscriptionId pour permettre de créer un nouveau lien
@@ -926,16 +957,26 @@ exports.changerPack = async (req, res) => {
       await admin.save();
     }
 
+    // Vérifier si un préavis est en cours
+    const preavisEnCours = nouveauPack === 'aucun' &&
+                           contrat.typeEngagement === 'flexible' &&
+                           contrat.dateFinEngagement &&
+                           new Date(contrat.dateFinEngagement) > new Date();
+
     res.json({
       success: true,
-      message: 'Pack de maintenance modifié avec succès',
+      message: preavisEnCours
+        ? `Demande d'annulation enregistrée. Effective le ${new Date(contrat.dateFinEngagement).toLocaleDateString('fr-FR')}`
+        : 'Pack de maintenance modifié avec succès',
       nouveauPack: contrat.detailsPack,
-      abonnementMisAJour: contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif',
-      infoProration: contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif'
+      abonnementMisAJour: contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif' && nouveauPack !== 'aucun',
+      infoProration: contrat.stripeSubscriptionId && contrat.statutPaiement === 'actif' && nouveauPack !== 'aucun'
         ? 'La différence de prix sera calculée au prorata et facturée/créditée sur votre prochaine facture.'
         : null,
       statutPaiement: contrat.statutPaiement,
-      needsPayment: contrat.statutPaiement === 'en_attente' && nouveauPack !== 'aucun'
+      needsPayment: contrat.statutPaiement === 'en_attente' && nouveauPack !== 'aucun',
+      preavisEnCours: preavisEnCours,
+      dateFinEffective: preavisEnCours ? contrat.dateFinEngagement : null
     });
 
   } catch (error) {
