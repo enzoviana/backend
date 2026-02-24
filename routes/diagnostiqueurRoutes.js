@@ -42,6 +42,7 @@ router.get('/documents', diagnostiqueurAuth, diagnostiqueurController.getDocumen
 router.delete('/documents/:documentId', diagnostiqueurAuth, diagnostiqueurController.deleteDocument);
 
 // Techniciens
+router.post('/techniciens/init-defaut', diagnostiqueurAuth, diagnostiqueurController.initTechnicienDefaut);
 router.post('/techniciens', diagnostiqueurAuth, diagnostiqueurController.addTechnicien);
 router.get('/techniciens', diagnostiqueurAuth, diagnostiqueurController.getTechniciens);
 router.put('/techniciens/:technicienId', diagnostiqueurAuth, diagnostiqueurController.updateTechnicien);

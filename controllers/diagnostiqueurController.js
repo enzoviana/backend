@@ -1378,3 +1378,71 @@ exports.getMesDevis = async (req, res) => {
     res.status(500).json({ message: 'Erreur lors de la récupération des devis.' });
   }
 };
+
+/**
+ * TECHNICIENS - Initialiser technicien par défaut
+ * Crée automatiquement un technicien par défaut si le diagnostiqueur n'en a pas
+ */
+exports.initTechnicienDefaut = async (req, res) => {
+  try {
+    const diagnostiqueur = req.diagnostiqueur;
+
+    // Vérifier si le diagnostiqueur a déjà des techniciens
+    const techniciensExistants = await TechnicienDiagnostiqueur.countDocuments({
+      diagnostiqueur: diagnostiqueur._id
+    });
+
+    if (techniciensExistants > 0) {
+      // Récupérer les techniciens existants
+      const techniciens = await TechnicienDiagnostiqueur.find({
+        diagnostiqueur: diagnostiqueur._id
+      });
+
+      return res.json({
+        message: 'Technicien(s) déjà existant(s)',
+        alreadyExists: true,
+        techniciens
+      });
+    }
+
+    // Vérifier les limites du plan
+    const limitesTechnicians = {
+      'STANDARD': 1,
+      'PRO': 5
+    };
+
+    const limite = limitesTechnicians[diagnostiqueur.typeAbonnement] || 1;
+
+    // Créer un technicien par défaut avec les infos du diagnostiqueur
+    const technicienData = {
+      diagnostiqueur: diagnostiqueur._id,
+      nom: diagnostiqueur.admin?.nom || 'Nom',
+      prenom: diagnostiqueur.admin?.prenom || 'Prénom',
+      email: diagnostiqueur.admin?.email || 'email@example.com',
+      telephone: diagnostiqueur.admin?.telephone || '0000000000',
+      actif: true
+    };
+
+    const technicien = await TechnicienDiagnostiqueur.create(technicienData);
+
+    console.log(`✅ Technicien par défaut créé pour ${diagnostiqueur.nom_entreprise}`);
+
+    res.status(201).json({
+      message: 'Technicien par défaut créé avec succès',
+      created: true,
+      technicien,
+      limites: {
+        plan: diagnostiqueur.typeAbonnement,
+        maxTechniciens: limite,
+        actuel: 1
+      }
+    });
+
+  } catch (error) {
+    console.error('Erreur initTechnicienDefaut:', error);
+    res.status(500).json({
+      message: 'Erreur lors de l\'initialisation du technicien par défaut.',
+      error: error.message
+    });
+  }
+};
