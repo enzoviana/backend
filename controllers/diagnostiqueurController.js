@@ -579,10 +579,26 @@ exports.addCertification = async (req, res) => {
     }
 
     // Upload sur Cloudinary
+    console.log('📤 Upload Cloudinary en cours...', {
+      filePath: req.file.path,
+      fileName: req.file.originalname,
+      folder: `diagnostiqueurs/${diagnostiqueur._id}/certifications`
+    });
+
     const result = await cloudinary.uploader.upload(req.file.path, {
       folder: `diagnostiqueurs/${diagnostiqueur._id}/certifications`,
       resource_type: 'auto'
     });
+
+    console.log('✅ Upload Cloudinary réussi:', {
+      url: result.secure_url,
+      public_id: result.public_id
+    });
+
+    // Vérifier que l'URL est bien présente
+    if (!result.secure_url) {
+      throw new Error('URL Cloudinary non générée après upload');
+    }
 
     // Créer la certification en attente d'approbation
     const certification = await Certification.create({
