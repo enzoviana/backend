@@ -1215,3 +1215,88 @@ exports.resetPasswordAdmin = async (req, res) => {
     res.status(500).json({ message: "Erreur serveur lors de la réinitialisation du mot de passe." });
   }
 };
+
+/**
+ * 🔧 MIGRATION - Initialiser les techniciens manquants
+ * Crée un technicien par défaut pour tous les diagnostiqueurs qui n'en ont pas
+ */
+exports.migrationInitTechniciens = async (req, res) => {
+  try {
+    const Diagnostiqueur = require('../models/Diagnostiqueur');
+    const TechnicienDiagnostiqueur = require('../models/TechnicienDiagnostiqueur');
+
+    // Récupérer tous les diagnostiqueurs
+    const diagnostiqueurs = await Diagnostiqueur.find({});
+
+    let nbCreated = 0;
+    let nbSkipped = 0;
+    let nbErrors = 0;
+    const details = [];
+
+    for (const diagnostiqueur of diagnostiqueurs) {
+      try {
+        // Vérifier si le diagnostiqueur a déjà des techniciens
+        const techniciensExistants = await TechnicienDiagnostiqueur.countDocuments({
+          diagnostiqueur: diagnostiqueur._id
+        });
+
+        if (techniciensExistants > 0) {
+          nbSkipped++;
+          details.push({
+            diagnostiqueur: diagnostiqueur.nom_entreprise,
+            status: 'skipped',
+            message: `${techniciensExistants} technicien(s) déjà existant(s)`
+          });
+          continue;
+        }
+
+        // Créer un technicien par défaut
+        const technicienData = {
+          diagnostiqueur: diagnostiqueur._id,
+          nom: diagnostiqueur.admin?.nom || 'Nom',
+          prenom: diagnostiqueur.admin?.prenom || 'Prénom',
+          email: diagnostiqueur.admin?.email || 'email@example.com',
+          telephone: diagnostiqueur.admin?.telephone || '0000000000',
+          actif: true
+        };
+
+        await TechnicienDiagnostiqueur.create(technicienData);
+
+        nbCreated++;
+        details.push({
+          diagnostiqueur: diagnostiqueur.nom_entreprise,
+          status: 'created',
+          message: 'Technicien créé avec succès'
+        });
+
+      } catch (error) {
+        nbErrors++;
+        details.push({
+          diagnostiqueur: diagnostiqueur.nom_entreprise,
+          status: 'error',
+          message: error.message
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      message: 'Migration des techniciens terminée',
+      summary: {
+        total: diagnostiqueurs.length,
+        created: nbCreated,
+        skipped: nbSkipped,
+        errors: nbErrors
+      },
+      details
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur migration techniciens:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la migration',
+      error: error.message
+    });
+  }
+};

@@ -223,4 +223,8 @@ router.get('/plans-abonnement/:planName', authMiddleware, adminPlanAbonnementCon
 // Vérifier les limites d'un plan
 router.post('/plans-abonnement/verifier-limites', authMiddleware, adminPlanAbonnementController.verifierLimitesPlan);
 
+// ========== MIGRATION TECHNICIENS ==========
+// Initialiser les techniciens manquants pour tous les diagnostiqueurs
+router.post('/migration/init-techniciens', authMiddleware, adminController.migrationInitTechniciens);
+
 module.exports = router;
