@@ -2,6 +2,7 @@ const Certification = require('../models/Certification');
 const Diagnostiqueur = require('../models/Diagnostiqueur');
 const TechnicienDiagnostiqueur = require('../models/TechnicienDiagnostiqueur');
 const DomaineActivite = require('../models/DomaineActivite');
+const sendEmail = require('../utils/sendEmails');
 
 /**
  * GET - Liste des certifications en attente d'approbation
@@ -85,6 +86,33 @@ const approuverCertification = async (req, res) => {
       .populate('domaine', 'nom code')
       .populate('approbation.approuvePar', 'nom prenom');
 
+    // Envoyer un email de notification au diagnostiqueur
+    try {
+      const dateExpiration = new Date(certificationPopulated.dateExpiration).toLocaleDateString('fr-FR');
+
+      await sendEmail({
+        to: certificationPopulated.diagnostiqueur.admin.email,
+        subject: '✅ Certification approuvée - Dimotec Contrôles',
+        template: 'CertificationApprouvee.html',
+        variables: {
+          nomDiagnostiqueur: certificationPopulated.diagnostiqueur.nom_entreprise,
+          nomDomaine: certificationPopulated.domaine.nom,
+          codeDomaine: certificationPopulated.domaine.code,
+          nomTechnicien: `${certificationPopulated.technicien.prenom} ${certificationPopulated.technicien.nom}`,
+          numeroCertification: certificationPopulated.numeroCertification,
+          organisme: certificationPopulated.organisme,
+          dateExpiration: dateExpiration,
+          commentaireAdmin: commentaireAdmin || '',
+          commentaireDisplay: commentaireAdmin ? '' : 'display: none;'
+        }
+      });
+
+      console.log('✅ Email de certification approuvée envoyé avec succès');
+    } catch (emailError) {
+      console.error('❌ Erreur envoi email certification approuvée:', emailError);
+      // Ne pas bloquer la réponse si l'email échoue
+    }
+
     res.json({
       message: 'Certification approuvée avec succès',
       certification: certificationPopulated
@@ -128,6 +156,31 @@ const rejeterCertification = async (req, res) => {
       .populate('technicien', 'prenom nom')
       .populate('domaine', 'nom code')
       .populate('approbation.approuvePar', 'nom prenom');
+
+    // Envoyer un email de notification au diagnostiqueur
+    try {
+      await sendEmail({
+        to: certificationPopulated.diagnostiqueur.admin.email,
+        subject: '❌ Certification non approuvée - Dimotec Contrôles',
+        template: 'CertificationRejetee.html',
+        variables: {
+          nomDiagnostiqueur: certificationPopulated.diagnostiqueur.nom_entreprise,
+          nomDomaine: certificationPopulated.domaine.nom,
+          codeDomaine: certificationPopulated.domaine.code,
+          nomTechnicien: `${certificationPopulated.technicien.prenom} ${certificationPopulated.technicien.nom}`,
+          numeroCertification: certificationPopulated.numeroCertification,
+          organisme: certificationPopulated.organisme,
+          raisonRejet: raisonRejet,
+          commentaireAdmin: commentaireAdmin || '',
+          commentaireDisplay: commentaireAdmin ? '' : 'display: none;'
+        }
+      });
+
+      console.log('✅ Email de certification rejetée envoyé avec succès');
+    } catch (emailError) {
+      console.error('❌ Erreur envoi email certification rejetée:', emailError);
+      // Ne pas bloquer la réponse si l'email échoue
+    }
 
     res.json({
       message: 'Certification rejetée',

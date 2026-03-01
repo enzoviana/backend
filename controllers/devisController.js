@@ -1552,7 +1552,8 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       dateCreation: new Date(),
       note: data.note || "",
       lignes,
-      secteur
+      secteur,
+      diagnostiqueurAssigne: data.diagnostiqueurAssigne || null // ✅ Diagnostiqueur assigné dès la création
     });
 
     await devis.save();

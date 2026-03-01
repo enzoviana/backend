@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Certification Approuvée</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #10b981;
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            font-size: 24px;
+        }
+        .content {
+            padding: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .info-box {
+            background-color: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .button {
+            display: inline-block;
+            background-color: #10b981;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                ✅ Certification Approuvée
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour {{nomDiagnostiqueur}},</p>
+
+                <p>Nous avons le plaisir de vous informer que votre certification a été <strong>approuvée</strong> par notre équipe administrative.</p>
+
+                <div class="info-box">
+                    <p style="margin: 0;"><strong>📋 Détails de la certification :</strong></p>
+                    <p style="margin: 5px 0 0 0;">
+                        <strong>Domaine :</strong> {{nomDomaine}} ({{codeDomaine}})<br>
+                        <strong>Technicien :</strong> {{nomTechnicien}}<br>
+                        <strong>Numéro de certification :</strong> {{numeroCertification}}<br>
+                        <strong>Organisme :</strong> {{organisme}}<br>
+                        <strong>Date d'expiration :</strong> {{dateExpiration}}
+                    </p>
+                </div>
+
+                <!-- Le commentaire admin sera inséré ici s'il existe -->
+                <p id="commentaireSection" style="{{commentaireDisplay}}"><strong>Commentaire de l'administrateur :</strong><br>
+                {{commentaireAdmin}}</p>
+
+                <p>Vous pouvez maintenant utiliser cette certification pour répondre aux appels d'offres et missions correspondantes.</p>
+
+                <p>
+                    <a href="https://diagnostiqueur.votre-devis-diagnostics.fr/certifications" class="button" style="color: #ffffff; background-color: #10b981; text-decoration: none;">
+                        Voir mes certifications
+                    </a>
+                </p>
+
+                <p>Nous vous rappelons de renouveler cette certification avant sa date d'expiration pour maintenir votre éligibilité.</p>
+
+                <p>Cordialement,<br>
+                L'équipe Dimotec Contrôles</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Dimotec Contrôles. Tous droits réservés.<br>
+                dimotec34@gmail.com | 04 67 60 50 18
+            </td>
+        </tr>
+    </table>
+</body>
+</html>

@@ -2,6 +2,7 @@ const cron = require('node-cron');
 const alerteService = require('../services/alerteService');
 const Certification = require('../models/Certification');
 const Diagnostiqueur = require('../models/Diagnostiqueur');
+const sendEmail = require('../utils/sendEmails');
 
 /**
  * Tâche quotidienne : Vérification des documents et envoi des alertes
@@ -105,6 +106,93 @@ const updateDocumentStatusesJob = cron.schedule('0 3 * * *', async () => {
 });
 
 /**
+ * Tâche quotidienne : Envoi des rappels pour certifications à renouveler
+ * Exécutée tous les jours à 9h00
+ */
+const rappelCertificationsJob = cron.schedule('0 9 * * *', async () => {
+  try {
+    console.log('📧 [CRON] Démarrage envoi rappels certifications à renouveler...');
+
+    // Trouver les certifications approuvées qui expirent dans 30 jours ou moins
+    const dateLimite = new Date();
+    dateLimite.setDate(dateLimite.getDate() + 30);
+
+    const certifications = await Certification.find({
+      'approbation.statutApprobation': 'approuve',
+      dateExpiration: { $lte: dateLimite, $gt: new Date() },
+      statut: { $in: ['valide', 'a_renouveler'] }
+    })
+      .populate('diagnostiqueur', 'nom_entreprise admin.email')
+      .populate('technicien', 'prenom nom')
+      .populate('domaine', 'nom code');
+
+    // Grouper les certifications par diagnostiqueur
+    const certificationsByDiag = {};
+    certifications.forEach(cert => {
+      const diagId = cert.diagnostiqueur._id.toString();
+      if (!certificationsByDiag[diagId]) {
+        certificationsByDiag[diagId] = {
+          diagnostiqueur: cert.diagnostiqueur,
+          certifications: []
+        };
+      }
+      certificationsByDiag[diagId].certifications.push(cert);
+    });
+
+    let emailsSent = 0;
+
+    // Envoyer un email groupé par diagnostiqueur
+    for (const diagId in certificationsByDiag) {
+      const data = certificationsByDiag[diagId];
+      const diagnostiqueur = data.diagnostiqueur;
+      const certs = data.certifications;
+
+      try {
+        // Construire la liste des certifications pour l'email
+        let certificationsList = '';
+        certs.forEach(cert => {
+          const dateExpiration = new Date(cert.dateExpiration).toLocaleDateString('fr-FR');
+          const joursRestants = Math.ceil((cert.dateExpiration - new Date()) / (1000 * 60 * 60 * 24));
+
+          certificationsList += `
+            <p style="margin: 10px 0 0 0;">
+              <strong>${cert.domaine.nom} (${cert.domaine.code})</strong><br>
+              Technicien : ${cert.technicien.prenom} ${cert.technicien.nom}<br>
+              Numéro : ${cert.numeroCertification}<br>
+              <span style="color: #ef4444; font-weight: bold;">Expire le : ${dateExpiration}</span> (${joursRestants} jours restants)
+            </p>
+          `;
+        });
+
+        await sendEmail({
+          to: diagnostiqueur.admin.email,
+          subject: '⚠️ Rappel : Certifications à renouveler - Dimotec Contrôles',
+          template: 'RappelCertificationARenouveler.html',
+          variables: {
+            nomDiagnostiqueur: diagnostiqueur.nom_entreprise,
+            certificationsList: certificationsList
+          }
+        });
+
+        emailsSent++;
+        console.log(`✅ Email de rappel envoyé à ${diagnostiqueur.nom_entreprise} (${certs.length} certification(s))`);
+
+      } catch (emailError) {
+        console.error(`❌ Erreur envoi email rappel à ${diagnostiqueur.nom_entreprise}:`, emailError);
+      }
+    }
+
+    console.log(`✅ [CRON] Rappels certifications terminé: ${emailsSent} emails envoyés`);
+
+  } catch (error) {
+    console.error('❌ [CRON] Erreur rappels certifications:', error);
+  }
+}, {
+  scheduled: false,
+  timezone: "Europe/Paris"
+});
+
+/**
  * Initialise et démarre tous les jobs planifiés
  */
 function init() {
@@ -119,6 +207,9 @@ function init() {
   updateDocumentStatusesJob.start();
   console.log('✅ Job MAJ statuts documents programmé (tous les jours à 3h00)');
 
+  rappelCertificationsJob.start();
+  console.log('✅ Job rappels certifications programmé (tous les jours à 9h00)');
+
   console.log('✅ Tous les jobs planifiés sont actifs');
 }
 
@@ -131,6 +222,7 @@ function stop() {
   verificationDocumentsJob.stop();
   updateCertificationStatusesJob.stop();
   updateDocumentStatusesJob.stop();
+  rappelCertificationsJob.stop();
 
   console.log('✅ Tous les jobs planifiés sont arrêtés');
 }
@@ -140,5 +232,6 @@ module.exports = {
   stop,
   verificationDocumentsJob,
   updateCertificationStatusesJob,
-  updateDocumentStatusesJob
+  updateDocumentStatusesJob,
+  rappelCertificationsJob
 };

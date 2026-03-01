@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rappel - Certification à Renouveler</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border: 1px solid #dddddd;
+        }
+        .header {
+            background-color: #f59e0b;
+            color: #ffffff;
+            text-align: center;
+            padding: 20px;
+            font-size: 24px;
+        }
+        .content {
+            padding: 20px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .warning-box {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .info-box {
+            background-color: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .button {
+            display: inline-block;
+            background-color: #f59e0b;
+            color: #ffffff;
+            text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-weight: bold;
+        }
+        .footer {
+            text-align: center;
+            padding: 10px;
+            font-size: 12px;
+            color: #777777;
+        }
+    </style>
+</head>
+<body>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                ⚠️ Certification à Renouveler
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour {{nomDiagnostiqueur}},</p>
+
+                <p>Nous vous informons qu'une ou plusieurs de vos certifications arrivent bientôt à expiration et nécessitent un renouvellement.</p>
+
+                <div class="warning-box">
+                    <p style="margin: 0;"><strong>⏰ Certifications concernées :</strong></p>
+                    {{certificationsList}}
+                </div>
+
+                <p>Le renouvellement de vos certifications est <strong>essentiel</strong> pour :</p>
+                <ul>
+                    <li>Continuer à recevoir des missions correspondant à ces domaines</li>
+                    <li>Maintenir votre éligibilité sur la plateforme</li>
+                    <li>Garantir la conformité de vos interventions</li>
+                </ul>
+
+                <div class="info-box">
+                    <p style="margin: 0;"><strong>📝 Actions à effectuer :</strong></p>
+                    <ol style="margin: 10px 0 0 0; padding-left: 20px;">
+                        <li>Contactez votre organisme de certification pour planifier le renouvellement</li>
+                        <li>Une fois renouvelé, téléchargez le nouveau document de certification</li>
+                        <li>Mettez à jour votre certification sur notre plateforme</li>
+                    </ol>
+                </div>
+
+                <p>
+                    <a href="https://diagnostiqueur.votre-devis-diagnostics.fr/certifications" class="button" style="color: #ffffff; background-color: #f59e0b; text-decoration: none;">
+                        Mettre à jour mes certifications
+                    </a>
+                </p>
+
+                <p><strong>⚠️ Important :</strong> Après expiration, vous ne pourrez plus recevoir de missions pour les domaines concernés jusqu'au renouvellement et à la validation de votre nouvelle certification.</p>
+
+                <p>Pour toute question concernant le renouvellement de vos certifications, notre équipe reste à votre disposition.</p>
+
+                <p>Cordialement,<br>
+                L'équipe Dimotec Contrôles</p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Dimotec Contrôles. Tous droits réservés.<br>
+                dimotec34@gmail.com | 04 67 60 50 18
+            </td>
+        </tr>
+    </table>
+</body>
+</html>
