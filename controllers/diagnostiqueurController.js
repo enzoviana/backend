@@ -931,25 +931,45 @@ exports.updateMissionStatut = async (req, res) => {
  * DEVIS - Liste
  */
 exports.getDevis = async (req, res) => {
+  console.log('--- Debug getDevis ---');
   try {
     const diagnostiqueur = req.diagnostiqueur;
+    
+    // Log 1: Vérification de l'utilisateur extrait du middleware
+    console.log('ID Diagnostiqueur extrait:', diagnostiqueur?._id);
 
+    if (!diagnostiqueur?._id) {
+      console.warn('Attention: Aucun ID diagnostiqueur trouvé dans la requête');
+    }
+
+    console.log('Recherche des devis en cours...');
+    
     const devis = await Devis.find({
       diagnostiqueurAssigne: diagnostiqueur._id
     })
-    .populate('agenceId') // OK : existe dans ton modèle
-    .populate('pack')     // OK : existe dans ton modèle
-    .populate('diagnosticsSelectionnes') // OK : existe dans ton modèle
-    // .populate('clientId') <-- SUPPRIMÉ car c'est un objet interne 'client'
-    .sort({ dateCreation: -1 })
-    .limit(50);
+      .populate('agenceId')
+      .sort({ dateCreation: -1 })
+      .limit(50);
 
-    // Les infos client seront accessibles via devis.client.nom, etc.
+    // Log 2: Résultat de la requête
+    console.log(`Nombre de devis trouvés: ${devis.length}`);
+    
+    // Log 3 (Optionnel): Voir le premier devis pour vérifier le populate
+    if (devis.length > 0) {
+      console.log('Exemple du premier devis (agenceId):', devis[0].agenceId ? 'Peuplé ✅' : 'Non peuplé ❌');
+    }
+
     res.json({ devis });
 
   } catch (error) {
-    console.error('Erreur getMesDevis:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération des devis.' });
+    // Log 4: Erreur détaillée
+    console.error('❌ Erreur getDevis:', error);
+    res.status(500).json({ 
+      message: 'Erreur lors de la récupération des devis.',
+      error: error.message // Utile en dev, à retirer en prod
+    });
+  } finally {
+    console.log('--- Fin de traitement getDevis ---');
   }
 };
 
@@ -1377,41 +1397,20 @@ exports.addNiveauExpertise = async (req, res) => {
 exports.getMesDevis = async (req, res) => {
   try {
     const diagnostiqueur = req.diagnostiqueur;
-    const { statut } = req.query;
 
-    console.log('🔍 getMesDevis - ID diagnostiqueur:', diagnostiqueur._id);
-    console.log('🔍 getMesDevis - Type ID:', typeof diagnostiqueur._id);
+    const devis = await Devis.find({
+      diagnostiqueurAssigne: diagnostiqueur._id
+    })
+    .populate('agenceId') // OK : existe dans ton modèle
+    .populate('pack')     // OK : existe dans ton modèle
+    .populate('diagnosticsSelectionnes') // OK : existe dans ton modèle
+    // .populate('clientId') <-- SUPPRIMÉ car c'est un objet interne 'client'
+    .sort({ dateCreation: -1 })
+    .limit(50);
 
-    const query = { diagnostiqueurAssigne: diagnostiqueur._id };
-    if (statut) {
-      query.statut = statut;
-    }
-
-    console.log('🔍 Query utilisée:', JSON.stringify(query));
-
-    const devis = await Devis.find(query)
-      .populate('agenceId', 'nom email')
-      .populate('clientId')
-      .populate('diagnosticsSelectionnes')
-      .populate('pack')
-      .sort({ createdAt: -1 })
-      .limit(100);
-
-    console.log(`✅ Nombre de devis trouvés: ${devis.length}`);
-
-    // Debug: vérifier tous les devis avec un diagnostiqueurAssigne
-    const tousLesDevisAvecDiag = await Devis.find({ diagnostiqueurAssigne: { $exists: true, $ne: null } })
-      .select('numero diagnostiqueurAssigne')
-      .limit(10);
-
-    console.log('📋 Devis existants avec diagnostiqueurAssigne:',
-      tousLesDevisAvecDiag.map(d => ({
-        numero: d.numero,
-        diagnostiqueurAssigne: d.diagnostiqueurAssigne?.toString()
-      }))
-    );
-
+    // Les infos client seront accessibles via devis.client.nom, etc.
     res.json({ devis });
+
   } catch (error) {
     console.error('Erreur getMesDevis:', error);
     res.status(500).json({ message: 'Erreur lors de la récupération des devis.' });
