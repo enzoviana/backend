@@ -1556,7 +1556,17 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       diagnostiqueurAssigne: data.diagnostiqueurAssigne || null // ✅ Diagnostiqueur assigné dès la création
     });
 
+    console.log('💾 Avant sauvegarde - diagnostiqueurAssigne:', data.diagnostiqueurAssigne?.toString() || 'NULL');
+
     await devis.save();
+
+    console.log('✅ Devis créé:', {
+      numero: devis.numero,
+      _id: devis._id.toString(),
+      diagnostiqueurAssigne: devis.diagnostiqueurAssigne?.toString() || 'NON ASSIGNÉ',
+      agenceId: devis.agenceId?.toString() || 'AUCUNE',
+      client: `${devis.client.nom} ${devis.client.prenom}`
+    });
 
     // ✅ Ajouter le devis au client
     if (!client.devis.includes(devis._id)) {

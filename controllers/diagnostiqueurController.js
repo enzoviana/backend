@@ -1375,10 +1375,15 @@ exports.getMesDevis = async (req, res) => {
     const diagnostiqueur = req.diagnostiqueur;
     const { statut } = req.query;
 
+    console.log('🔍 getMesDevis - ID diagnostiqueur:', diagnostiqueur._id);
+    console.log('🔍 getMesDevis - Type ID:', typeof diagnostiqueur._id);
+
     const query = { diagnostiqueurAssigne: diagnostiqueur._id };
     if (statut) {
       query.statut = statut;
     }
+
+    console.log('🔍 Query utilisée:', JSON.stringify(query));
 
     const devis = await Devis.find(query)
       .populate('agenceId', 'nom email')
@@ -1387,6 +1392,20 @@ exports.getMesDevis = async (req, res) => {
       .populate('pack')
       .sort({ createdAt: -1 })
       .limit(100);
+
+    console.log(`✅ Nombre de devis trouvés: ${devis.length}`);
+
+    // Debug: vérifier tous les devis avec un diagnostiqueurAssigne
+    const tousLesDevisAvecDiag = await Devis.find({ diagnostiqueurAssigne: { $exists: true, $ne: null } })
+      .select('numero diagnostiqueurAssigne')
+      .limit(10);
+
+    console.log('📋 Devis existants avec diagnostiqueurAssigne:',
+      tousLesDevisAvecDiag.map(d => ({
+        numero: d.numero,
+        diagnostiqueurAssigne: d.diagnostiqueurAssigne?.toString()
+      }))
+    );
 
     res.json({ devis });
   } catch (error) {
