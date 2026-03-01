@@ -931,9 +931,19 @@ exports.updateMissionStatut = async (req, res) => {
  * DEVIS - Liste
  */
 exports.getDevis = async (req, res) => {
+  console.log('--- Debug getDevis ---');
   try {
     const diagnostiqueur = req.diagnostiqueur;
+    
+    // Log 1: Vérification de l'utilisateur extrait du middleware
+    console.log('ID Diagnostiqueur extrait:', diagnostiqueur?._id);
 
+    if (!diagnostiqueur?._id) {
+      console.warn('Attention: Aucun ID diagnostiqueur trouvé dans la requête');
+    }
+
+    console.log('Recherche des devis en cours...');
+    
     const devis = await Devis.find({
       diagnostiqueurAssigne: diagnostiqueur._id
     })
@@ -941,11 +951,25 @@ exports.getDevis = async (req, res) => {
       .sort({ dateCreation: -1 })
       .limit(50);
 
+    // Log 2: Résultat de la requête
+    console.log(`Nombre de devis trouvés: ${devis.length}`);
+    
+    // Log 3 (Optionnel): Voir le premier devis pour vérifier le populate
+    if (devis.length > 0) {
+      console.log('Exemple du premier devis (agenceId):', devis[0].agenceId ? 'Peuplé ✅' : 'Non peuplé ❌');
+    }
+
     res.json({ devis });
 
   } catch (error) {
-    console.error('Erreur getDevis:', error);
-    res.status(500).json({ message: 'Erreur lors de la récupération des devis.' });
+    // Log 4: Erreur détaillée
+    console.error('❌ Erreur getDevis:', error);
+    res.status(500).json({ 
+      message: 'Erreur lors de la récupération des devis.',
+      error: error.message // Utile en dev, à retirer en prod
+    });
+  } finally {
+    console.log('--- Fin de traitement getDevis ---');
   }
 };
 
