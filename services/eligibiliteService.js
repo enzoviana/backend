@@ -243,29 +243,71 @@ async function verifierEligibilitePack(diagnostiqueur, packId) {
  */
 async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
   try {
+    console.log("====================================================");
+    console.log("🔍 DÉBUT vérification éligibilité");
+    console.log("Diagnostiqueur ID:", diagnostiqueur?._id);
+    console.log("Diagnostic ID:", diagnosticId);
+    console.log("Date actuelle:", new Date());
+    console.log("====================================================");
+
     const diagnostic = await Diagnostic.findById(diagnosticId);
 
     if (!diagnostic) {
+      console.log("❌ Diagnostic non trouvé");
       throw new Error('Diagnostic non trouvé');
     }
 
-    // Chercher le mapping configuré pour ce diagnostic
+    console.log("✅ Diagnostic trouvé:", {
+      id: diagnostic._id,
+      nom: diagnostic.nom
+    });
+
+    // ============================
+    // RECHERCHE MAPPING
+    // ============================
+
     const mapping = await DiagnosticCertificationMapping.findOne({
       diagnostic: diagnosticId,
       actif: true
     }).populate('domainesCertification.domaine');
 
+    if (mapping) {
+      console.log("✅ Mapping trouvé:", mapping._id);
+      console.log("Domaines configurés:", mapping.domainesCertification);
+    } else {
+      console.log("⚠️ Aucun mapping actif trouvé pour ce diagnostic");
+    }
+
+    // ============================
+    // SI MAPPING CONFIGURÉ
+    // ============================
+
     if (mapping && mapping.domainesCertification.length > 0) {
-      // Utiliser le mapping configuré
+
       const certificationsManquantes = [];
 
       for (const domaineCertif of mapping.domainesCertification) {
-        if (!domaineCertif.obligatoire) continue;
 
-        // Chercher la certification avec mention spéciale si requise
+        console.log("----------------------------------------------------");
+        console.log("🔎 Vérification domaine:", {
+          domaineId: domaineCertif.domaine?._id,
+          code: domaineCertif.domaine?.code,
+          nom: domaineCertif.domaine?.nom,
+          obligatoire: domaineCertif.obligatoire,
+          mentionRequise: domaineCertif.mentionSpecialeRequise
+        });
+
+        if (!domaineCertif.obligatoire) {
+          console.log("⏭ Domaine non obligatoire → ignoré");
+          continue;
+        }
+
         let certTrouvee = false;
 
-        // 1. Chercher directement sur le diagnostiqueur
+        // ============================
+        // 1️⃣ RECHERCHE SUR DIAGNOSTIQUEUR
+        // ============================
+
         const queryDiagnostiqueur = {
           diagnostiqueur: diagnostiqueur._id,
           domaine: domaineCertif.domaine._id,
@@ -278,18 +320,32 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
           queryDiagnostiqueur.mentionSpeciale = domaineCertif.mentionSpecialeRequise;
         }
 
+        console.log("📤 Query diagnostiqueur:", queryDiagnostiqueur);
+
         const certDiag = await Certification.findOne(queryDiagnostiqueur);
 
+        console.log("📥 Résultat certification diagnostiqueur:", certDiag);
+
         if (certDiag) {
+          console.log("✅ Certification trouvée sur diagnostiqueur");
           certTrouvee = true;
         } else {
-          // 2. Chercher parmi les techniciens
+
+          console.log("❌ Aucune certification sur diagnostiqueur, recherche techniciens...");
+
+          // ============================
+          // 2️⃣ RECHERCHE SUR TECHNICIENS
+          // ============================
+
           const techniciens = await TechnicienDiagnostiqueur.find({
             diagnostiqueur: diagnostiqueur._id,
             actif: true
           });
 
+          console.log("👥 Techniciens trouvés:", techniciens.map(t => t._id));
+
           for (const technicien of techniciens) {
+
             const queryTechnicien = {
               technicien: technicien._id,
               domaine: domaineCertif.domaine._id,
@@ -302,9 +358,14 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
               queryTechnicien.mentionSpeciale = domaineCertif.mentionSpecialeRequise;
             }
 
+            console.log("📤 Query technicien:", queryTechnicien);
+
             const certTech = await Certification.findOne(queryTechnicien);
 
+            console.log("📥 Résultat certification technicien:", certTech);
+
             if (certTech) {
+              console.log("✅ Certification trouvée sur technicien:", technicien._id);
               certTrouvee = true;
               break;
             }
@@ -312,6 +373,8 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
         }
 
         if (!certTrouvee) {
+          console.log("🚨 Certification MANQUANTE pour domaine:", domaineCertif.domaine.nom);
+
           certificationsManquantes.push({
             domaineCode: domaineCertif.domaine.code,
             nomDomaine: domaineCertif.domaine.nom,
@@ -320,8 +383,9 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
         }
       }
 
-      // Si des certifications manquent
       if (certificationsManquantes.length > 0) {
+        console.log("❌ Certifications manquantes:", certificationsManquantes);
+
         return {
           eligible: false,
           raison: `Certifications manquantes pour ${diagnostic.nom}: ${certificationsManquantes.map(c => c.nomDomaine).join(', ')}`,
@@ -332,6 +396,8 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
         };
       }
 
+      console.log("🎉 Toutes les certifications obligatoires sont présentes");
+
       return {
         eligible: true,
         raison: null,
@@ -341,12 +407,18 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
       };
     }
 
-    // Fallback vers ancien système si pas de mapping
-    console.log(`⚠️ Aucun mapping trouvé pour le diagnostic ${diagnostic.nom}, utilisation du système par défaut`);
+    // ============================
+    // FALLBACK
+    // ============================
+
+    console.log(`⚠️ FALLBACK activé pour diagnostic: ${diagnostic.nom}`);
 
     const domaine = await mapperDiagnosticVersDomaine(diagnostic.nom);
 
+    console.log("📌 Domaine mappé:", domaine);
+
     if (!domaine) {
+      console.log("❌ Aucun domaine trouvé dans fallback");
       return {
         eligible: false,
         raison: `Domaine non trouvé pour le diagnostic: ${diagnostic.nom}`,
@@ -356,8 +428,8 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
       };
     }
 
-    // Exception: SURFACE n'a pas besoin de certification
     if (domaine.code === 'SURFACE') {
+      console.log("✅ Domaine SURFACE → pas besoin de certification");
       return {
         eligible: true,
         raison: null,
@@ -367,10 +439,20 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
       };
     }
 
-    // Vérifier si le diagnostiqueur a une certification valide pour ce domaine
-    const certificationValide = await aCertificationValide(diagnostiqueur._id, domaine._id);
+    console.log("🔎 Vérification certification via aCertificationValide...");
+    console.log("Diagnostiqueur ID:", diagnostiqueur._id);
+    console.log("Domaine ID:", domaine._id);
+
+    const certificationValide = await aCertificationValide(
+      diagnostiqueur._id,
+      domaine._id
+    );
+
+    console.log("📥 Résultat aCertificationValide:", certificationValide);
 
     if (!certificationValide) {
+      console.log("🚨 Certification invalide ou expirée");
+
       return {
         eligible: false,
         raison: `Certification manquante ou expirée pour: ${domaine.nom}`,
@@ -379,6 +461,8 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
         certificationTrouvee: false
       };
     }
+
+    console.log("🎉 Certification valide trouvée (fallback)");
 
     return {
       eligible: true,
@@ -389,7 +473,7 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
     };
 
   } catch (error) {
-    console.error('Erreur verifierEligibiliteDiagnostic:', error);
+    console.error('💥 Erreur verifierEligibiliteDiagnostic:', error);
     throw error;
   }
 }
