@@ -57,6 +57,7 @@ router.delete('/certifications/:certificationId', diagnostiqueurAuth, diagnostiq
 // Missions
 router.get('/missions', diagnostiqueurAuth, diagnostiqueurController.getMissions);
 router.get('/missions/:missionId', diagnostiqueurAuth, diagnostiqueurController.getMissionDetail);
+router.get('/missions/:missionId/download', diagnostiqueurAuth, diagnostiqueurController.downloadOrdreMission);
 router.post('/missions/:missionId/accepter', diagnostiqueurAuth, checkEligibilite, diagnostiqueurController.accepterMission);
 router.post('/missions/:missionId/refuser', diagnostiqueurAuth, diagnostiqueurController.refuserMission);
 router.put('/missions/:missionId/statut', diagnostiqueurAuth, diagnostiqueurController.updateMissionStatut);

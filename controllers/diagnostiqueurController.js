@@ -928,6 +928,60 @@ exports.updateMissionStatut = async (req, res) => {
 };
 
 /**
+ * MISSIONS - Télécharger l'ordre de mission en PDF
+ */
+exports.downloadOrdreMission = async (req, res) => {
+  try {
+    const { missionId } = req.params;
+    const diagnostiqueur = req.diagnostiqueur;
+
+    const mission = await OrdreMission.findOne({
+      _id: missionId,
+      diagnostiqueur: diagnostiqueur._id
+    })
+      .populate('devisId')
+      .populate('clientId')
+      .populate('agenceId');
+
+    if (!mission) {
+      return res.status(404).json({ message: 'Mission non trouvée.' });
+    }
+
+    // Générer un PDF simple (pour l'instant, retourner les données JSON)
+    // TODO: Implémenter la génération PDF avec puppeteer ou pdfkit
+    const pdfContent = `
+      ORDRE DE MISSION
+
+      Numéro: ${mission.numero}
+      Date: ${new Date(mission.dateCreation).toLocaleDateString('fr-FR')}
+      Statut: ${mission.statut}
+
+      CLIENT:
+      ${mission.clientId?.nom} ${mission.clientId?.prenom}
+      ${mission.clientId?.email}
+
+      DEVIS:
+      ${mission.devisId?.numero}
+      Montant: ${mission.devisId?.totalFinal || mission.devisId?.montantTTC} €
+
+      DIAGNOSTIQUEUR:
+      ${diagnostiqueur.nom_entreprise}
+      ${diagnostiqueur.email_entreprise}
+    `;
+
+    // Pour l'instant, retourner du texte brut
+    // En production, utiliser un générateur de PDF
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="OrdreMission_${mission.numero}.pdf"`);
+    res.send(Buffer.from(pdfContent, 'utf-8'));
+
+  } catch (error) {
+    console.error('Erreur downloadOrdreMission:', error);
+    res.status(500).json({ message: 'Erreur lors du téléchargement de l\'ordre de mission.' });
+  }
+};
+
+/**
  * DEVIS - Liste
  */
 exports.getDevis = async (req, res) => {

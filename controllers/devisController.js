@@ -1593,9 +1593,9 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
     // ✅ Si le payeur est l'agence
     // ✅ Si le payeur est l'agence
     if (data.payer === "agence") {
-      // Récupérer le diagnostiqueur par défaut de l'agence
+      // Récupérer le diagnostiqueur assigné au devis, sinon le diagnostiqueur par défaut de l'agence
       const agenceData = await Agence.findById(devis.agenceId);
-      const diagnostiqueurId = agenceData?.diagnostiqueurParDefaut || null;
+      const diagnostiqueurId = devis.diagnostiqueurAssigne || agenceData?.diagnostiqueurParDefaut || null;
 
       const ordre = new OrdreMission({
         devisId: devis._id,
@@ -1931,9 +1931,9 @@ exports.uploadPdfDevis = async (req, res) => {
       clientId = client?._id;
     }
 
-    // Récupérer le diagnostiqueur par défaut de l'agence
+    // Récupérer le diagnostiqueur assigné au devis, sinon le diagnostiqueur par défaut de l'agence
     const agenceData = await Agence.findById(devis.agenceId);
-    const diagnostiqueurId = agenceData?.diagnostiqueurParDefaut || null;
+    const diagnostiqueurId = devis.diagnostiqueurAssigne || agenceData?.diagnostiqueurParDefaut || null;
 
     const ordre = new OrdreMission({
       devisId: devis._id,
@@ -2654,9 +2654,9 @@ exports.updateDevisInfos = async (req, res) => {
             await devis.save();
           }
 
-          // Récupérer le diagnostiqueur par défaut de l'agence
+          // Récupérer le diagnostiqueur assigné au devis, sinon le diagnostiqueur par défaut de l'agence
           const agenceData = await Agence.findById(devis.agenceId);
-          const diagnostiqueurId = agenceData?.diagnostiqueurParDefaut || null;
+          const diagnostiqueurId = devis.diagnostiqueurAssigne || agenceData?.diagnostiqueurParDefaut || null;
 
           const nouvelOrdreMission = new OrdreMission({
             devisId: devis._id,
