@@ -187,7 +187,7 @@ async function verifierAssurances(diagnostiqueur) {
  */
 async function verifierEligibilitePack(diagnostiqueur, packId) {
   try {
-    const pack = await Pack.findById(packId).populate('diagnosticsInclus');
+    const pack = await Pack.findById(packId).populate('diagnostics');
 
     if (!pack) {
       throw new Error('Pack non trouvé');
@@ -201,7 +201,12 @@ async function verifierEligibilitePack(diagnostiqueur, packId) {
     };
 
     // Vérifier chaque diagnostic du pack
-    for (const diagnostic of pack.diagnosticsInclus) {
+    if (!pack.diagnostics || pack.diagnostics.length === 0) {
+      console.warn(`⚠️ Le pack ${pack.nom} n'a aucun diagnostic associé`);
+      return resultat;
+    }
+
+    for (const diagnostic of pack.diagnostics) {
       const diagEligible = await verifierEligibiliteDiagnostic(diagnostiqueur, diagnostic._id);
 
       resultat.diagnosticsVerifies.push({
