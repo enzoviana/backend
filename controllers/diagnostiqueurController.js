@@ -1512,6 +1512,79 @@ exports.refuserDevis = async (req, res) => {
 };
 
 /**
+ * ASSURANCES - Récupérer les assurances du diagnostiqueur
+ */
+exports.getAssurances = async (req, res) => {
+  try {
+    const diagnostiqueur = req.diagnostiqueur;
+
+    const assurances = diagnostiqueur.documents.filter(
+      doc => doc.type === 'assurance_rc' || doc.type === 'assurance_decennale'
+    );
+
+    res.json({ assurances });
+
+  } catch (error) {
+    console.error('Erreur getAssurances:', error);
+    res.status(500).json({ message: 'Erreur lors de la récupération des assurances.' });
+  }
+};
+
+/**
+ * ASSURANCES - Upload une nouvelle assurance
+ */
+exports.uploadAssurance = async (req, res) => {
+  try {
+    const { type, dateExpiration } = req.body;
+    const diagnostiqueur = req.diagnostiqueur;
+
+    if (!req.file) {
+      return res.status(400).json({ message: 'Veuillez fournir un fichier PDF.' });
+    }
+
+    if (!type || (type !== 'assurance_rc' && type !== 'assurance_decennale')) {
+      return res.status(400).json({ message: 'Type d\'assurance invalide.' });
+    }
+
+    if (!dateExpiration) {
+      return res.status(400).json({ message: 'Veuillez fournir une date d\'expiration.' });
+    }
+
+    // Vérifier si une assurance du même type existe déjà
+    const existingIndex = diagnostiqueur.documents.findIndex(doc => doc.type === type);
+
+    const newDocument = {
+      type,
+      nom: req.file.originalname,
+      url: req.file.path,
+      public_id: req.file.filename,
+      dateExpiration: new Date(dateExpiration),
+      dateDepot: new Date(),
+      statut: 'valide'
+    };
+
+    if (existingIndex !== -1) {
+      // Remplacer l'ancienne assurance
+      diagnostiqueur.documents[existingIndex] = newDocument;
+    } else {
+      // Ajouter la nouvelle assurance
+      diagnostiqueur.documents.push(newDocument);
+    }
+
+    await diagnostiqueur.save();
+
+    res.json({
+      message: 'Assurance enregistrée avec succès.',
+      document: newDocument
+    });
+
+  } catch (error) {
+    console.error('Erreur uploadAssurance:', error);
+    res.status(500).json({ message: 'Erreur lors de l\'upload de l\'assurance.' });
+  }
+};
+
+/**
  * TECHNICIENS - Initialiser technicien par défaut
  * Crée automatiquement un technicien par défaut si le diagnostiqueur n'en a pas
  */
