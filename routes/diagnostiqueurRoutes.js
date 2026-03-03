@@ -64,6 +64,7 @@ router.put('/missions/:missionId/statut', diagnostiqueurAuth, diagnostiqueurCont
 // Devis
 router.get('/devis', diagnostiqueurAuth, diagnostiqueurController.getDevis);
 router.get('/devis/:devisId', diagnostiqueurAuth, diagnostiqueurController.getDevisDetail);
+router.post('/devis/:devisId/refuser', diagnostiqueurAuth, diagnostiqueurController.refuserDevis);
 
 // Alertes
 router.get('/alertes', diagnostiqueurAuth, diagnostiqueurController.getAlertes);

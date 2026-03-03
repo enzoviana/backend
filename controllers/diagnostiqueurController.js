@@ -1418,6 +1418,46 @@ exports.getMesDevis = async (req, res) => {
 };
 
 /**
+ * DEVIS - Refuser un devis avec une raison
+ */
+exports.refuserDevis = async (req, res) => {
+  try {
+    const { devisId } = req.params;
+    const { raison } = req.body;
+    const diagnostiqueur = req.diagnostiqueur;
+
+    if (!raison || raison.trim().length === 0) {
+      return res.status(400).json({ message: 'Veuillez fournir une raison de refus.' });
+    }
+
+    const devis = await Devis.findOne({
+      _id: devisId,
+      diagnostiqueurAssigne: diagnostiqueur._id
+    });
+
+    if (!devis) {
+      return res.status(404).json({ message: 'Devis non trouvé ou non assigné à vous.' });
+    }
+
+    // Mettre à jour le devis avec le statut refusé et la raison
+    devis.statut = 'Refusé';
+    devis.raisonRefus = raison;
+    devis.diagnostiqueurAssigne = null; // Libérer le diagnostiqueur assigné
+
+    await devis.save();
+
+    res.json({
+      message: 'Devis refusé avec succès.',
+      devis
+    });
+
+  } catch (error) {
+    console.error('Erreur refuserDevis:', error);
+    res.status(500).json({ message: 'Erreur lors du refus du devis.' });
+  }
+};
+
+/**
  * TECHNICIENS - Initialiser technicien par défaut
  * Crée automatiquement un technicien par défaut si le diagnostiqueur n'en a pas
  */
