@@ -1205,18 +1205,44 @@ exports.getAbonnement = async (req, res) => {
  */
 exports.upgradeAbonnement = async (req, res) => {
   try {
+    console.log("=== UPGRADE ABONNEMENT START ===");
+
     const diagnostiqueur = req.diagnostiqueur;
     const { returnUrl, cancelUrl } = req.body;
 
+    console.log("Diagnostiqueur reçu :", diagnostiqueur);
+    console.log("ID diagnostiqueur :", diagnostiqueur?._id);
+    console.log("Type abonnement actuel :", diagnostiqueur?.typeAbonnement);
+    console.log("Body reçu :", req.body);
+    console.log("Return URL :", returnUrl);
+    console.log("Cancel URL :", cancelUrl);
+    console.log("FRONTEND_DIAGNOSTIQUEUR_URL :", process.env.FRONTEND_DIAGNOSTIQUEUR_URL);
+
     if (diagnostiqueur.typeAbonnement === 'PRO') {
+      console.log("⛔ Déjà PRO, on bloque l'upgrade.");
       return res.status(400).json({ message: 'Vous êtes déjà abonné PRO.' });
     }
 
+    const finalReturnUrl =
+      returnUrl || `${process.env.FRONTEND_DIAGNOSTIQUEUR_URL}/abonnement`;
+    const finalCancelUrl =
+      cancelUrl || `${process.env.FRONTEND_DIAGNOSTIQUEUR_URL}/abonnement`;
+
+    console.log("Final Return URL :", finalReturnUrl);
+    console.log("Final Cancel URL :", finalCancelUrl);
+
+    console.log("➡️ Création session Stripe...");
     const session = await stripeService.creerCheckoutSession(
       diagnostiqueur._id,
-      returnUrl || `${process.env.FRONTEND_DIAGNOSTIQUEUR_URL}/abonnement`,
-      cancelUrl || `${process.env.FRONTEND_DIAGNOSTIQUEUR_URL}/abonnement`
+      finalReturnUrl,
+      finalCancelUrl
     );
+
+    console.log("✅ Session Stripe créée :", session);
+    console.log("Session ID :", session?.id);
+    console.log("Session URL :", session?.url);
+
+    console.log("=== UPGRADE ABONNEMENT SUCCESS ===");
 
     res.json({
       sessionId: session.id,
@@ -1224,7 +1250,11 @@ exports.upgradeAbonnement = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur upgradeAbonnement:', error);
+    console.error("❌ Erreur upgradeAbonnement:");
+    console.error("Message :", error.message);
+    console.error("Stack :", error.stack);
+    console.error("Erreur complète :", error);
+
     res.status(500).json({ message: 'Erreur lors de la création de la session Stripe.' });
   }
 };
