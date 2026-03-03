@@ -262,7 +262,11 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
       for (const domaineCertif of mapping.domainesCertification) {
         if (!domaineCertif.obligatoire) continue;
 
-        const query = {
+        // Chercher la certification avec mention spéciale si requise
+        let certTrouvee = false;
+
+        // 1. Chercher directement sur le diagnostiqueur
+        const queryDiagnostiqueur = {
           diagnostiqueur: diagnostiqueur._id,
           domaine: domaineCertif.domaine._id,
           'approbation.statutApprobation': 'approuve',
@@ -271,12 +275,43 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
         };
 
         if (domaineCertif.mentionSpecialeRequise) {
-          query.mentionSpeciale = domaineCertif.mentionSpecialeRequise;
+          queryDiagnostiqueur.mentionSpeciale = domaineCertif.mentionSpecialeRequise;
         }
 
-        const cert = await Certification.findOne(query);
+        const certDiag = await Certification.findOne(queryDiagnostiqueur);
 
-        if (!cert) {
+        if (certDiag) {
+          certTrouvee = true;
+        } else {
+          // 2. Chercher parmi les techniciens
+          const techniciens = await TechnicienDiagnostiqueur.find({
+            diagnostiqueur: diagnostiqueur._id,
+            actif: true
+          });
+
+          for (const technicien of techniciens) {
+            const queryTechnicien = {
+              technicien: technicien._id,
+              domaine: domaineCertif.domaine._id,
+              'approbation.statutApprobation': 'approuve',
+              statut: 'valide',
+              dateExpiration: { $gt: new Date() }
+            };
+
+            if (domaineCertif.mentionSpecialeRequise) {
+              queryTechnicien.mentionSpeciale = domaineCertif.mentionSpecialeRequise;
+            }
+
+            const certTech = await Certification.findOne(queryTechnicien);
+
+            if (certTech) {
+              certTrouvee = true;
+              break;
+            }
+          }
+        }
+
+        if (!certTrouvee) {
           certificationsManquantes.push({
             domaineCode: domaineCertif.domaine.code,
             nomDomaine: domaineCertif.domaine.nom,
@@ -402,8 +437,8 @@ async function mapperDiagnosticVersDomaine(nomDiagnostic) {
  */
 async function aCertificationValide(diagnostiqueurId, domaineId) {
   try {
-    // Rechercher une certification valide ET approuvée pour ce diagnostiqueur et ce domaine
-    const certification = await Certification.findOne({
+    // 1. Chercher une certification directement sur le diagnostiqueur
+    let certification = await Certification.findOne({
       diagnostiqueur: diagnostiqueurId,
       domaine: domaineId,
       'approbation.statutApprobation': 'approuve',
@@ -411,7 +446,39 @@ async function aCertificationValide(diagnostiqueurId, domaineId) {
       dateExpiration: { $gt: new Date() }
     });
 
-    return !!certification;
+    if (certification) {
+      return true;
+    }
+
+    // 2. Si pas trouvé, chercher parmi les techniciens du diagnostiqueur
+    const techniciens = await TechnicienDiagnostiqueur.find({
+      diagnostiqueur: diagnostiqueurId,
+      actif: true
+    });
+
+    if (techniciens.length === 0) {
+      console.log(`ℹ️ Aucun technicien actif trouvé pour le diagnostiqueur ${diagnostiqueurId}`);
+      return false;
+    }
+
+    // Chercher une certification valide parmi les techniciens
+    for (const technicien of techniciens) {
+      certification = await Certification.findOne({
+        technicien: technicien._id,
+        domaine: domaineId,
+        'approbation.statutApprobation': 'approuve',
+        statut: 'valide',
+        dateExpiration: { $gt: new Date() }
+      });
+
+      if (certification) {
+        console.log(`✅ Certification valide trouvée pour le technicien ${technicien.nom} ${technicien.prenom}`);
+        return true;
+      }
+    }
+
+    console.log(`❌ Aucune certification valide trouvée pour le domaine ${domaineId}`);
+    return false;
 
   } catch (error) {
     console.error('Erreur aCertificationValide:', error);
