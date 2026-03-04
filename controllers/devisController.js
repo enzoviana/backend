@@ -1727,7 +1727,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
         message: "✅ Devis créé, accepté automatiquement et ordre envoyé (payeur agence).",
         devis,
       });
-    }
+
 
 
 
