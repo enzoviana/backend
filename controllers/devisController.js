@@ -1677,7 +1677,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
 
           await agenceData.save();
         }
-      }
+
 
       // ✅ Emails
       const agence = await Agence.findById(devis.agenceId);
@@ -1721,12 +1721,11 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
         }
       });
 
-
-
       return res.status(201).json({
         message: "✅ Devis créé, accepté automatiquement et ordre envoyé (payeur agence).",
         devis,
       });
+    }
 
 
 
