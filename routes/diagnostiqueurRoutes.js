@@ -61,6 +61,7 @@ router.get('/missions/:missionId/download', diagnostiqueurAuth, diagnostiqueurCo
 router.post('/missions/:missionId/accepter', diagnostiqueurAuth, checkEligibilite, diagnostiqueurController.accepterMission);
 router.post('/missions/:missionId/refuser', diagnostiqueurAuth, diagnostiqueurController.refuserMission);
 router.put('/missions/:missionId/statut', diagnostiqueurAuth, diagnostiqueurController.updateMissionStatut);
+router.put('/missions/:missionId/rdv', diagnostiqueurAuth, diagnostiqueurController.updateMissionRdv);
 
 // Devis
 router.get('/devis', diagnostiqueurAuth, diagnostiqueurController.getDevis);

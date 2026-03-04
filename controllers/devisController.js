@@ -877,8 +877,10 @@ exports.envoyerRappelsAutomatiques = async () => {
     const deuxJours = new Date(Date.now() - 48 * 60 * 60 * 1000);
 
     const devisArelancer = await Devis.find({
-      // MODIFICATION ICI : On accepte "Envoyé" OU "Ouvert"
+      // Seulement les devis "Envoyé" ou "ouvert"
       statut: { $in: ["Envoyé", "ouvert"] },
+      // ⚠️ IMPORTANT : Exclure les devis déjà signés (en attente d'upload PDF)
+      cgvAccepted: { $ne: true },
       $or: [
         { derniereRelance: { $lt: deuxJours } },
         { derniereRelance: null }
@@ -886,9 +888,30 @@ exports.envoyerRappelsAutomatiques = async () => {
       'client.email': { $exists: true, $ne: "" }
     });
 
-    console.log(`🔍 ${devisArelancer.length} devis à relancer (Statuts: Envoyé/Ouvert)`);
+    console.log(`🔍 ${devisArelancer.length} devis candidats trouvés (Statuts: Envoyé/Ouvert, non signés)`);
+
+    let rappelsEnvoyes = 0;
+    let devisIgnores = 0;
+    let devisAvecOrdre = 0;
 
     for (const devis of devisArelancer) {
+      // ⚠️ VÉRIFICATION CRITIQUE 1 : Ne pas relancer si un ordre de mission existe déjà
+      const ordreMissionExiste = await OrdreMission.findOne({ devisId: devis._id });
+
+      if (ordreMissionExiste) {
+        console.log(`⏭️  Devis ${devis.numero} IGNORÉ - Ordre de mission ${ordreMissionExiste.numero} déjà créé (RDV: ${ordreMissionExiste.rdvDate ? new Date(ordreMissionExiste.rdvDate).toLocaleDateString('fr-FR') : 'Non fixé'})`);
+        devisAvecOrdre++;
+        continue;
+      }
+
+      // ⚠️ VÉRIFICATION CRITIQUE 2 : Ne pas relancer si le statut est "Accepté"
+      if (devis.statut === "Accepté") {
+        console.log(`⏭️  Devis ${devis.numero} IGNORÉ - Statut déjà "Accepté"`);
+        devisIgnores++;
+        continue;
+      }
+
+      // Si toutes les vérifications passent, on peut envoyer le rappel
       const lienDevis = `https://admin.votre-devis-diagnostics.fr/client-Devis/${devis.accesClientKey}`;
 
       await sendEmail({
@@ -906,9 +929,10 @@ exports.envoyerRappelsAutomatiques = async () => {
       devis.derniereRelance = new Date();
       await devis.save();
       console.log(`✅ Rappel envoyé pour le devis ${devis.numero} (${devis.statut})`);
+      rappelsEnvoyes++;
     }
 
-    console.log("✅ Tous les rappels ont été envoyés avec succès");
+    console.log(`✅ Job de rappels terminé - ${rappelsEnvoyes} rappels envoyés, ${devisAvecOrdre} devis avec ordre de mission, ${devisIgnores} devis déjà acceptés`);
   } catch (error) {
     console.error("❌ Erreur lors de l'envoi automatique des rappels :", error);
   }
@@ -1623,7 +1647,11 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
       if (diagnostiqueurId) {
         devis.diagnostiqueurAssigne = diagnostiqueurId;
-        await devis.save();
+      }
+
+      // ⚠️ IMPORTANT : Mettre à jour le statut du devis pour éviter les relances
+      devis.statut = "Accepté";
+      await devis.save();
 
         // Incrémenter le compteur d'utilisation dans l'agence
         const Diagnostiqueur = require('../models/Diagnostiqueur');
@@ -1952,7 +1980,6 @@ exports.uploadPdfDevis = async (req, res) => {
     // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
     if (diagnostiqueurId) {
       devis.diagnostiqueurAssigne = diagnostiqueurId;
-      await devis.save();
 
       // Incrémenter le compteur d'utilisation dans l'agence
       const Diagnostiqueur = require('../models/Diagnostiqueur');
@@ -1979,6 +2006,10 @@ exports.uploadPdfDevis = async (req, res) => {
         await agenceData.save();
       }
     }
+
+    // ⚠️ IMPORTANT : Mettre à jour le statut du devis pour éviter les relances
+    devis.statut = "Accepté";
+    await devis.save();
 
     // 5️⃣ GESTION DE LA CAGNOTTE
     const agence = await Agence.findById(devis.agenceId);
@@ -2679,7 +2710,6 @@ exports.updateDevisInfos = async (req, res) => {
           // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
           if (diagnostiqueurId) {
             devis.diagnostiqueurAssigne = diagnostiqueurId;
-            await devis.save();
 
             // Incrémenter le compteur d'utilisation dans l'agence
             const Diagnostiqueur = require('../models/Diagnostiqueur');
@@ -2706,6 +2736,10 @@ exports.updateDevisInfos = async (req, res) => {
               await agenceData.save();
             }
           }
+
+          // ⚠️ IMPORTANT : Mettre à jour le statut du devis pour éviter les relances
+          devis.statut = "Accepté";
+          await devis.save();
         }
       } catch (errorOM) {
         console.error("❌ Erreur lors de la création de l'ordre de mission :", errorOM);

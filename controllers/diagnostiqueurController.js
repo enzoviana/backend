@@ -804,7 +804,13 @@ exports.getMissionDetail = async (req, res) => {
       _id: missionId,
       diagnostiqueur: diagnostiqueur._id
     })
-      .populate('devisId')
+      .populate({
+        path: 'devisId',
+        populate: [
+          { path: 'pack', populate: 'diagnostics' },
+          { path: 'diagnosticsSelectionnes' }
+        ]
+      })
       .populate('clientId')
       .populate('agenceId');
 
@@ -924,6 +930,38 @@ exports.updateMissionStatut = async (req, res) => {
   } catch (error) {
     console.error('Erreur updateMissionStatut:', error);
     res.status(500).json({ message: 'Erreur lors de la mise à jour du statut.' });
+  }
+};
+
+/**
+ * MISSIONS - Mettre à jour la date de RDV
+ */
+exports.updateMissionRdv = async (req, res) => {
+  try {
+    const { missionId } = req.params;
+    const { rdvDate } = req.body;
+    const diagnostiqueur = req.diagnostiqueur;
+
+    const mission = await OrdreMission.findOne({
+      _id: missionId,
+      diagnostiqueur: diagnostiqueur._id
+    });
+
+    if (!mission) {
+      return res.status(404).json({ message: 'Mission non trouvée.' });
+    }
+
+    mission.rdvDate = new Date(rdvDate);
+    await mission.save();
+
+    res.json({
+      message: 'Date de rendez-vous mise à jour.',
+      mission
+    });
+
+  } catch (error) {
+    console.error('Erreur updateMissionRdv:', error);
+    res.status(500).json({ message: 'Erreur lors de la mise à jour de la date de RDV.' });
   }
 };
 

@@ -26,9 +26,14 @@ exports.getOrdresMission = async (req, res) => {
     }
 
     else if (req.role === "agence") {
-      // 🏢 Agence → uniquement ses ordres de mission
-      query = { agenceId: req.agence._id };
-    } else if (req.role === "employe") {
+  // 🏢 Agence → Voit ses propres ordres OU ceux partagés avec elle
+  query = {
+    $or: [
+      { agenceId: req.agence._id },        // Propriétaire direct
+      { shareAgency: req.agence._id }     // Partagé avec cette agence
+    ]
+  };
+} else if (req.role === "employe") {
       // 👨‍💻 Employé → uniquement les OM où il est creePar ou dans partageAvec
       const empId = req.user._id.toString();
 
