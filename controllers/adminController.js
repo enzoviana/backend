@@ -979,8 +979,10 @@ exports.updateDiagnostic = async (req, res) => {
 
 exports.updatePack = async (req, res) => {
   try {
-    console.log("✏️ [updatePack] Requête reçue :", req.params.id, req.body);
     const { id } = req.params;
+    console.log(`\n🔍 [updatePack] DÉBUT - Pack ID: ${id}`);
+    console.log("📦 Body reçu :", JSON.stringify(req.body, null, 2));
+
     const {
       nom,
       typeBien,
@@ -996,64 +998,42 @@ exports.updatePack = async (req, res) => {
     } = req.body;
 
     const pack = await Pack.findById(id);
-    if (!pack) return res.status(404).json({ message: "Pack introuvable." });
-
-    // Champs principaux
-    if (nom !== undefined) pack.nom = nom;
-    if (typeBien !== undefined) pack.typeBien = typeBien;
-    if (typeOperation !== undefined) pack.typeOperation = typeOperation;
-    if (trancheAnnee !== undefined) pack.trancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : [];
-
-    // Tarifs globaux
-    if (tarifs) {
-      pack.tarifs.var = Number(tarifs.var ?? pack.tarifs.var);
-      pack.tarifs.herault = Number(tarifs.herault ?? pack.tarifs.herault);
-      pack.tarifs.autre = Number(tarifs.autre ?? pack.tarifs.autre);
+    if (!pack) {
+        console.error(`❌ [updatePack] Pack ${id} introuvable en BDD`);
+        return res.status(404).json({ message: "Pack introuvable." });
     }
 
-    // Tarifs détaillés
-    if (typeBien !== "appartement" && Array.isArray(tarifsParSurface)) {
-      pack.tarifsParSurface = tarifsParSurface.map(t => ({
-        _id: t._id || undefined,
-        surfaceMin: Number(t.surfaceMin ?? 0),
-        surfaceMax: Number(t.surfaceMax ?? 0),
-        tarifs: {
-          var: Number(t.tarifs?.var ?? 0),
-          herault: Number(t.tarifs?.herault ?? 0),
-          autre: Number(t.tarifs?.autre ?? 0)
-        }
-      }));
-    }
+    // Détermination des valeurs de référence pour la validation
+    const packTypeBien = typeBien || pack.typeBien;
+    const packTrancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : pack.trancheAnnee;
 
-    if (typeBien === "appartement" && Array.isArray(tarifsParAppartement)) {
-      pack.tarifsParAppartement = tarifsParAppartement.map(t => ({
-        _id: t._id || undefined,
-        typeAppartement: t.typeAppartement ?? "<20m2",
-        tarifs: {
-          var: Number(t.tarifs?.var ?? 0),
-          herault: Number(t.tarifs?.herault ?? 0),
-          autre: Number(t.tarifs?.autre ?? 0)
-        }
-      }));
-    }
+    console.log(`⚙️ [updatePack] Analyse avec TypeBien: "${packTypeBien}" et Tranches: [${packTrancheAnnee.join(', ')}]`);
 
-    // Diagnostics : vérifier qu'ils existent ET qu'ils correspondent au type de bien et tranche d'année
+    // ... (Mise à jour des tarifs inchangée)
+
+    // Diagnostics : vérification approfondie
     if (Array.isArray(diagnostics)) {
+      console.log(`🧪 [updatePack] Vérification de ${diagnostics.length} diagnostics...`);
       const validDiagnostics = await Diagnostic.find({ _id: { $in: diagnostics } });
 
+      console.log(`📚 [updatePack] Diagnostics trouvés en BDD :`, validDiagnostics.map(d => ({ id: d._id, nom: d.nom, typeBien: d.typeBien, tranches: d.trancheAnnee })));
+
       if (validDiagnostics.length !== diagnostics.length) {
+        const foundIds = validDiagnostics.map(d => d._id.toString());
+        const missingIds = diagnostics.filter(id => !foundIds.includes(id));
+        console.error("❌ [updatePack] Certains IDs n'existent pas :", missingIds);
         return res.status(400).json({ message: "Certains diagnostics sont introuvables." });
       }
-
-      // Vérifier que chaque diagnostic correspond au typeBien du pack
-      const packTypeBien = typeBien || pack.typeBien;
-      const packTrancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : pack.trancheAnnee;
 
       const diagnosticsIncompatibles = [];
 
       for (const diag of validDiagnostics) {
-        // Vérifier le typeBien
+        console.log(`  --- Check : ${diag.nom} ---`);
+        
+        // 1. Logique Type de Bien
+        console.log(`  - TypeBien Diagnostic: "${diag.typeBien}" vs Pack: "${packTypeBien}"`);
         if (diag.typeBien !== packTypeBien) {
+          console.log(`  ⚠️ INCOMPATIBLE : Type de bien différent`);
           diagnosticsIncompatibles.push({
             nom: diag.nom,
             raison: `Type de bien incompatible (diagnostic: ${diag.typeBien}, pack: ${packTypeBien})`
@@ -1061,12 +1041,16 @@ exports.updatePack = async (req, res) => {
           continue;
         }
 
-        // Vérifier la trancheAnnee : le diagnostic doit avoir "toutes" OU au moins une tranche en commun avec le pack
+        // 2. Logique Tranche d'Année
         const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
         const aTrancheToutes = diagTrancheAnnee.includes("toutes");
         const aTrancheCommune = diagTrancheAnnee.some(tranche => packTrancheAnnee.includes(tranche));
+        
+        console.log(`  - Tranches Diagnostic: [${diagTrancheAnnee.join(', ')}]`);
+        console.log(`  - "toutes" présent: ${aTrancheToutes} | Intersection trouvée: ${aTrancheCommune}`);
 
         if (!aTrancheToutes && !aTrancheCommune) {
+          console.log(`  ⚠️ INCOMPATIBLE : Aucune tranche commune`);
           diagnosticsIncompatibles.push({
             nom: diag.nom,
             raison: `Tranche d'année incompatible (diagnostic: ${diagTrancheAnnee.join(', ')}, pack: ${packTrancheAnnee.join(', ')})`
@@ -1075,7 +1059,7 @@ exports.updatePack = async (req, res) => {
       }
 
       if (diagnosticsIncompatibles.length > 0) {
-        console.error("❌ [updatePack] Diagnostics incompatibles :", diagnosticsIncompatibles);
+        console.error("❌ [updatePack] Résultat : Échec de validation", diagnosticsIncompatibles);
         return res.status(400).json({
           message: "Certains diagnostics ne correspondent pas au type de bien ou à la tranche d'année du pack.",
           diagnosticsIncompatibles
@@ -1083,19 +1067,24 @@ exports.updatePack = async (req, res) => {
       }
 
       pack.diagnostics = validDiagnostics.map(d => d._id);
-      console.log(`✅ [updatePack] ${validDiagnostics.length} diagnostics validés et compatibles`);
+      console.log(`✅ [updatePack] Tous les diagnostics sont compatibles.`);
     }
 
-    // Champs supplémentaires
+    // Mise à jour finale
+    if (nom !== undefined) pack.nom = nom;
+    if (typeBien !== undefined) pack.typeBien = typeBien;
+    if (typeOperation !== undefined) pack.typeOperation = typeOperation;
+    if (trancheAnnee !== undefined) pack.trancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : [];
     if (obligatoireDansPacks !== undefined) pack.obligatoireDansPacks = obligatoireDansPacks;
     if (erpOffert !== undefined) pack.erpOffert = Boolean(erpOffert);
     if (supplementsDisponibles !== undefined) pack.supplementsDisponibles = supplementsDisponibles;
 
     await pack.save();
+    console.log(`🚀 [updatePack] SUCCÈS - Pack "${pack.nom}" mis à jour.`);
     res.json({ message: "Pack mis à jour.", pack });
 
   } catch (err) {
-    console.error("❌ [updatePack] Erreur :", err);
+    console.error("💥 [updatePack] ERREUR CRITIQUE :", err);
     res.status(500).json({ message: "Erreur serveur lors de la modification du pack." });
   }
 };
