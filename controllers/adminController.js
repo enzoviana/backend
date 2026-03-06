@@ -980,62 +980,112 @@ exports.updateDiagnostic = async (req, res) => {
 exports.updatePack = async (req, res) => {
   try {
     const { id } = req.params;
+    console.log(`\n🔍 [updatePack] Début de mise à jour - ID: ${id}`);
+
     const {
       nom,
       typeBien,
-      typeOperation,
+      typeOperation, // 'location' ou 'vente'
       trancheAnnee,
-      // On peut ignorer "diagnostics" s'il est envoyé, ou l'utiliser comme secours
       tarifs,
       tarifsParSurface,
-      // ... autres champs
+      tarifsParAppartement,
+      obligatoireDansPacks,
+      erpOffert,
+      supplementsDisponibles
     } = req.body;
 
     const pack = await Pack.findById(id);
-    if (!pack) return res.status(404).json({ message: "Pack introuvable." });
+    if (!pack) {
+      console.error("❌ [updatePack] Pack introuvable en BDD.");
+      return res.status(404).json({ message: "Pack introuvable." });
+    }
 
-    // 1. Déterminer les critères de recherche
-    const targetType = typeBien || pack.typeBien;
+    // 1. Détermination des critères cibles (depuis le body ou l'existant)
+    const targetType = typeBien !== undefined ? typeBien : pack.typeBien;
+    const targetOperation = typeOperation !== undefined ? typeOperation : pack.typeOperation;
     const targetTranches = Array.isArray(trancheAnnee) ? trancheAnnee : pack.trancheAnnee;
 
-    console.log(`🤖 [Auto-Association] Recherche de diagnostics pour : ${targetType} / Tranches: ${targetTranches}`);
+    console.log(`🤖 [Auto-Association] Recherche de diagnostics pour :
+      - Type : "${targetType}"
+      - Opération : "${targetOperation}"
+      - Tranches : [${targetTranches.join(', ')}]`);
 
-    // 2. Rechercher DIRECTEMENT en BDD les diagnostics compatibles
-    // On cherche ceux qui ont le bon typeBien (ou "tous") 
-    // ET qui ont au moins une tranche commune (ou "toutes")
+    // 2. Recherche automatique des diagnostics correspondants en BDD
+    // On filtre sur : Type de bien (ou "tous"), Opération (ou "tous") et Tranches (ou "toutes")
     const matchingDiagnostics = await Diagnostic.find({
       $and: [
         { typeBien: { $in: [targetType, 'tous'] } },
+        { typeOperation: { $in: [targetOperation, 'tous'] } }, // Filtre ajouté ici
         { trancheAnnee: { $in: [...targetTranches, 'toutes'] } }
       ]
     });
 
-    console.log(`✅ [Auto-Association] ${matchingDiagnostics.length} diagnostics trouvés et associés.`);
+    console.log(`✅ [Auto-Association] ${matchingDiagnostics.length} diagnostics trouvés.`);
 
-    // 3. Appliquer les modifications
+    // 3. Mise à jour des champs d'identité du Pack
     if (nom !== undefined) pack.nom = nom;
     if (typeBien !== undefined) pack.typeBien = typeBien;
     if (typeOperation !== undefined) pack.typeOperation = typeOperation;
     if (trancheAnnee !== undefined) pack.trancheAnnee = targetTranches;
-    
-    // On remplace les diagnostics par ceux trouvés automatiquement
+
+    // Remplacement forcé des IDs par ceux trouvés en BDD
     pack.diagnostics = matchingDiagnostics.map(d => d._id);
 
-    // ... (Reste de ta logique pour les tarifs)
+    // 4. Mise à jour des Tarifs Globaux
+    if (tarifs) {
+      pack.tarifs.var = Number(tarifs.var ?? pack.tarifs.var);
+      pack.tarifs.herault = Number(tarifs.herault ?? pack.tarifs.herault);
+      pack.tarifs.autre = Number(tarifs.autre ?? pack.tarifs.autre);
+    }
 
+    // 5. Mise à jour des Tarifs par Surface (Locaux, Maisons, Bureaux...)
+    if (targetType !== "appartement" && Array.isArray(tarifsParSurface)) {
+      pack.tarifsParSurface = tarifsParSurface.map(t => ({
+        _id: t._id || undefined,
+        surfaceMin: Number(t.surfaceMin ?? 0),
+        surfaceMax: Number(t.surfaceMax ?? 0),
+        tarifs: {
+          var: Number(t.tarifs?.var ?? 0),
+          herault: Number(t.tarifs?.herault ?? 0),
+          autre: Number(t.tarifs?.autre ?? 0)
+        }
+      }));
+    }
+
+    // 6. Mise à jour des Tarifs par Type d'Appartement (T1, T2...)
+    if (targetType === "appartement" && Array.isArray(tarifsParAppartement)) {
+      pack.tarifsParAppartement = tarifsParAppartement.map(t => ({
+        _id: t._id || undefined,
+        typeAppartement: t.typeAppartement ?? "<20m2",
+        tarifs: {
+          var: Number(t.tarifs?.var ?? 0),
+          herault: Number(t.tarifs?.herault ?? 0),
+          autre: Number(t.tarifs?.autre ?? 0)
+        }
+      }));
+    }
+
+    // 7. Mise à jour des options supplémentaires
+    if (obligatoireDansPacks !== undefined) pack.obligatoireDansPacks = obligatoireDansPacks;
+    if (erpOffert !== undefined) pack.erpOffert = Boolean(erpOffert);
+    if (supplementsDisponibles !== undefined) pack.supplementsDisponibles = supplementsDisponibles;
+
+    // 8. Sauvegarde finale
     await pack.save();
+    console.log(`🚀 [updatePack] SUCCÈS - Pack "${pack.nom}" mis à jour.`);
+
     res.json({ 
-      message: "Pack mis à jour automatiquement avec les diagnostics correspondants.", 
+      message: "Pack mis à jour avec succès (Diagnostics auto-associés).", 
       pack,
-      diagnosticsAssocies: matchingDiagnostics.map(d => d.nom) 
+      diagnosticsTrouves: matchingDiagnostics.map(d => d.nom)
     });
 
   } catch (err) {
-    console.error("❌ [updatePack] Erreur :", err);
-    res.status(500).json({ message: "Erreur serveur." });
+    console.error("💥 [updatePack] ERREUR CRITIQUE :", err);
+    res.status(500).json({ message: "Erreur serveur lors de la modification du pack." });
   }
 };
-
 /**
  * 🗑️ Supprimer un diagnostic
  */
