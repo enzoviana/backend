@@ -799,13 +799,51 @@ exports.createPack = async (req, res) => {
       return res.status(400).json({ message: "Champs obligatoires manquants." });
     }
 
-    // Vérifier que les diagnostics existent
+    // Vérifier que les diagnostics existent ET qu'ils correspondent au type de bien et tranche d'année
     let validDiagnostics = [];
     if (diagnostics?.length) {
       validDiagnostics = await Diagnostic.find({ _id: { $in: diagnostics } });
+
       if (validDiagnostics.length !== diagnostics.length) {
         return res.status(400).json({ message: "Certains diagnostics sont introuvables." });
       }
+
+      // Vérifier que chaque diagnostic correspond au typeBien du pack
+      const packTrancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : [];
+      const diagnosticsIncompatibles = [];
+
+      for (const diag of validDiagnostics) {
+        // Vérifier le typeBien
+        if (diag.typeBien !== typeBien) {
+          diagnosticsIncompatibles.push({
+            nom: diag.nom,
+            raison: `Type de bien incompatible (diagnostic: ${diag.typeBien}, pack: ${typeBien})`
+          });
+          continue;
+        }
+
+        // Vérifier la trancheAnnee : le diagnostic doit avoir "toutes" OU au moins une tranche en commun avec le pack
+        const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
+        const aTrancheToutes = diagTrancheAnnee.includes("toutes");
+        const aTrancheCommune = diagTrancheAnnee.some(tranche => packTrancheAnnee.includes(tranche));
+
+        if (!aTrancheToutes && !aTrancheCommune) {
+          diagnosticsIncompatibles.push({
+            nom: diag.nom,
+            raison: `Tranche d'année incompatible (diagnostic: ${diagTrancheAnnee.join(', ')}, pack: ${packTrancheAnnee.join(', ')})`
+          });
+        }
+      }
+
+      if (diagnosticsIncompatibles.length > 0) {
+        console.error("❌ [createPack] Diagnostics incompatibles :", diagnosticsIncompatibles);
+        return res.status(400).json({
+          message: "Certains diagnostics ne correspondent pas au type de bien ou à la tranche d'année du pack.",
+          diagnosticsIncompatibles
+        });
+      }
+
+      console.log(`✅ [createPack] ${validDiagnostics.length} diagnostics validés et compatibles`);
     }
 
     // Construction du pack
@@ -999,13 +1037,53 @@ exports.updatePack = async (req, res) => {
       }));
     }
 
-    // Diagnostics : vérifier qu'ils existent
+    // Diagnostics : vérifier qu'ils existent ET qu'ils correspondent au type de bien et tranche d'année
     if (Array.isArray(diagnostics)) {
       const validDiagnostics = await Diagnostic.find({ _id: { $in: diagnostics } });
+
       if (validDiagnostics.length !== diagnostics.length) {
         return res.status(400).json({ message: "Certains diagnostics sont introuvables." });
       }
+
+      // Vérifier que chaque diagnostic correspond au typeBien du pack
+      const packTypeBien = typeBien || pack.typeBien;
+      const packTrancheAnnee = Array.isArray(trancheAnnee) ? trancheAnnee : pack.trancheAnnee;
+
+      const diagnosticsIncompatibles = [];
+
+      for (const diag of validDiagnostics) {
+        // Vérifier le typeBien
+        if (diag.typeBien !== packTypeBien) {
+          diagnosticsIncompatibles.push({
+            nom: diag.nom,
+            raison: `Type de bien incompatible (diagnostic: ${diag.typeBien}, pack: ${packTypeBien})`
+          });
+          continue;
+        }
+
+        // Vérifier la trancheAnnee : le diagnostic doit avoir "toutes" OU au moins une tranche en commun avec le pack
+        const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
+        const aTrancheToutes = diagTrancheAnnee.includes("toutes");
+        const aTrancheCommune = diagTrancheAnnee.some(tranche => packTrancheAnnee.includes(tranche));
+
+        if (!aTrancheToutes && !aTrancheCommune) {
+          diagnosticsIncompatibles.push({
+            nom: diag.nom,
+            raison: `Tranche d'année incompatible (diagnostic: ${diagTrancheAnnee.join(', ')}, pack: ${packTrancheAnnee.join(', ')})`
+          });
+        }
+      }
+
+      if (diagnosticsIncompatibles.length > 0) {
+        console.error("❌ [updatePack] Diagnostics incompatibles :", diagnosticsIncompatibles);
+        return res.status(400).json({
+          message: "Certains diagnostics ne correspondent pas au type de bien ou à la tranche d'année du pack.",
+          diagnosticsIncompatibles
+        });
+      }
+
       pack.diagnostics = validDiagnostics.map(d => d._id);
+      console.log(`✅ [updatePack] ${validDiagnostics.length} diagnostics validés et compatibles`);
     }
 
     // Champs supplémentaires
