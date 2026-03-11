@@ -1077,7 +1077,10 @@ exports.getDevisDetail = async (req, res) => {
       _id: devisId,
       diagnostiqueurAssigne: diagnostiqueur._id
     })
-      .populate('pack')
+      .populate({
+        path: 'pack',
+        populate: { path: 'diagnostics' }
+      })
       .populate('diagnosticsSelectionnes')
       .populate('supplementsSelectionnes')
       .populate('agenceId');
