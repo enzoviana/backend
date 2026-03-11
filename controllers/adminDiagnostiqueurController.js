@@ -31,6 +31,23 @@ exports.getAllDiagnostiqueurs = async (req, res) => {
     // Enrichir chaque diagnostiqueur avec certifications et statistiques
     const diagnostiqueursEnrichis = await Promise.all(
       diagnostiqueurs.map(async (diag) => {
+        // Mettre à jour le statut des documents expirés
+        const now = new Date();
+        let documentsModifies = false;
+
+        if (diag.documents && diag.documents.length > 0) {
+          diag.documents.forEach(doc => {
+            if (doc.dateExpiration && new Date(doc.dateExpiration) < now && doc.statut === 'valide') {
+              doc.statut = 'expire';
+              documentsModifies = true;
+            }
+          });
+
+          if (documentsModifies) {
+            await diag.save();
+          }
+        }
+
         // Récupérer les certifications
         const certifications = await Certification.find({ diagnostiqueur: diag._id })
           .populate('technicien')
