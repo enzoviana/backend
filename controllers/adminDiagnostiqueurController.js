@@ -419,15 +419,19 @@ exports.changerStatutDocument = async (req, res) => {
     const { id, documentId } = req.params;
     const { statut, raison } = req.body;
 
+    console.log('📝 Changement statut document:', { id, documentId, statut, raison });
+
     // Vérifier que le statut est valide
-    const statutsValides = ['valide', 'refuse', 'en_attente', 'expire'];
+    const statutsValides = ['valide', 'expire', 'a_renouveler', 'en_attente', 'rejete'];
     if (!statutsValides.includes(statut)) {
+      console.error('❌ Statut invalide:', statut);
       return res.status(400).json({ message: 'Statut invalide.' });
     }
 
     const diagnostiqueur = await Diagnostiqueur.findById(id);
 
     if (!diagnostiqueur) {
+      console.error('❌ Diagnostiqueur non trouvé:', id);
       return res.status(404).json({ message: 'Diagnostiqueur non trouvé.' });
     }
 
@@ -435,27 +439,41 @@ exports.changerStatutDocument = async (req, res) => {
     const document = diagnostiqueur.documents.id(documentId);
 
     if (!document) {
+      console.error('❌ Document non trouvé:', documentId);
       return res.status(404).json({ message: 'Document non trouvé.' });
     }
+
+    console.log('✅ Document trouvé:', { nom: document.nom, ancienStatut: document.statut });
 
     // Mettre à jour le statut
     document.statut = statut;
 
-    // Si refusé, ajouter la raison
-    if (statut === 'refuse' && raison) {
-      document.raisonRefus = raison;
+    // Si validé, ajouter la date de validation
+    if (statut === 'valide') {
+      document.dateValidation = new Date();
+      document.raisonRefus = null; // Effacer la raison de refus si elle existait
+    }
+
+    // Si rejeté, ajouter la raison
+    if (statut === 'rejete') {
+      if (raison) {
+        document.raisonRefus = raison;
+      }
+      document.dateValidation = null; // Effacer la date de validation si elle existait
     }
 
     // Sauvegarder
     await diagnostiqueur.save();
 
+    console.log('✅ Document mis à jour avec succès:', { nouveauStatut: document.statut });
+
     res.json({
-      message: `Document ${statut === 'valide' ? 'validé' : statut === 'refuse' ? 'refusé' : 'mis à jour'} avec succès.`,
+      message: `Document ${statut === 'valide' ? 'validé' : statut === 'rejete' ? 'rejeté' : 'mis à jour'} avec succès.`,
       document
     });
 
   } catch (error) {
-    console.error('Erreur changerStatutDocument:', error);
+    console.error('❌ Erreur changerStatutDocument:', error);
     res.status(500).json({ message: 'Erreur lors de la modification du statut du document.' });
   }
 };

@@ -40,11 +40,13 @@ const DocumentAdministratifSchema = new Schema({
   public_id: { type: String, required: true },
   dateExpiration: { type: Date, default: null },
   dateDepot: { type: Date, default: Date.now },
+  dateValidation: { type: Date, default: null },
   statut: {
     type: String,
-    enum: ['valide', 'expire', 'a_renouveler', 'en_attente'],
-    default: 'valide'
-  }
+    enum: ['valide', 'expire', 'a_renouveler', 'en_attente', 'rejete'],
+    default: 'en_attente'
+  },
+  raisonRefus: { type: String, default: null }
 }, { _id: true });
 
 /**
