@@ -966,6 +966,44 @@ exports.updateMissionRdv = async (req, res) => {
 };
 
 /**
+ * MISSIONS - Clôturer une mission
+ */
+exports.cloturerMission = async (req, res) => {
+  try {
+    const { missionId } = req.params;
+    const diagnostiqueur = req.diagnostiqueur;
+
+    const mission = await OrdreMission.findOne({
+      _id: missionId,
+      diagnostiqueur: diagnostiqueur._id
+    });
+
+    if (!mission) {
+      return res.status(404).json({ message: 'Mission non trouvée.' });
+    }
+
+    // Vérifier que la mission est acceptée
+    if (mission.statutAcceptation !== 'accepte') {
+      return res.status(400).json({ message: 'Seules les missions acceptées peuvent être clôturées.' });
+    }
+
+    // Mettre à jour le statut d'acceptation à 'termine'
+    mission.statutAcceptation = 'termine';
+    mission.statut = 'Traité'; // Optionnel : mettre aussi le statut à Traité
+    await mission.save();
+
+    res.json({
+      message: 'Mission clôturée avec succès.',
+      mission
+    });
+
+  } catch (error) {
+    console.error('Erreur cloturerMission:', error);
+    res.status(500).json({ message: 'Erreur lors de la clôture de la mission.' });
+  }
+};
+
+/**
  * MISSIONS - Télécharger l'ordre de mission en PDF
  */
 exports.downloadOrdreMission = async (req, res) => {
@@ -977,7 +1015,14 @@ exports.downloadOrdreMission = async (req, res) => {
       _id: missionId,
       diagnostiqueur: diagnostiqueur._id
     })
-      .populate('devisId')
+      .populate({
+        path: 'devisId',
+        populate: [
+          { path: 'pack', populate: { path: 'diagnostics' } },
+          { path: 'diagnosticsSelectionnes' },
+          { path: 'supplementsSelectionnes' }
+        ]
+      })
       .populate('clientId')
       .populate('agenceId');
 
@@ -985,33 +1030,107 @@ exports.downloadOrdreMission = async (req, res) => {
       return res.status(404).json({ message: 'Mission non trouvée.' });
     }
 
-    // Générer un PDF simple (pour l'instant, retourner les données JSON)
-    // TODO: Implémenter la génération PDF avec puppeteer ou pdfkit
-    const pdfContent = `
-      ORDRE DE MISSION
+    const PDFDocument = require('pdfkit');
+    const doc = new PDFDocument({ margin: 50 });
 
-      Numéro: ${mission.numero}
-      Date: ${new Date(mission.dateCreation).toLocaleDateString('fr-FR')}
-      Statut: ${mission.statut}
-
-      CLIENT:
-      ${mission.clientId?.nom} ${mission.clientId?.prenom}
-      ${mission.clientId?.email}
-
-      DEVIS:
-      ${mission.devisId?.numero}
-      Montant: ${mission.devisId?.totalFinal || mission.devisId?.montantTTC} €
-
-      DIAGNOSTIQUEUR:
-      ${diagnostiqueur.nom_entreprise}
-      ${diagnostiqueur.email_entreprise}
-    `;
-
-    // Pour l'instant, retourner du texte brut
-    // En production, utiliser un générateur de PDF
+    // Headers pour le téléchargement
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="OrdreMission_${mission.numero}.pdf"`);
-    res.send(Buffer.from(pdfContent, 'utf-8'));
+
+    // Pipe le PDF vers la réponse
+    doc.pipe(res);
+
+    // En-tête
+    doc.fontSize(20).font('Helvetica-Bold').text('ORDRE DE MISSION', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica').text('DIMOTEC CONTROLES', { align: 'center' });
+    doc.text('298 rue d\'Alco, 34080 Montpellier', { align: 'center' });
+    doc.text('SIRET 921 392 775 00018 - Tél : 04 67 60 50 18', { align: 'center' });
+    doc.moveDown(2);
+
+    // Informations de la mission
+    doc.fontSize(12).font('Helvetica-Bold').text('Informations de la mission', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Numéro de mission : ${mission.numero}`);
+    doc.text(`Date de création : ${new Date(mission.dateCreation).toLocaleDateString('fr-FR')}`);
+    doc.text(`Statut : ${mission.statut}`);
+    if (mission.rdvDate) {
+      doc.text(`Date de RDV : ${new Date(mission.rdvDate).toLocaleString('fr-FR')}`);
+    }
+    doc.moveDown(1.5);
+
+    // Informations du client
+    doc.fontSize(12).font('Helvetica-Bold').text('Client (Propriétaire)', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Nom : ${mission.clientId?.nom || 'N/A'} ${mission.clientId?.prenom || ''}`);
+    doc.text(`Email : ${mission.clientId?.email || 'N/A'}`);
+    doc.text(`Téléphone : ${mission.clientId?.telephone || 'N/A'}`);
+    doc.text(`Adresse : ${mission.clientId?.adresse || 'N/A'}`);
+    doc.text(`Ville : ${mission.clientId?.codePostal || ''} ${mission.clientId?.ville || 'N/A'}`);
+    doc.moveDown(1.5);
+
+    // Informations du bien
+    if (mission.devisId?.adresseBien) {
+      doc.fontSize(12).font('Helvetica-Bold').text('Bien immobilier', { underline: true });
+      doc.moveDown(0.5);
+      doc.fontSize(10).font('Helvetica');
+      doc.text(`Type : ${mission.devisId.bien || 'N/A'}`);
+      doc.text(`Adresse : ${mission.devisId.adresseBien.adresse || 'N/A'}`);
+      doc.text(`Ville : ${mission.devisId.adresseBien.codePostal || ''} ${mission.devisId.adresseBien.ville || 'N/A'}`);
+      if (mission.devisId.adresseBien.etage) {
+        doc.text(`Étage : ${mission.devisId.adresseBien.etage}`);
+      }
+      doc.moveDown(1.5);
+    }
+
+    // Diagnostics à effectuer
+    doc.fontSize(12).font('Helvetica-Bold').text('Diagnostics à effectuer', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+
+    const diagnostics = [];
+    if (mission.devisId?.pack?.diagnostics) {
+      diagnostics.push(...mission.devisId.pack.diagnostics);
+    }
+    if (mission.devisId?.diagnosticsSelectionnes) {
+      diagnostics.push(...mission.devisId.diagnosticsSelectionnes);
+    }
+
+    if (diagnostics.length > 0) {
+      diagnostics.forEach((diag, index) => {
+        doc.text(`${index + 1}. ${diag.nom || 'Diagnostic'}`);
+      });
+    } else {
+      doc.text('Aucun diagnostic assigné');
+    }
+    doc.moveDown(1.5);
+
+    // Informations financières
+    doc.fontSize(12).font('Helvetica-Bold').text('Informations financières', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Numéro de devis : ${mission.devisId?.numero || 'N/A'}`);
+    doc.text(`Montant TTC : ${mission.devisId?.totalApresReduction || mission.devisId?.montantTTC || 'N/A'} €`);
+    doc.moveDown(1.5);
+
+    // Diagnostiqueur
+    doc.fontSize(12).font('Helvetica-Bold').text('Diagnostiqueur assigné', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).font('Helvetica');
+    doc.text(`Entreprise : ${diagnostiqueur.nom_entreprise || 'N/A'}`);
+    doc.text(`Email : ${diagnostiqueur.admin?.email || diagnostiqueur.email_entreprise || 'N/A'}`);
+    doc.moveDown(2);
+
+    // Footer
+    doc.fontSize(8).font('Helvetica').text(
+      'Document généré automatiquement par DIMOTEC CONTROLES',
+      { align: 'center' }
+    );
+
+    // Finaliser le PDF
+    doc.end();
 
   } catch (error) {
     console.error('Erreur downloadOrdreMission:', error);

@@ -62,6 +62,7 @@ router.post('/missions/:missionId/accepter', diagnostiqueurAuth, checkEligibilit
 router.post('/missions/:missionId/refuser', diagnostiqueurAuth, diagnostiqueurController.refuserMission);
 router.put('/missions/:missionId/statut', diagnostiqueurAuth, diagnostiqueurController.updateMissionStatut);
 router.put('/missions/:missionId/rdv', diagnostiqueurAuth, diagnostiqueurController.updateMissionRdv);
+router.put('/missions/:missionId/cloturer', diagnostiqueurAuth, diagnostiqueurController.cloturerMission);
 
 // Devis
 router.get('/devis', diagnostiqueurAuth, diagnostiqueurController.getDevis);
