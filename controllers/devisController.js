@@ -1647,6 +1647,57 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
       if (diagnostiqueurId) {
         devis.diagnostiqueurAssigne = diagnostiqueurId;
+
+        // 📧 Envoyer un email au diagnostiqueur pour l'informer qu'il a été choisi
+        try {
+          const Diagnostiqueur = require('../models/Diagnostiqueur');
+          const diagnostiqueurData = await Diagnostiqueur.findById(diagnostiqueurId);
+          if (diagnostiqueurData?.admin?.email) {
+            await sendEmail({
+              to: diagnostiqueurData.admin.email,
+              subject: '🔔 Nouvelle mission disponible - DIMOTEC',
+              html: `
+                <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+                  <div style="background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+                    <h1 style="color: white; margin: 0; font-size: 28px;">🎯 Nouvelle Mission Disponible</h1>
+                  </div>
+                  <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                    <p style="font-size: 16px; color: #333; line-height: 1.6;">
+                      Bonjour <strong>${diagnostiqueurData.nom_entreprise}</strong>,
+                    </p>
+                    <p style="font-size: 16px; color: #333; line-height: 1.6;">
+                      Bonne nouvelle ! Vous avez été sélectionné pour une nouvelle mission.
+                    </p>
+                    <div style="background: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                      <h3 style="color: #FF6B35; margin-top: 0;">📋 Détails de la mission</h3>
+                      <p style="margin: 8px 0;"><strong>Numéro du devis :</strong> ${devis.numero}</p>
+                      <p style="margin: 8px 0;"><strong>Client :</strong> ${devis.client?.nom} ${devis.client?.prenom}</p>
+                      <p style="margin: 8px 0;"><strong>Montant TTC :</strong> ${devis.montantTTC || devis.totalApresReduction || 'N/A'} €</p>
+                      <p style="margin: 8px 0;"><strong>Agence :</strong> ${agenceData?.nom_commercial || 'N/A'}</p>
+                    </div>
+                    <p style="font-size: 16px; color: #333; line-height: 1.6;">
+                      Cette mission est en attente de votre acceptation. Connectez-vous à votre espace pour consulter tous les détails et accepter la mission.
+                    </p>
+                    <div style="text-align: center; margin: 30px 0;">
+                      <a href="${process.env.FRONTEND_DIAGNOSTIQUEUR_URL || 'https://diagnostiqueur.dimotec.fr'}/missions"
+                         style="background: linear-gradient(135deg, #FF6B35 0%, #FF8C42 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px rgba(255,107,53,0.3);">
+                        📱 Voir la mission
+                      </a>
+                    </div>
+                    <p style="font-size: 14px; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                      Cordialement,<br>
+                      <strong>L'équipe DIMOTEC</strong>
+                    </p>
+                  </div>
+                </div>
+              `
+            });
+            console.log('✅ Email envoyé au diagnostiqueur pour nouvelle mission');
+          }
+        } catch (emailError) {
+          console.error('❌ Erreur envoi email diagnostiqueur:', emailError);
+          // Ne pas bloquer la création du devis si l'email échoue
+        }
       }
 
       // ⚠️ IMPORTANT : Mettre à jour le statut du devis pour éviter les relances
@@ -1979,6 +2030,63 @@ exports.uploadPdfDevis = async (req, res) => {
     // Synchroniser diagnostiqueurAssigne dans le devis et mettre à jour compteur agence
     if (diagnostiqueurId) {
       devis.diagnostiqueurAssigne = diagnostiqueurId;
+
+      // 📧 Envoyer un email au diagnostiqueur pour l'informer que le devis a été accepté
+      try {
+        const Diagnostiqueur = require('../models/Diagnostiqueur');
+        const diagnostiqueurData = await Diagnostiqueur.findById(diagnostiqueurId);
+        if (diagnostiqueurData?.admin?.email) {
+          await sendEmail({
+            to: diagnostiqueurData.admin.email,
+            subject: '✅ Devis accepté - Mission à confirmer - DIMOTEC',
+            html: `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; background-color: #f9f9f9;">
+                <div style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); padding: 30px; border-radius: 10px 10px 0 0; text-align: center;">
+                  <h1 style="color: white; margin: 0; font-size: 28px;">✅ Devis Accepté !</h1>
+                </div>
+                <div style="background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
+                  <p style="font-size: 16px; color: #333; line-height: 1.6;">
+                    Bonjour <strong>${diagnostiqueurData.nom_entreprise}</strong>,
+                  </p>
+                  <p style="font-size: 16px; color: #333; line-height: 1.6;">
+                    Excellente nouvelle ! Le client a accepté le devis pour lequel vous avez été sélectionné.
+                  </p>
+                  <div style="background: #f0fdf4; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #10B981;">
+                    <h3 style="color: #059669; margin-top: 0;">📋 Détails de la mission</h3>
+                    <p style="margin: 8px 0;"><strong>Numéro du devis :</strong> ${devis.numero}</p>
+                    <p style="margin: 8px 0;"><strong>Numéro de mission :</strong> ${ordre.numero}</p>
+                    <p style="margin: 8px 0;"><strong>Client :</strong> ${devis.client?.nom} ${devis.client?.prenom}</p>
+                    <p style="margin: 8px 0;"><strong>Montant TTC :</strong> ${devis.totalApresReduction || devis.montantTTC || 'N/A'} €</p>
+                    <p style="margin: 8px 0;"><strong>Agence :</strong> ${agenceData?.nom_commercial || 'N/A'}</p>
+                  </div>
+                  <div style="background: #FEF3C7; padding: 15px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+                    <p style="margin: 0; color: #92400E; font-weight: bold;">
+                      ⚠️ Action requise
+                    </p>
+                    <p style="margin: 8px 0 0 0; color: #92400E;">
+                      Veuillez vous connecter à votre espace diagnostiqueur pour accepter cette mission et consulter tous les détails.
+                    </p>
+                  </div>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${process.env.FRONTEND_DIAGNOSTIQUEUR_URL || 'https://diagnostiqueur.dimotec.fr'}/missions/${ordre._id}"
+                       style="background: linear-gradient(135deg, #10B981 0%, #059669 100%); color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; font-weight: bold; display: inline-block; box-shadow: 0 4px 6px rgba(16,185,129,0.3);">
+                      ✓ Accepter la mission
+                    </a>
+                  </div>
+                  <p style="font-size: 14px; color: #666; margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                    Cordialement,<br>
+                    <strong>L'équipe DIMOTEC</strong>
+                  </p>
+                </div>
+              </div>
+            `
+          });
+          console.log('✅ Email envoyé au diagnostiqueur pour devis accepté');
+        }
+      } catch (emailError) {
+        console.error('❌ Erreur envoi email diagnostiqueur:', emailError);
+        // Ne pas bloquer la création de l'ordre si l'email échoue
+      }
 
       // Incrémenter le compteur d'utilisation dans l'agence
       const Diagnostiqueur = require('../models/Diagnostiqueur');

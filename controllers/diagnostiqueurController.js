@@ -1628,7 +1628,7 @@ exports.uploadAssurance = async (req, res) => {
       public_id: req.file.filename,
       dateExpiration: new Date(dateExpiration),
       dateDepot: new Date(),
-      statut: 'valide'
+      statut: 'en_attente'
     };
 
     if (existingIndex !== -1) {

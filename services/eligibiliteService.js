@@ -166,7 +166,7 @@ async function verifierAssurances(diagnostiqueur) {
 
   if (assuranceRC) {
     resultat.rc.dateExpiration = assuranceRC.dateExpiration;
-    resultat.rc.valide = assuranceRC.dateExpiration > maintenant;
+    resultat.rc.valide = assuranceRC.dateExpiration > maintenant && assuranceRC.statut === 'valide';
   }
 
   // Vérifier décennale
@@ -176,7 +176,7 @@ async function verifierAssurances(diagnostiqueur) {
 
   if (assuranceDecennale) {
     resultat.decennale.dateExpiration = assuranceDecennale.dateExpiration;
-    resultat.decennale.valide = assuranceDecennale.dateExpiration > maintenant;
+    resultat.decennale.valide = assuranceDecennale.dateExpiration > maintenant && assuranceDecennale.statut === 'valide';
   }
 
   return resultat;
