@@ -233,27 +233,28 @@ const telechargerDocumentCertification = async (req, res) => {
     }
 
     const publicId = certification.document.public_id;
-    
-    // IMPORTANT: Comme tu stockes dans le dossier 'dimotec', 
-    // le public_id complet est souvent 'dimotec/nom_du_fichier'
-    // Mais dans ton middleware, tu retournes public_id: publicId (sans le préfixe dossier)
-    // Cloudinary combine souvent les deux.
-    
     console.log('🔗 Génération du lien pour public_id:', publicId);
 
-    // Génération d'une URL signée qui force le téléchargement
+    // 1. On génère l'URL signée comme avant
     const downloadUrl = cloudinary.url(publicId, {
       resource_type: 'raw',
       sign_url: true,
-      type: 'upload', // ou 'authenticated' selon ton réglage Cloudinary
-      attachment: true, // Force le téléchargement au lieu de l'ouverture
-      expires_at: Math.floor(Date.now() / 1000) + (60 * 10) // Expire dans 10 min
+      type: 'upload', 
+      attachment: true, 
+      expires_at: Math.floor(Date.now() / 1000) + (60 * 10) 
     });
 
     console.log('✅ URL générée:', downloadUrl);
     
-    // On redirige le client vers l'URL sécurisée de Cloudinary
-    res.redirect(downloadUrl);
+    // --- LE CHANGEMENT EST ICI ---
+    // Au lieu de res.redirect(downloadUrl);
+    // On renvoie un JSON pour que le fetch() côté Vue.js puisse le lire sans erreur
+    res.json({ 
+      success: true,
+      url: downloadUrl,
+      nomFichier: certification.document.nom || `certification-${certificationId}.pdf`
+    });
+    // -----------------------------
 
   } catch (error) {
     console.error('❌ Erreur:', error);
