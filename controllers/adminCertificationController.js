@@ -218,55 +218,97 @@ const supprimerCertification = async (req, res) => {
 /**
  * GET - Télécharger le document d'une certification (proxy Cloudinary sécurisé)
  */
+/**
+ * GET - Télécharger le document d'une certification (proxy Cloudinary sécurisé)
+ */
 const telechargerDocumentCertification = async (req, res) => {
   try {
-    const { certificationId } = req.params;
+    // 1. LOG DE DÉPART - Si ce log n'apparaît pas, le problème est dans votre fichier de routes (middleware)
+    console.log('--- 🔽 DÉBUT FONCTION BACKEND: telechargerDocumentCertification ---');
+    
+    // Vérifier l'utilisateur injecté par le middleware d'auth
+    console.log('👤 Utilisateur Req:', req.user ? { id: req.user._id, role: req.user.role } : 'Aucun req.user trouvé');
+    
+    // Vérifier le header Authorization reçu
+    console.log('🔑 Auth Header:', req.headers.authorization ? 'Présent (commence par ' + req.headers.authorization.substring(0, 15) + '...)' : 'ABSENT');
 
+    const { certificationId } = req.params;
+    console.log('🆔 ID Certification demandé:', certificationId);
+
+    // 2. RECHERCHE EN BDD
     const certification = await Certification.findById(certificationId);
+    
     if (!certification) {
+      console.log('❌ Certification non trouvée en BDD pour ID:', certificationId);
       return res.status(404).json({ message: 'Certification non trouvée' });
     }
 
+    console.log('✅ Certification récupérée:', {
+      _id: certification._id,
+      hasDocument: !!certification.document,
+      url: certification.document?.url ? 'OUI (présente)' : 'NON (absente)'
+    });
+
     if (!certification.document || !certification.document.url) {
+      console.log('❌ Erreur: Pas d\'URL Cloudinary associée');
       return res.status(404).json({ message: 'Aucun document associé à cette certification' });
     }
 
     const documentUrl = certification.document.url;
     const documentNom = certification.document.nom || `certification-${certificationId}.pdf`;
 
-    // Récupérer le fichier depuis Cloudinary
+    // 3. REQUÊTE VERS CLOUDINARY
+    console.log('📡 Tentative de streaming depuis Cloudinary...');
     const https = require('https');
     const http = require('http');
-    const url = require('url');
 
-    const parsedUrl = url.parse(documentUrl);
+    const parsedUrl = new URL(documentUrl);
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
     protocol.get(documentUrl, (cloudinaryResponse) => {
+      console.log('📦 Status retour Cloudinary:', cloudinaryResponse.statusCode);
+      console.log('📦 Headers retour Cloudinary:', cloudinaryResponse.headers['content-type']);
+
       if (cloudinaryResponse.statusCode !== 200) {
+        console.error('❌ Cloudinary a répondu avec une erreur:', cloudinaryResponse.statusCode);
         return res.status(cloudinaryResponse.statusCode).json({
-          message: 'Erreur lors de la récupération du document depuis Cloudinary'
+          message: `Erreur Cloudinary (${cloudinaryResponse.statusCode})`
         });
       }
 
-      // Définir les headers pour le téléchargement
+      // 4. CONFIGURATION DE LA RÉPONSE CLIENT
       res.setHeader('Content-Type', cloudinaryResponse.headers['content-type'] || 'application/pdf');
+      // Utilisation d'un nom de fichier propre
       res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(documentNom)}"`);
-      res.setHeader('Content-Length', cloudinaryResponse.headers['content-length']);
+      
+      if (cloudinaryResponse.headers['content-length']) {
+        res.setHeader('Content-Length', cloudinaryResponse.headers['content-length']);
+      }
 
-      // Pipe la réponse de Cloudinary vers le client
+      console.log('🚀 Début du pipe vers le client...');
+
       cloudinaryResponse.pipe(res);
+
+      // Log quand c'est fini
+      res.on('finish', () => {
+        console.log('🏁 Transfert terminé avec succès pour:', documentNom);
+        console.log('--- 🔼 FIN FONCTION BACKEND ---');
+      });
+
     }).on('error', (error) => {
-      console.error('Erreur téléchargement depuis Cloudinary:', error);
-      res.status(500).json({ message: 'Erreur lors du téléchargement du document' });
+      console.error('❌ Erreur réseau HTTP/HTTPS:', error.message);
+      if (!res.headersSent) {
+        res.status(500).json({ message: 'Erreur réseau lors du téléchargement' });
+      }
     });
 
   } catch (error) {
-    console.error('Erreur telechargerDocumentCertification:', error);
-    res.status(500).json({ message: error.message });
+    console.error('💥 CRASH EXCEPTION dans telechargerDocumentCertification:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ message: error.message });
+    }
   }
 };
-
 // Exportation groupée de toutes les fonctions
 module.exports = {
   getCertificationsEnAttente,
