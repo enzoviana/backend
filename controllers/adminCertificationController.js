@@ -221,92 +221,43 @@ const supprimerCertification = async (req, res) => {
 /**
  * GET - Télécharger le document d'une certification (proxy Cloudinary sécurisé)
  */
+const cloudinary = require('cloudinary').v2;
+
 const telechargerDocumentCertification = async (req, res) => {
   try {
-    // 1. LOG DE DÉPART - Si ce log n'apparaît pas, le problème est dans votre fichier de routes (middleware)
-    console.log('--- 🔽 DÉBUT FONCTION BACKEND: telechargerDocumentCertification ---');
-    
-    // Vérifier l'utilisateur injecté par le middleware d'auth
-    console.log('👤 Utilisateur Req:', req.user ? { id: req.user._id, role: req.user.role } : 'Aucun req.user trouvé');
-    
-    // Vérifier le header Authorization reçu
-    console.log('🔑 Auth Header:', req.headers.authorization ? 'Présent (commence par ' + req.headers.authorization.substring(0, 15) + '...)' : 'ABSENT');
-
     const { certificationId } = req.params;
-    console.log('🆔 ID Certification demandé:', certificationId);
-
-    // 2. RECHERCHE EN BDD
     const certification = await Certification.findById(certificationId);
+
+    if (!certification || !certification.document || !certification.document.public_id) {
+      return res.status(404).json({ message: "Document introuvable" });
+    }
+
+    const publicId = certification.document.public_id;
     
-    if (!certification) {
-      console.log('❌ Certification non trouvée en BDD pour ID:', certificationId);
-      return res.status(404).json({ message: 'Certification non trouvée' });
-    }
+    // IMPORTANT: Comme tu stockes dans le dossier 'dimotec', 
+    // le public_id complet est souvent 'dimotec/nom_du_fichier'
+    // Mais dans ton middleware, tu retournes public_id: publicId (sans le préfixe dossier)
+    // Cloudinary combine souvent les deux.
+    
+    console.log('🔗 Génération du lien pour public_id:', publicId);
 
-    console.log('✅ Certification récupérée:', {
-      _id: certification._id,
-      hasDocument: !!certification.document,
-      url: certification.document?.url ? 'OUI (présente)' : 'NON (absente)'
+    // Génération d'une URL signée qui force le téléchargement
+    const downloadUrl = cloudinary.url(publicId, {
+      resource_type: 'raw',
+      sign_url: true,
+      type: 'upload', // ou 'authenticated' selon ton réglage Cloudinary
+      attachment: true, // Force le téléchargement au lieu de l'ouverture
+      expires_at: Math.floor(Date.now() / 1000) + (60 * 10) // Expire dans 10 min
     });
 
-    if (!certification.document || !certification.document.url) {
-      console.log('❌ Erreur: Pas d\'URL Cloudinary associée');
-      return res.status(404).json({ message: 'Aucun document associé à cette certification' });
-    }
-
-    const documentUrl = certification.document.url;
-    const documentNom = certification.document.nom || `certification-${certificationId}.pdf`;
-
-    // 3. REQUÊTE VERS CLOUDINARY
-    console.log('📡 Tentative de streaming depuis Cloudinary...');
-    const https = require('https');
-    const http = require('http');
-
-    const parsedUrl = new URL(documentUrl);
-    const protocol = parsedUrl.protocol === 'https:' ? https : http;
-
-    protocol.get(documentUrl, (cloudinaryResponse) => {
-      console.log('📦 Status retour Cloudinary:', cloudinaryResponse.statusCode);
-      console.log('📦 Headers retour Cloudinary:', cloudinaryResponse.headers['content-type']);
-
-      if (cloudinaryResponse.statusCode !== 200) {
-        console.error('❌ Cloudinary a répondu avec une erreur:', cloudinaryResponse.statusCode);
-        return res.status(cloudinaryResponse.statusCode).json({
-          message: `Erreur Cloudinary (${cloudinaryResponse.statusCode})`
-        });
-      }
-
-      // 4. CONFIGURATION DE LA RÉPONSE CLIENT
-      res.setHeader('Content-Type', cloudinaryResponse.headers['content-type'] || 'application/pdf');
-      // Utilisation d'un nom de fichier propre
-      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(documentNom)}"`);
-      
-      if (cloudinaryResponse.headers['content-length']) {
-        res.setHeader('Content-Length', cloudinaryResponse.headers['content-length']);
-      }
-
-      console.log('🚀 Début du pipe vers le client...');
-
-      cloudinaryResponse.pipe(res);
-
-      // Log quand c'est fini
-      res.on('finish', () => {
-        console.log('🏁 Transfert terminé avec succès pour:', documentNom);
-        console.log('--- 🔼 FIN FONCTION BACKEND ---');
-      });
-
-    }).on('error', (error) => {
-      console.error('❌ Erreur réseau HTTP/HTTPS:', error.message);
-      if (!res.headersSent) {
-        res.status(500).json({ message: 'Erreur réseau lors du téléchargement' });
-      }
-    });
+    console.log('✅ URL générée:', downloadUrl);
+    
+    // On redirige le client vers l'URL sécurisée de Cloudinary
+    res.redirect(downloadUrl);
 
   } catch (error) {
-    console.error('💥 CRASH EXCEPTION dans telechargerDocumentCertification:', error);
-    if (!res.headersSent) {
-      res.status(500).json({ message: error.message });
-    }
+    console.error('❌ Erreur:', error);
+    res.status(500).json({ message: "Erreur lors de la génération du lien" });
   }
 };
 // Exportation groupée de toutes les fonctions
