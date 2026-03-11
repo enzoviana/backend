@@ -192,10 +192,34 @@ const rejeterCertification = async (req, res) => {
   }
 };
 
+/**
+ * DELETE - Supprimer une certification
+ */
+const supprimerCertification = async (req, res) => {
+  try {
+    const { certificationId } = req.params;
+
+    const certification = await Certification.findById(certificationId);
+    if (!certification) {
+      return res.status(404).json({ message: 'Certification non trouvée' });
+    }
+
+    await Certification.findByIdAndDelete(certificationId);
+
+    res.json({
+      message: 'Certification supprimée avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur supprimerCertification:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Exportation groupée de toutes les fonctions
 module.exports = {
   getCertificationsEnAttente,
   getToutesCertifications,
   approuverCertification,
-  rejeterCertification
+  rejeterCertification,
+  supprimerCertification
 };

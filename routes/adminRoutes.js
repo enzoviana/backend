@@ -184,6 +184,9 @@ router.put('/certifications/:certificationId/approuver', authMiddleware, adminCe
 // Rejeter une certification
 router.put('/certifications/:certificationId/rejeter', authMiddleware, adminCertificationController.rejeterCertification);
 
+// Supprimer une certification
+router.delete('/certifications/:certificationId', authMiddleware, adminCertificationController.supprimerCertification);
+
 // ---------------------- GESTION STRIPE DES DIAGNOSTIQUEURS ----------------------
 
 // Créer un abonnement PRO pour un diagnostiqueur
