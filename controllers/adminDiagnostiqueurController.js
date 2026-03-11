@@ -28,7 +28,47 @@ exports.getAllDiagnostiqueurs = async (req, res) => {
       .sort({ createdAt: -1 })
       .limit(100);
 
-    res.json({ diagnostiqueurs });
+    // Enrichir chaque diagnostiqueur avec certifications et statistiques
+    const diagnostiqueursEnrichis = await Promise.all(
+      diagnostiqueurs.map(async (diag) => {
+        // Récupérer les certifications
+        const certifications = await Certification.find({ diagnostiqueur: diag._id })
+          .populate('technicien')
+          .populate('domaine')
+          .sort({ dateExpiration: 1 });
+
+        // Récupérer les statistiques de missions
+        const missionsTotal = await OrdreMission.countDocuments({ diagnostiqueur: diag._id });
+        const missionsCompletes = await OrdreMission.countDocuments({
+          diagnostiqueur: diag._id,
+          statut: 'Traité'
+        });
+
+        // Calculer la note moyenne (à partir des notations clients)
+        const missions = await OrdreMission.find({
+          diagnostiqueur: diag._id,
+          noteClient: { $exists: true, $ne: null }
+        }).select('noteClient');
+
+        let noteMoyenne = 'N/A';
+        if (missions.length > 0) {
+          const sommeNotes = missions.reduce((acc, m) => acc + (m.noteClient || 0), 0);
+          noteMoyenne = (sommeNotes / missions.length).toFixed(1);
+        }
+
+        return {
+          ...diag.toObject(),
+          certifications,
+          stats: {
+            missions: missionsTotal,
+            missionsCompletes,
+            note: noteMoyenne
+          }
+        };
+      })
+    );
+
+    res.json({ diagnostiqueurs: diagnostiqueursEnrichis });
 
   } catch (error) {
     console.error('Erreur getAllDiagnostiqueurs:', error);
@@ -351,6 +391,55 @@ exports.updateDomaine = async (req, res) => {
   } catch (error) {
     console.error('Erreur updateDomaine:', error);
     res.status(500).json({ message: 'Erreur lors de la mise à jour du domaine.' });
+  }
+};
+
+/**
+ * Changer le statut d'un document (valider ou refuser)
+ */
+exports.changerStatutDocument = async (req, res) => {
+  try {
+    const { id, documentId } = req.params;
+    const { statut, raison } = req.body;
+
+    // Vérifier que le statut est valide
+    const statutsValides = ['valide', 'refuse', 'en_attente', 'expire'];
+    if (!statutsValides.includes(statut)) {
+      return res.status(400).json({ message: 'Statut invalide.' });
+    }
+
+    const diagnostiqueur = await Diagnostiqueur.findById(id);
+
+    if (!diagnostiqueur) {
+      return res.status(404).json({ message: 'Diagnostiqueur non trouvé.' });
+    }
+
+    // Trouver le document dans le tableau documents
+    const document = diagnostiqueur.documents.id(documentId);
+
+    if (!document) {
+      return res.status(404).json({ message: 'Document non trouvé.' });
+    }
+
+    // Mettre à jour le statut
+    document.statut = statut;
+
+    // Si refusé, ajouter la raison
+    if (statut === 'refuse' && raison) {
+      document.raisonRefus = raison;
+    }
+
+    // Sauvegarder
+    await diagnostiqueur.save();
+
+    res.json({
+      message: `Document ${statut === 'valide' ? 'validé' : statut === 'refuse' ? 'refusé' : 'mis à jour'} avec succès.`,
+      document
+    });
+
+  } catch (error) {
+    console.error('Erreur changerStatutDocument:', error);
+    res.status(500).json({ message: 'Erreur lors de la modification du statut du document.' });
   }
 };
 

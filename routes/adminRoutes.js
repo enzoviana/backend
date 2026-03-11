@@ -161,6 +161,9 @@ router.delete('/diagnostiqueurs/:id', authMiddleware, adminDiagnostiqueurControl
 router.get('/diagnostiqueurs/:id/certifications', authMiddleware, adminDiagnostiqueurController.getCertificationsDiagnostiqueur);
 router.post('/diagnostiqueurs/:id/eligibilite', authMiddleware, adminDiagnostiqueurController.verifierEligibilite);
 
+// Gestion des documents
+router.put('/diagnostiqueurs/:id/documents/:documentId/statut', authMiddleware, adminDiagnostiqueurController.changerStatutDocument);
+
 // ---------------------- DOMAINES D'ACTIVITÉ ----------------------
 
 router.get('/domaines', authMiddleware, adminDiagnostiqueurController.getAllDomaines);
