@@ -215,11 +215,64 @@ const supprimerCertification = async (req, res) => {
   }
 };
 
+/**
+ * GET - Télécharger le document d'une certification (proxy Cloudinary sécurisé)
+ */
+const telechargerDocumentCertification = async (req, res) => {
+  try {
+    const { certificationId } = req.params;
+
+    const certification = await Certification.findById(certificationId);
+    if (!certification) {
+      return res.status(404).json({ message: 'Certification non trouvée' });
+    }
+
+    if (!certification.document || !certification.document.url) {
+      return res.status(404).json({ message: 'Aucun document associé à cette certification' });
+    }
+
+    const documentUrl = certification.document.url;
+    const documentNom = certification.document.nom || `certification-${certificationId}.pdf`;
+
+    // Récupérer le fichier depuis Cloudinary
+    const https = require('https');
+    const http = require('http');
+    const url = require('url');
+
+    const parsedUrl = url.parse(documentUrl);
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+    protocol.get(documentUrl, (cloudinaryResponse) => {
+      if (cloudinaryResponse.statusCode !== 200) {
+        return res.status(cloudinaryResponse.statusCode).json({
+          message: 'Erreur lors de la récupération du document depuis Cloudinary'
+        });
+      }
+
+      // Définir les headers pour le téléchargement
+      res.setHeader('Content-Type', cloudinaryResponse.headers['content-type'] || 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(documentNom)}"`);
+      res.setHeader('Content-Length', cloudinaryResponse.headers['content-length']);
+
+      // Pipe la réponse de Cloudinary vers le client
+      cloudinaryResponse.pipe(res);
+    }).on('error', (error) => {
+      console.error('Erreur téléchargement depuis Cloudinary:', error);
+      res.status(500).json({ message: 'Erreur lors du téléchargement du document' });
+    });
+
+  } catch (error) {
+    console.error('Erreur telechargerDocumentCertification:', error);
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Exportation groupée de toutes les fonctions
 module.exports = {
   getCertificationsEnAttente,
   getToutesCertifications,
   approuverCertification,
   rejeterCertification,
-  supprimerCertification
+  supprimerCertification,
+  telechargerDocumentCertification
 };

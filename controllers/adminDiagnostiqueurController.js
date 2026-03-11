@@ -460,4 +460,62 @@ exports.changerStatutDocument = async (req, res) => {
   }
 };
 
+/**
+ * GET - Télécharger un document d'un diagnostiqueur (proxy Cloudinary sécurisé)
+ */
+exports.telechargerDocument = async (req, res) => {
+  try {
+    const { id, documentId } = req.params;
+
+    const diagnostiqueur = await Diagnostiqueur.findById(id);
+    if (!diagnostiqueur) {
+      return res.status(404).json({ message: 'Diagnostiqueur non trouvé.' });
+    }
+
+    // Trouver le document dans le tableau documents
+    const document = diagnostiqueur.documents.id(documentId);
+    if (!document) {
+      return res.status(404).json({ message: 'Document non trouvé.' });
+    }
+
+    if (!document.url) {
+      return res.status(404).json({ message: 'Aucune URL de document disponible.' });
+    }
+
+    const documentUrl = document.url;
+    const documentNom = document.nom || `document-${documentId}.pdf`;
+
+    // Récupérer le fichier depuis Cloudinary
+    const https = require('https');
+    const http = require('http');
+    const url = require('url');
+
+    const parsedUrl = url.parse(documentUrl);
+    const protocol = parsedUrl.protocol === 'https:' ? https : http;
+
+    protocol.get(documentUrl, (cloudinaryResponse) => {
+      if (cloudinaryResponse.statusCode !== 200) {
+        return res.status(cloudinaryResponse.statusCode).json({
+          message: 'Erreur lors de la récupération du document depuis Cloudinary'
+        });
+      }
+
+      // Définir les headers pour le téléchargement
+      res.setHeader('Content-Type', cloudinaryResponse.headers['content-type'] || 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(documentNom)}"`);
+      res.setHeader('Content-Length', cloudinaryResponse.headers['content-length']);
+
+      // Pipe la réponse de Cloudinary vers le client
+      cloudinaryResponse.pipe(res);
+    }).on('error', (error) => {
+      console.error('Erreur téléchargement depuis Cloudinary:', error);
+      res.status(500).json({ message: 'Erreur lors du téléchargement du document' });
+    });
+
+  } catch (error) {
+    console.error('Erreur telechargerDocument:', error);
+    res.status(500).json({ message: 'Erreur lors du téléchargement du document.' });
+  }
+};
+
 module.exports = exports;

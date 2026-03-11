@@ -163,6 +163,7 @@ router.post('/diagnostiqueurs/:id/eligibilite', authMiddleware, adminDiagnostiqu
 
 // Gestion des documents
 router.put('/diagnostiqueurs/:id/documents/:documentId/statut', authMiddleware, adminDiagnostiqueurController.changerStatutDocument);
+router.get('/diagnostiqueurs/:id/documents/:documentId/download', authMiddleware, adminDiagnostiqueurController.telechargerDocument);
 
 // ---------------------- DOMAINES D'ACTIVITÉ ----------------------
 
@@ -183,6 +184,9 @@ router.put('/certifications/:certificationId/approuver', authMiddleware, adminCe
 
 // Rejeter une certification
 router.put('/certifications/:certificationId/rejeter', authMiddleware, adminCertificationController.rejeterCertification);
+
+// Télécharger le document d'une certification
+router.get('/certifications/:certificationId/download', authMiddleware, adminCertificationController.telechargerDocumentCertification);
 
 // Supprimer une certification
 router.delete('/certifications/:certificationId', authMiddleware, adminCertificationController.supprimerCertification);
