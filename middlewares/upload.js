@@ -37,18 +37,20 @@ const storage = new CloudinaryStorage({
   params: async (req, file) => {
     const ext = file.originalname.split('.').pop().toLowerCase();
     const missionId = req.body.missionId;
-    
     const publicId = await generateUniquePublicId(file.originalname, missionId);
 
-    // Définition du type de ressource Cloudinary
-    // 'raw' est obligatoire pour les archives (zip, rar) et les fichiers Excel/Doc complexes
-    const isRaw = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'zip', 'rar', '7z', 'txt', 'csv'].includes(ext);
+    // Détermination du resource_type
+    let resourceType = 'raw'; 
+    if (['jpg', 'jpeg', 'png', 'webp', 'pdf'].includes(ext)) {
+      resourceType = 'image'; // PDF et Images vont ici
+    }
 
     return {
       folder: 'dimotec',
       public_id: publicId,
-      resource_type: isRaw ? 'raw' : 'image', // 'raw' permet de stocker n'importe quel fichier binaire
-      // On ne met pas allowed_formats ici si resource_type est 'raw' (Cloudinary ne le supporte pas)
+      resource_type: resourceType,
+      // IMPORTANT : Pour les PDF en mode 'image', on peut forcer le format
+      format: ext === 'pdf' ? 'pdf' : undefined, 
     };
   }
 });
