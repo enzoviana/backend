@@ -371,7 +371,6 @@ exports.updateAdminMe = async (req, res) => {
         if (logo !== undefined) agence.logo = logo;
         if (nom_commercial !== undefined) agence.nom_commercial = nom_commercial;
         if (nom_responsable !== undefined) agence.nom_responsable = nom_responsable;
-        if (prenom_responsable !== undefined) agence.prenom_responsable = prenom_responsable;
         if (telephone_fixe !== undefined) agence.telephone_fixe = telephone_fixe;
         if (siret !== undefined) agence.siret = siret;
         if (numeroTVA !== undefined) agence.numeroTVA = numeroTVA;
@@ -382,11 +381,9 @@ exports.updateAdminMe = async (req, res) => {
         // Mise à jour de l'adresse
         if (adresse !== undefined) {
           if (typeof adresse === 'object') {
-            agence.adresse = {
-              rue: adresse.rue || '',
-              codePostal: adresse.codePostal || '',
-              ville: adresse.ville || ''
-            };
+            // Construire la chaîne d'adresse complète
+            const adresseStr = `${adresse.rue || ''}, ${adresse.codePostal || ''} ${adresse.ville || ''}`.trim();
+            agence.adresse = adresseStr;
           } else {
             agence.adresse = adresse;
           }
@@ -401,11 +398,14 @@ exports.updateAdminMe = async (req, res) => {
           }
         }
 
-        // Mise à jour admin.email et photoProfil
+        // Mise à jour du sous-document admin
         if (email !== undefined) agence.admin.email = email;
         if (photoProfil !== undefined) agence.admin.photo_profil = photoProfil;
         if (nom_responsable !== undefined) agence.admin.nom = nom_responsable;
         if (prenom_responsable !== undefined) agence.admin.prenom = prenom_responsable;
+
+        // Marquer le sous-document admin comme modifié pour forcer la sauvegarde
+        agence.markModified('admin');
 
         await agence.save();
       }
