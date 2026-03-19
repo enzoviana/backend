@@ -36,6 +36,7 @@ router.post('/register', adminController.register);
 router.post('/login', adminController.login);
 
 router.get('/me', authMiddleware, adminController.getAdminDetails);
+router.put('/me', authMiddleware, adminController.updateAdminMe);
 router.get("/verify-token",  adminController.verifyToken);
 
 // 🔹 Mot de passe oublié / réinitialisation admin

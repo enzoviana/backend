@@ -293,6 +293,143 @@ exports.updateAdmin = async (req, res) => {
   }
 };
 
+/**
+ * METTRE À JOUR LES INFOS DE L'ADMIN ET SON AGENCE (/api/admin/me PUT)
+ */
+exports.updateAdminMe = async (req, res) => {
+  try {
+    const adminId = req.user?.id || req.admin?.id;
+
+    if (!adminId) {
+      return res.status(400).json({ message: "Aucun identifiant d'admin fourni." });
+    }
+
+    // Récupérer l'admin et son agence liée
+    const admin = await Admin.findById(adminId).populate({ path: 'entreprise', model: 'Agence' });
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin introuvable.' });
+    }
+
+    const {
+      // Informations admin
+      nom,
+      prenom,
+      email,
+      telephone,
+      photoProfil,
+
+      // Informations agence
+      logo,
+      nom_commercial,
+      nom_responsable,
+      prenom_responsable,
+      adresse,
+      telephone_fixe,
+      siret,
+      numeroTVA,
+      activite,
+      domaine_intervention,
+      email_contact,
+      alerte_secteur
+    } = req.body;
+
+    // --- Mise à jour de l'admin ---
+    if (nom !== undefined) admin.nom = nom;
+    if (prenom !== undefined) admin.prenom = prenom;
+    if (email !== undefined) admin.email = email;
+    if (telephone !== undefined) admin.telephone = telephone;
+
+    // Mise à jour entreprise embarquée (sous-document CompanySchema)
+    if (!admin.entreprise || typeof admin.entreprise === 'string') {
+      // Si entreprise est un ObjectId, c'est une référence à une Agence
+      // On ne met pas à jour ici, on le fait plus bas
+    } else {
+      // Si entreprise est un sous-document CompanySchema
+      if (logo !== undefined) admin.entreprise.logo = logo;
+      if (nom_commercial !== undefined) admin.entreprise.name = nom_commercial;
+      if (siret !== undefined) admin.entreprise.siret = siret;
+      if (numeroTVA !== undefined) admin.entreprise.numeroTVA = numeroTVA;
+      if (telephone_fixe !== undefined) admin.entreprise.telephone = telephone_fixe;
+
+      if (adresse !== undefined) {
+        if (!admin.entreprise.adresse) admin.entreprise.adresse = {};
+        if (adresse.rue !== undefined) admin.entreprise.adresse.rue = adresse.rue;
+        if (adresse.codePostal !== undefined) admin.entreprise.adresse.codePostal = adresse.codePostal;
+        if (adresse.ville !== undefined) admin.entreprise.adresse.ville = adresse.ville;
+      }
+    }
+
+    await admin.save();
+
+    // --- Mise à jour de l'agence liée (si entreprise est un ObjectId) ---
+    if (admin.entreprise && typeof admin.entreprise === 'object' && admin.entreprise._id) {
+      const agenceId = admin.entreprise._id;
+      const agence = await Agence.findById(agenceId);
+
+      if (agence) {
+        // Mise à jour des champs de l'agence
+        if (logo !== undefined) agence.logo = logo;
+        if (nom_commercial !== undefined) agence.nom_commercial = nom_commercial;
+        if (nom_responsable !== undefined) agence.nom_responsable = nom_responsable;
+        if (prenom_responsable !== undefined) agence.prenom_responsable = prenom_responsable;
+        if (telephone_fixe !== undefined) agence.telephone_fixe = telephone_fixe;
+        if (siret !== undefined) agence.siret = siret;
+        if (numeroTVA !== undefined) agence.numeroTVA = numeroTVA;
+        if (activite !== undefined) agence.activite = activite;
+        if (domaine_intervention !== undefined) agence.domaine_intervention = domaine_intervention;
+        if (alerte_secteur !== undefined) agence.alerte_secteur = alerte_secteur;
+
+        // Mise à jour de l'adresse
+        if (adresse !== undefined) {
+          if (typeof adresse === 'object') {
+            agence.adresse = {
+              rue: adresse.rue || '',
+              codePostal: adresse.codePostal || '',
+              ville: adresse.ville || ''
+            };
+          } else {
+            agence.adresse = adresse;
+          }
+        }
+
+        // Mise à jour de l'email de contact
+        if (email_contact !== undefined) {
+          if (agence.emails_contact && agence.emails_contact.length > 0) {
+            agence.emails_contact[0].email = email_contact;
+          } else {
+            agence.emails_contact = [{ email: email_contact }];
+          }
+        }
+
+        // Mise à jour admin.email et photoProfil
+        if (email !== undefined) agence.admin.email = email;
+        if (photoProfil !== undefined) agence.admin.photo_profil = photoProfil;
+        if (nom_responsable !== undefined) agence.admin.nom = nom_responsable;
+        if (prenom_responsable !== undefined) agence.admin.prenom = prenom_responsable;
+
+        await agence.save();
+      }
+    }
+
+    res.status(200).json({
+      message: '✅ Informations mises à jour avec succès',
+      admin: {
+        id: admin._id,
+        nom: admin.nom,
+        prenom: admin.prenom,
+        email: admin.email,
+        telephone: admin.telephone
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors de la mise à jour des infos admin/agence :', error);
+    res.status(500).json({
+      message: 'Erreur serveur lors de la mise à jour des informations.',
+      error: error.message
+    });
+  }
+};
 
 
 /**
