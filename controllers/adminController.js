@@ -137,12 +137,19 @@ exports.getAdminDetails = async (req, res) => {
     // Convertir en objet plain
     const admin = adminDoc.toObject();
 
-    // Détermine l'agence
-    const agence = admin.entreprise
-      ? typeof admin.entreprise === 'object' && admin.entreprise._id
-        ? admin.entreprise // populated object
-        : admin.entreprise // déjà objet complet
-      : null;
+    // Vérifier si entreprise est une référence ObjectId ou un sous-document
+    let agence = null;
+    let isEntrepriseSubdocument = false;
+
+    if (admin.entreprise) {
+      // Si entreprise a un _id, c'est une référence à une Agence (populated)
+      if (typeof admin.entreprise === 'object' && admin.entreprise._id && admin.entreprise.nom_commercial) {
+        agence = admin.entreprise;
+      } else {
+        // Sinon, c'est un sous-document (CompanySchema)
+        isEntrepriseSubdocument = true;
+      }
+    }
 
     // Récupère configuration, diagnostics, packs et suppléments
     const configuration = await Configuration.findOne({ adminId: adminId }).lean();
@@ -154,10 +161,11 @@ exports.getAdminDetails = async (req, res) => {
     res.json({
       admin: {
         ...admin,
-        entreprise: undefined, // supprime le champ original pour éviter doublon
-        aAccesGoogleCalendar, // Ajouter le boolean pour l'accès Google Calendar
+        // Ne supprimer entreprise que si c'était une référence
+        entreprise: isEntrepriseSubdocument ? admin.entreprise : undefined,
+        aAccesGoogleCalendar,
       },
-      agence,
+      agence, // Agence reference (si existe)
       configuration,
       diagnostics,
       packs,
