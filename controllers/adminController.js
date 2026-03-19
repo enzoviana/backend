@@ -298,53 +298,46 @@ exports.updateAdmin = async (req, res) => {
  */
 exports.updateAdminMe = async (req, res) => {
   try {
+    console.log("🚀 --- DÉBUT UPDATE ADMIN ME ---");
     const adminId = req.user?.id || req.admin?.id;
+    console.log("🆔 Admin ID détecté :", adminId);
 
     if (!adminId) {
+      console.log("⚠️ Erreur : Aucun ID trouvé dans la requête.");
       return res.status(400).json({ message: "Aucun identifiant d'admin fourni." });
     }
 
     // Récupérer l'admin et son agence liée
     const admin = await Admin.findById(adminId).populate({ path: 'entreprise', model: 'Agence' });
+    
     if (!admin) {
+      console.log("❌ Admin non trouvé en base pour l'ID :", adminId);
       return res.status(404).json({ message: 'Admin introuvable.' });
     }
 
-    const {
-      // Informations admin
-      nom,
-      prenom,
-      email,
-      telephone,
-      photoProfil,
+    console.log("👤 Admin trouvé :", admin.nom, admin.prenom);
+    console.log("🏢 Agence liée via populate :", admin.entreprise ? admin.entreprise.nom_commercial : "Aucune");
+    console.log("📦 Données reçues (req.body) :", JSON.stringify(req.body, null, 2));
 
-      // Informations agence
-      logo,
-      nom_commercial,
-      nom_responsable,
-      prenom_responsable,
-      adresse,
-      telephone_fixe,
-      siret,
-      numeroTVA,
-      activite,
-      domaine_intervention,
-      email_contact,
-      alerte_secteur
+    const {
+      nom, prenom, email, telephone, photoProfil,
+      logo, nom_commercial, nom_responsable, prenom_responsable,
+      adresse, telephone_fixe, siret, numeroTVA,
+      activite, domaine_intervention, email_contact, alerte_secteur
     } = req.body;
 
-    // --- Mise à jour de l'admin ---
+    // --- 1. Mise à jour de l'objet ADMIN ---
+    console.log("🛠️ Mise à jour des champs Admin...");
     if (nom !== undefined) admin.nom = nom;
     if (prenom !== undefined) admin.prenom = prenom;
     if (email !== undefined) admin.email = email;
     if (telephone !== undefined) admin.telephone = telephone;
 
-    // Mise à jour entreprise embarquée (sous-document CompanySchema)
+    // Mise à jour entreprise EMBARQUÉE (si c'est un schéma imbriqué et non une ref)
     if (!admin.entreprise || typeof admin.entreprise === 'string') {
-      // Si entreprise est un ObjectId, c'est une référence à une Agence
-      // On ne met pas à jour ici, on le fait plus bas
+      console.log("ℹ️ L'admin utilise une référence d'agence (ObjectId), pas de sous-document imbriqué.");
     } else {
-      // Si entreprise est un sous-document CompanySchema
+      console.log("📝 Mise à jour du sous-document entreprise interne à l'Admin...");
       if (logo !== undefined) admin.entreprise.logo = logo;
       if (nom_commercial !== undefined) admin.entreprise.name = nom_commercial;
       if (siret !== undefined) admin.entreprise.siret = siret;
@@ -360,14 +353,17 @@ exports.updateAdminMe = async (req, res) => {
     }
 
     await admin.save();
+    console.log("✅ Document Admin sauvegardé.");
 
-    // --- Mise à jour de l'agence liée (si entreprise est un ObjectId) ---
+    // --- 2. Mise à jour de l'AGENCE liée (Modèle Agence séparé) ---
     if (admin.entreprise && typeof admin.entreprise === 'object' && admin.entreprise._id) {
       const agenceId = admin.entreprise._id;
+      console.log("🔍 Recherche de l'agence physique ID :", agenceId);
+      
       const agence = await Agence.findById(agenceId);
 
       if (agence) {
-        // Mise à jour des champs de l'agence
+        console.log("🛠️ Mise à jour des champs de l'agence :", agence.nom_commercial);
         if (logo !== undefined) agence.logo = logo;
         if (nom_commercial !== undefined) agence.nom_commercial = nom_commercial;
         if (nom_responsable !== undefined) agence.nom_responsable = nom_responsable;
@@ -378,19 +374,20 @@ exports.updateAdminMe = async (req, res) => {
         if (domaine_intervention !== undefined) agence.domaine_intervention = domaine_intervention;
         if (alerte_secteur !== undefined) agence.alerte_secteur = alerte_secteur;
 
-        // Mise à jour de l'adresse
+        // Adresse
         if (adresse !== undefined) {
           if (typeof adresse === 'object') {
-            // Construire la chaîne d'adresse complète
             const adresseStr = `${adresse.rue || ''}, ${adresse.codePostal || ''} ${adresse.ville || ''}`.trim();
             agence.adresse = adresseStr;
+            console.log("📍 Adresse formatée en string :", adresseStr);
           } else {
             agence.adresse = adresse;
           }
         }
 
-        // Mise à jour de l'email de contact
+        // Email de contact
         if (email_contact !== undefined) {
+          console.log("📧 Mise à jour email contact agence...");
           if (agence.emails_contact && agence.emails_contact.length > 0) {
             agence.emails_contact[0].email = email_contact;
           } else {
@@ -398,19 +395,22 @@ exports.updateAdminMe = async (req, res) => {
           }
         }
 
-        // Mise à jour du sous-document admin
+        // Synchronisation des infos admin dans l'agence (pour les devis/factures)
+        console.log("🔄 Synchronisation du profil responsable dans le document Agence...");
         if (email !== undefined) agence.admin.email = email;
         if (photoProfil !== undefined) agence.admin.photo_profil = photoProfil;
         if (nom_responsable !== undefined) agence.admin.nom = nom_responsable;
         if (prenom_responsable !== undefined) agence.admin.prenom = prenom_responsable;
 
-        // Marquer le sous-document admin comme modifié pour forcer la sauvegarde
         agence.markModified('admin');
-
         await agence.save();
+        console.log("✅ Document Agence sauvegardé avec succès.");
+      } else {
+        console.log("⚠️ Agence introuvable en base malgré l'ID présent dans l'admin.");
       }
     }
 
+    console.log("✨ --- FIN DE PROCÉDURE RÉUSSIE ---");
     res.status(200).json({
       message: '✅ Informations mises à jour avec succès',
       admin: {
@@ -423,7 +423,7 @@ exports.updateAdminMe = async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Erreur lors de la mise à jour des infos admin/agence :', error);
+    console.error('❌ ERREUR CRITIQUE :', error);
     res.status(500).json({
       message: 'Erreur serveur lors de la mise à jour des informations.',
       error: error.message
