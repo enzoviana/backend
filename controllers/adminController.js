@@ -294,7 +294,7 @@ exports.updateAdmin = async (req, res) => {
 };
 
 /**
- * METTRE À JOUR LES INFOS DE L'ADMIN ET SON AGENCE (/api/admin/me PUT)
+ * METTRE À JOUR LES INFOS DE L'ADMIN ET SON ENTREPRISE (/api/admin/me PUT)
  */
 exports.updateAdminMe = async (req, res) => {
   try {
@@ -307,108 +307,108 @@ exports.updateAdminMe = async (req, res) => {
       return res.status(400).json({ message: "Aucun identifiant d'admin fourni." });
     }
 
-    // Récupérer l'admin et son agence liée
-    const admin = await Admin.findById(adminId).populate({ path: 'entreprise', model: 'Agence' });
-    
+    // Récupérer l'admin (l'entreprise est un sous-document, pas une ref)
+    const admin = await Admin.findById(adminId);
+
     if (!admin) {
       console.log("❌ Admin non trouvé en base pour l'ID :", adminId);
       return res.status(404).json({ message: 'Admin introuvable.' });
     }
 
     console.log("👤 Admin trouvé :", admin.nom, admin.prenom);
-    console.log("🏢 Agence liée via populate :", admin.entreprise ? admin.entreprise.nom_commercial : "Aucune");
+    console.log("🏢 Entreprise (sous-doc) :", admin.entreprise?.name || "Non définie");
     console.log("📦 Données reçues (req.body) :", JSON.stringify(req.body, null, 2));
 
     const {
-      nom, prenom, email, telephone, photoProfil,
-      logo, nom_commercial, nom_responsable, prenom_responsable,
-      adresse, telephone_fixe, siret, numeroTVA,
-      activite, domaine_intervention, email_contact, alerte_secteur
+      // Informations du responsable (admin)
+      nom_responsable,
+      prenom_responsable,
+      email,
+      telephone,
+      photoProfil,
+
+      // Informations entreprise
+      logo,
+      nom_commercial,
+      adresse,
+      telephone_fixe,
+      siret,
+      numeroTVA
     } = req.body;
 
-    // --- 1. Mise à jour de l'objet ADMIN ---
-    console.log("🛠️ Mise à jour des champs Admin...");
-    if (nom !== undefined) admin.nom = nom;
-    if (prenom !== undefined) admin.prenom = prenom;
-    if (email !== undefined) admin.email = email;
-    if (telephone !== undefined) admin.telephone = telephone;
+    // --- 1. Mise à jour des infos personnelles de l'admin (responsable) ---
+    console.log("🛠️ Mise à jour des champs Admin (responsable)...");
+    if (nom_responsable !== undefined) {
+      admin.nom = nom_responsable;
+      console.log("✏️ admin.nom =", nom_responsable);
+    }
+    if (prenom_responsable !== undefined) {
+      admin.prenom = prenom_responsable;
+      console.log("✏️ admin.prenom =", prenom_responsable);
+    }
+    if (email !== undefined) {
+      admin.email = email;
+      console.log("✏️ admin.email =", email);
+    }
+    if (telephone !== undefined) {
+      admin.telephone = telephone;
+      console.log("✏️ admin.telephone =", telephone);
+    }
+    if (photoProfil !== undefined) {
+      admin.photoProfil = photoProfil;
+      console.log("✏️ admin.photoProfil = [IMAGE BASE64]");
+    }
 
-    // Mise à jour entreprise EMBARQUÉE (si c'est un schéma imbriqué et non une ref)
-    if (!admin.entreprise || typeof admin.entreprise === 'string') {
-      console.log("ℹ️ L'admin utilise une référence d'agence (ObjectId), pas de sous-document imbriqué.");
-    } else {
-      console.log("📝 Mise à jour du sous-document entreprise interne à l'Admin...");
-      if (logo !== undefined) admin.entreprise.logo = logo;
-      if (nom_commercial !== undefined) admin.entreprise.name = nom_commercial;
-      if (siret !== undefined) admin.entreprise.siret = siret;
-      if (numeroTVA !== undefined) admin.entreprise.numeroTVA = numeroTVA;
-      if (telephone_fixe !== undefined) admin.entreprise.telephone = telephone_fixe;
+    // --- 2. Mise à jour de l'entreprise (sous-document) ---
+    console.log("🏢 Mise à jour du sous-document entreprise...");
+    if (!admin.entreprise) {
+      admin.entreprise = {};
+      console.log("⚠️ Sous-document entreprise créé car inexistant.");
+    }
 
-      if (adresse !== undefined) {
-        if (!admin.entreprise.adresse) admin.entreprise.adresse = {};
-        if (adresse.rue !== undefined) admin.entreprise.adresse.rue = adresse.rue;
-        if (adresse.codePostal !== undefined) admin.entreprise.adresse.codePostal = adresse.codePostal;
-        if (adresse.ville !== undefined) admin.entreprise.adresse.ville = adresse.ville;
+    if (logo !== undefined) {
+      admin.entreprise.logo = logo;
+      console.log("✏️ entreprise.logo = [IMAGE BASE64]");
+    }
+    if (nom_commercial !== undefined) {
+      admin.entreprise.name = nom_commercial;
+      console.log("✏️ entreprise.name =", nom_commercial);
+    }
+    if (siret !== undefined) {
+      admin.entreprise.siret = siret;
+      console.log("✏️ entreprise.siret =", siret);
+    }
+    if (numeroTVA !== undefined) {
+      admin.entreprise.numeroTVA = numeroTVA;
+      console.log("✏️ entreprise.numeroTVA =", numeroTVA);
+    }
+    if (telephone_fixe !== undefined) {
+      admin.entreprise.telephone = telephone_fixe;
+      console.log("✏️ entreprise.telephone =", telephone_fixe);
+    }
+
+    // Mise à jour de l'adresse
+    if (adresse !== undefined) {
+      if (!admin.entreprise.adresse) admin.entreprise.adresse = {};
+      if (adresse.rue !== undefined) {
+        admin.entreprise.adresse.rue = adresse.rue;
+        console.log("✏️ entreprise.adresse.rue =", adresse.rue);
+      }
+      if (adresse.codePostal !== undefined) {
+        admin.entreprise.adresse.codePostal = adresse.codePostal;
+        console.log("✏️ entreprise.adresse.codePostal =", adresse.codePostal);
+      }
+      if (adresse.ville !== undefined) {
+        admin.entreprise.adresse.ville = adresse.ville;
+        console.log("✏️ entreprise.adresse.ville =", adresse.ville);
       }
     }
+
+    // Marquer le sous-document entreprise comme modifié pour forcer la sauvegarde
+    admin.markModified('entreprise');
 
     await admin.save();
-    console.log("✅ Document Admin sauvegardé.");
-
-    // --- 2. Mise à jour de l'AGENCE liée (Modèle Agence séparé) ---
-    if (admin.entreprise && typeof admin.entreprise === 'object' && admin.entreprise._id) {
-      const agenceId = admin.entreprise._id;
-      console.log("🔍 Recherche de l'agence physique ID :", agenceId);
-      
-      const agence = await Agence.findById(agenceId);
-
-      if (agence) {
-        console.log("🛠️ Mise à jour des champs de l'agence :", agence.nom_commercial);
-        if (logo !== undefined) agence.logo = logo;
-        if (nom_commercial !== undefined) agence.nom_commercial = nom_commercial;
-        if (nom_responsable !== undefined) agence.nom_responsable = nom_responsable;
-        if (telephone_fixe !== undefined) agence.telephone_fixe = telephone_fixe;
-        if (siret !== undefined) agence.siret = siret;
-        if (numeroTVA !== undefined) agence.numeroTVA = numeroTVA;
-        if (activite !== undefined) agence.activite = activite;
-        if (domaine_intervention !== undefined) agence.domaine_intervention = domaine_intervention;
-        if (alerte_secteur !== undefined) agence.alerte_secteur = alerte_secteur;
-
-        // Adresse
-        if (adresse !== undefined) {
-          if (typeof adresse === 'object') {
-            const adresseStr = `${adresse.rue || ''}, ${adresse.codePostal || ''} ${adresse.ville || ''}`.trim();
-            agence.adresse = adresseStr;
-            console.log("📍 Adresse formatée en string :", adresseStr);
-          } else {
-            agence.adresse = adresse;
-          }
-        }
-
-        // Email de contact
-        if (email_contact !== undefined) {
-          console.log("📧 Mise à jour email contact agence...");
-          if (agence.emails_contact && agence.emails_contact.length > 0) {
-            agence.emails_contact[0].email = email_contact;
-          } else {
-            agence.emails_contact = [{ email: email_contact }];
-          }
-        }
-
-        // Synchronisation des infos admin dans l'agence (pour les devis/factures)
-        console.log("🔄 Synchronisation du profil responsable dans le document Agence...");
-        if (email !== undefined) agence.admin.email = email;
-        if (photoProfil !== undefined) agence.admin.photo_profil = photoProfil;
-        if (nom_responsable !== undefined) agence.admin.nom = nom_responsable;
-        if (prenom_responsable !== undefined) agence.admin.prenom = prenom_responsable;
-
-        agence.markModified('admin');
-        await agence.save();
-        console.log("✅ Document Agence sauvegardé avec succès.");
-      } else {
-        console.log("⚠️ Agence introuvable en base malgré l'ID présent dans l'admin.");
-      }
-    }
+    console.log("✅ Document Admin sauvegardé avec succès.");
 
     console.log("✨ --- FIN DE PROCÉDURE RÉUSSIE ---");
     res.status(200).json({
@@ -418,7 +418,16 @@ exports.updateAdminMe = async (req, res) => {
         nom: admin.nom,
         prenom: admin.prenom,
         email: admin.email,
-        telephone: admin.telephone
+        telephone: admin.telephone,
+        photoProfil: admin.photoProfil,
+        entreprise: {
+          name: admin.entreprise?.name,
+          logo: admin.entreprise?.logo,
+          telephone: admin.entreprise?.telephone,
+          siret: admin.entreprise?.siret,
+          numeroTVA: admin.entreprise?.numeroTVA,
+          adresse: admin.entreprise?.adresse
+        }
       }
     });
 

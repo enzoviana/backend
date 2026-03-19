@@ -76,6 +76,11 @@ const AdminSchema = new Schema({
     type: String,
     trim: true
   },
+  photoProfil: {
+    type: String,
+    trim: true,
+    default: null
+  },
 
   // OPTION A: entreprise embarquée (sous-document)
   entreprise: {
