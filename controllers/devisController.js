@@ -235,7 +235,7 @@ exports.getDevis = async (req, res) => {
       return {
         _id: d._id,
         numero: d.numero || `DV-${d._id.toString().slice(-4)}`,
-        nomAgence: d.agenceId?.nom_commercial || ' ',
+        nomAgence: d.agenceId?.nom_commercial ||' DIMOTEC ',
         pack: d.pack || null,
         diagnosticsSelectionnes: d.diagnosticsSelectionnes || [],
         montantTTC: d.montantTTC || 0,
