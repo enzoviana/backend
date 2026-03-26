@@ -995,6 +995,17 @@ exports.createDevis = async (req, res) => {
         return res.status(404).json({ message: "Client introuvable." });
       }
 
+      // ⚠️ Vérifier s'il y a des doublons d'email pour ce client
+      if (client.email) {
+        const duplicates = await Client.find({ email: client.email, _id: { $ne: client._id } });
+        if (duplicates.length > 0) {
+          console.warn('⚠️ ATTENTION: Plusieurs clients avec le même email détectés!');
+          console.warn(`   Email: ${client.email}`);
+          console.warn(`   Client sélectionné: ${client._id} - ${client.prenom} ${client.nom}`);
+          console.warn(`   Autres clients avec cet email:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
+        }
+      }
+
       // Ajouter l'agence au client s'il ne l'a pas déjà
       if (agenceId && !client.agences.includes(agenceId)) {
         client.agences.push(agenceId);

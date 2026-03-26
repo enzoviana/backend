@@ -50,6 +50,15 @@ const Employe = require("../models/Employe");
           console.log(`❌ Client introuvable pour ${devis.numero} → OM impossible`);
           continue;
         }
+
+        // ⚠️ Vérifier s'il y a des doublons d'email
+        const duplicates = await Client.find({ email: devis.client.email, _id: { $ne: client._id } });
+        if (duplicates.length > 0) {
+          console.warn(`⚠️ ATTENTION: Plusieurs clients avec l'email ${devis.client.email} !`);
+          console.warn(`   Client utilisé: ${client._id} - ${client.prenom} ${client.nom}`);
+          console.warn(`   ${duplicates.length} autre(s) client(s) avec cet email trouvé(s)`);
+        }
+
         clientId = client._id;
       }
 
