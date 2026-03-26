@@ -10,7 +10,14 @@ const devisSchema = new mongoose.Schema({
 
   raisonRefus: String,
 
-  /* 👤 Informations du client */
+  /* 🔗 Référence au client dans la collection Client */
+  clientId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Client",
+    required: false, // Optionnel pour compatibilité avec anciens devis
+  },
+
+  /* 👤 Informations du client (embedded pour historique) */
   client: {
     nom: { type: String, required: true },
     prenom: { type: String, required: true },

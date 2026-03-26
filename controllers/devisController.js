@@ -746,7 +746,18 @@ exports.generateDevisAI = async (req, res) => {
 
     // 7. Vérification si le client existe déjà
     if (clientInfo.email) {
-      const existingClient = await Client.findOne({ email: clientInfo.email });
+      // ⚠️ Vérifier s'il y a des doublons d'email
+      const duplicates = await Client.find({ email: clientInfo.email });
+
+      if (duplicates.length > 1) {
+        console.warn("⚠️ [IA-DEVIS] Plusieurs clients avec le même email détectés !");
+        console.warn(`   Email: ${clientInfo.email}`);
+        console.warn(`   Nombre de clients: ${duplicates.length}`);
+        console.warn(`   Clients trouvés:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
+        console.warn("   ⚠️ Utilisation du premier client trouvé - Vérifiez manuellement");
+      }
+
+      const existingClient = duplicates[0];
       if (existingClient) {
         clientInfo = { ...existingClient.toObject(), ...clientInfo }; // Fusionne avec l'existant
       }
@@ -1538,6 +1549,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       shareAgency: shareAgencyId,
       shareAgencyName,
       creePar,
+      clientId: client._id, // ✅ IMPORTANT : Stocker la référence au client
       client: {
         nom: client.nom,
         prenom: client.prenom,
@@ -1598,6 +1610,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
     console.log('✅ Devis créé:', {
       numero: devis.numero,
       _id: devis._id.toString(),
+      clientId: devis.clientId?.toString() || 'NON DÉFINI', // ✅ Vérifier que le clientId est bien sauvegardé
       diagnostiqueurAssigne: devis.diagnostiqueurAssigne?.toString() || 'NON ASSIGNÉ',
       agenceId: devis.agenceId?.toString() || 'AUCUNE',
       client: `${devis.client.nom} ${devis.client.prenom}`
@@ -2015,9 +2028,38 @@ exports.uploadPdfDevis = async (req, res) => {
     // 4️⃣ LOGIQUE MÉTIER : Création de l'Ordre de Mission
     console.log("📝 [UPLOAD-PDF] Création de l'Ordre de Mission...");
     let clientId = devis.clientId;
+
+    // ⚠️ IMPORTANT : Toujours privilégier le clientId du devis
     if (!clientId && devis.client?.email) {
-      const client = await Client.findOne({ email: devis.client.email });
-      clientId = client?._id;
+      console.warn("⚠️ [UPLOAD-PDF] Devis sans clientId, recherche par email...");
+
+      // Vérifier s'il y a des doublons d'email
+      const duplicates = await Client.find({ email: devis.client.email });
+
+      if (duplicates.length > 1) {
+        console.error("❌ [UPLOAD-PDF] PLUSIEURS CLIENTS AVEC LE MÊME EMAIL DÉTECTÉS !");
+        console.error(`   Email: ${devis.client.email}`);
+        console.error(`   Nombre de clients: ${duplicates.length}`);
+        console.error(`   Clients trouvés:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
+        console.error("   ⚠️ IMPOSSIBLE DE DÉTERMINER LE BON CLIENT - ORDRE DE MISSION NON CRÉÉ");
+
+        // Ne pas créer d'ordre de mission si doublons détectés
+        return res.status(400).json({
+          message: "Plusieurs clients avec le même email détectés. Impossible de créer l'ordre de mission automatiquement. Veuillez contacter le support."
+        });
+      }
+
+      const client = duplicates[0];
+      if (client) {
+        clientId = client._id;
+
+        // Mettre à jour le devis avec le clientId trouvé
+        devis.clientId = clientId;
+        await devis.save();
+        console.log("✅ [UPLOAD-PDF] Client trouvé et associé au devis:", clientId);
+      } else {
+        console.error("❌ [UPLOAD-PDF] Aucun client trouvé avec l'email:", devis.client.email);
+      }
     }
 
     // Récupérer le diagnostiqueur assigné au devis, sinon le diagnostiqueur par défaut de l'agence
@@ -2779,8 +2821,28 @@ exports.updateDevisInfos = async (req, res) => {
         } else {
           let clientId = devis.clientId;
 
+          // ⚠️ IMPORTANT : Toujours privilégier le clientId du devis
           if (!clientId && devis.client?.email) {
-            let clientExist = await Client.findOne({ email: devis.client.email });
+            console.warn("⚠️ Devis sans clientId, recherche par email...");
+
+            // Vérifier s'il y a des doublons d'email
+            const duplicates = await Client.find({ email: devis.client.email });
+
+            if (duplicates.length > 1) {
+              console.error("❌ PLUSIEURS CLIENTS AVEC LE MÊME EMAIL DÉTECTÉS !");
+              console.error(`   Email: ${devis.client.email}`);
+              console.error(`   Nombre de clients: ${duplicates.length}`);
+              console.error(`   Clients trouvés:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
+              console.error("   ⚠️ ORDRE DE MISSION NON CRÉÉ - Doublons d'email détectés");
+
+              // Ne pas créer l'ordre de mission si doublons
+              return res.status(200).json({
+                message: "Devis mis à jour, mais ordre de mission non créé (doublons d'email détectés)",
+                devis
+              });
+            }
+
+            let clientExist = duplicates[0];
 
             if (!clientExist) {
               clientExist = new Client({

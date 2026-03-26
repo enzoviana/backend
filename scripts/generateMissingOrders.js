@@ -43,23 +43,34 @@ const Employe = require("../models/Employe");
       // ────────────────────────────────────────────
       let clientId = devis.clientId;
 
+      // ⚠️ IMPORTANT : Toujours privilégier le clientId du devis
       if (!clientId && devis.client?.email) {
-        const client = await Client.findOne({ email: devis.client.email });
+        console.warn(`⚠️ Devis ${devis.numero} sans clientId, recherche par email...`);
 
-        if (!client) {
+        // Vérifier s'il y a des doublons d'email AVANT de sélectionner
+        const duplicates = await Client.find({ email: devis.client.email });
+
+        if (duplicates.length === 0) {
           console.log(`❌ Client introuvable pour ${devis.numero} → OM impossible`);
           continue;
         }
 
-        // ⚠️ Vérifier s'il y a des doublons d'email
-        const duplicates = await Client.find({ email: devis.client.email, _id: { $ne: client._id } });
-        if (duplicates.length > 0) {
-          console.warn(`⚠️ ATTENTION: Plusieurs clients avec l'email ${devis.client.email} !`);
-          console.warn(`   Client utilisé: ${client._id} - ${client.prenom} ${client.nom}`);
-          console.warn(`   ${duplicates.length} autre(s) client(s) avec cet email trouvé(s)`);
+        if (duplicates.length > 1) {
+          console.error(`❌ PLUSIEURS CLIENTS (${duplicates.length}) AVEC L'EMAIL ${devis.client.email} !`);
+          console.error(`   Devis: ${devis.numero}`);
+          console.error(`   Clients trouvés:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
+          console.error(`   ⚠️ ORDRE DE MISSION NON CRÉÉ - Impossible de déterminer le bon client`);
+          continue; // Sauter ce devis
         }
 
+        // Un seul client trouvé, on peut l'utiliser en toute sécurité
+        const client = duplicates[0];
         clientId = client._id;
+
+        // Mettre à jour le devis avec le clientId
+        devis.clientId = clientId;
+        await devis.save();
+        console.log(`✅ Client trouvé et associé au devis: ${client._id} - ${client.prenom} ${client.nom}`);
       }
 
       // ────────────────────────────────────────────
