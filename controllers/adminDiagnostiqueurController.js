@@ -3,6 +3,7 @@ const Certification = require('../models/Certification');
 const OrdreMission = require('../models/OrdreMission');
 const DomaineActivite = require('../models/DomaineActivite');
 const eligibiliteService = require('../services/eligibiliteService');
+const sendEmail = require('../utils/sendEmails');
 
 /**
  * Récupérer tous les diagnostiqueurs
@@ -152,7 +153,26 @@ exports.validerDiagnostiqueur = async (req, res) => {
 
     await diagnostiqueur.save();
 
-    // TODO: Envoyer email de confirmation au diagnostiqueur
+    // Envoyer email de confirmation au diagnostiqueur
+    try {
+      const loginUrl = process.env.FRONTEND_DIAGNOSTIQUEUR_URL || 'https://diagnostiqueur.dimotec.fr';
+
+      await sendEmail({
+        to: diagnostiqueur.admin.email,
+        subject: 'Votre compte Dimotec est approuvé !',
+        template: 'CompteDiagnostiqueurApprouve.html',
+        variables: {
+          prenom: diagnostiqueur.admin.prenom,
+          nom: diagnostiqueur.admin.nom,
+          nom_entreprise: diagnostiqueur.nom_entreprise,
+          login_url: loginUrl
+        }
+      });
+      console.log(`✅ Email d'approbation envoyé à ${diagnostiqueur.admin.email}`);
+    } catch (emailError) {
+      console.error('❌ Erreur envoi email approbation:', emailError);
+      // On ne bloque pas la validation si l'email échoue
+    }
 
     res.json({
       message: 'Diagnostiqueur validé avec succès.',
@@ -183,7 +203,24 @@ exports.bloquerDiagnostiqueur = async (req, res) => {
 
     await diagnostiqueur.save();
 
-    // TODO: Envoyer email au diagnostiqueur avec la raison
+    // Envoyer email au diagnostiqueur avec la raison
+    try {
+      await sendEmail({
+        to: diagnostiqueur.admin.email,
+        subject: 'Votre compte Dimotec a été bloqué',
+        template: 'CompteDiagnostiqueurBloque.html',
+        variables: {
+          prenom: diagnostiqueur.admin.prenom,
+          nom: diagnostiqueur.admin.nom,
+          nom_entreprise: diagnostiqueur.nom_entreprise,
+          raison: raison || 'Aucune raison spécifiée. Veuillez contacter l\'administrateur.'
+        }
+      });
+      console.log(`✅ Email de blocage envoyé à ${diagnostiqueur.admin.email}`);
+    } catch (emailError) {
+      console.error('❌ Erreur envoi email blocage:', emailError);
+      // On ne bloque pas le blocage si l'email échoue
+    }
 
     res.json({
       message: 'Diagnostiqueur bloqué avec succès.',

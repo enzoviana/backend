@@ -178,6 +178,7 @@ export class ChromeLauncher extends BrowserLauncher {
       'MediaRouter',
       'OptimizationHints',
       'RenderDocument', // https://crbug.com/444150315
+      'PartitionAllocSchedulerLoopQuarantineTaskControlledPurge', // https://crbug.com/489314676
       ...(turnOnExperimentalFeaturesForTesting
         ? []
         : [
@@ -244,6 +245,14 @@ export class ChromeLauncher extends BrowserLauncher {
       userDataDir,
       enableExtensions = false,
     } = options;
+
+    if (
+      process.env['PUPPETEER_DANGEROUS_NO_SANDBOX'] === 'true' &&
+      !args.includes('--no-sandbox')
+    ) {
+      chromeArguments.push('--no-sandbox');
+    }
+
     if (userDataDir) {
       // If absolute (for any platform) path is given, we should not resolve it.
       chromeArguments.push(

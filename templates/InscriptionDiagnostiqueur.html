@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bienvenue sur Dimotec</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #f4f7fa;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 600px;
+            margin: 40px auto;
+            background-color: #ffffff;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+        }
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #ffffff;
+            text-align: center;
+            padding: 40px 20px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            font-weight: 700;
+        }
+        .content {
+            padding: 40px 30px;
+            color: #333333;
+            line-height: 1.6;
+        }
+        .content h2 {
+            color: #667eea;
+            font-size: 22px;
+            margin-top: 0;
+        }
+        .info-box {
+            background-color: #f8f9fa;
+            border-left: 4px solid #667eea;
+            padding: 15px 20px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        .info-box p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+        .status-badge {
+            display: inline-block;
+            background-color: #ffc107;
+            color: #000;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 600;
+            font-size: 14px;
+            margin: 10px 0;
+        }
+        .footer {
+            background-color: #f8f9fa;
+            text-align: center;
+            padding: 25px;
+            font-size: 12px;
+            color: #6c757d;
+        }
+        .footer a {
+            color: #667eea;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎉 Inscription réussie !</h1>
+        </div>
+
+        <div class="content">
+            <h2>Bonjour {{prenom}} {{nom}},</h2>
+
+            <p>Merci d'avoir rejoint <strong>Dimotec</strong> ! Votre demande d'inscription a bien été reçue.</p>
+
+            <div class="info-box">
+                <p><strong>📋 Informations de votre entreprise :</strong></p>
+                <p><strong>Nom :</strong> {{nom_entreprise}}</p>
+                <p><strong>SIRET :</strong> {{siret}}</p>
+                <p><strong>Email :</strong> {{email}}</p>
+            </div>
+
+            <p>Votre compte est actuellement : <span class="status-badge">⏳ En attente de validation</span></p>
+
+            <p>Notre équipe va examiner votre dossier dans les plus brefs délais. Vous recevrez un email de confirmation dès que votre compte sera approuvé.</p>
+
+            <p><strong>Prochaines étapes :</strong></p>
+            <ul>
+                <li>✅ Vérification de vos informations par notre équipe</li>
+                <li>📧 Réception d'un email de confirmation</li>
+                <li>🚀 Accès complet à la plateforme Dimotec</li>
+            </ul>
+
+            <p>Si vous avez des questions, n'hésitez pas à nous contacter.</p>
+
+            <p>À très bientôt !<br><strong>L'équipe Dimotec</strong></p>
+        </div>
+
+        <div class="footer">
+            <p>© 2024 Dimotec Contrôles - Tous droits réservés</p>
+            <p>298 rue d'Alco, 34080 Montpellier | Tél : 04 67 60 50 18</p>
+            <p><a href="mailto:contact@dimotec.fr">contact@dimotec.fr</a></p>
+        </div>
+    </div>
+</body>
+</html>

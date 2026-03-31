@@ -15,6 +15,7 @@ const cloudinary = require('../config/cloudinary');
 const alerteService = require('../services/alerteService');
 const notationService = require('../services/notationService');
 const stripeService = require('../services/stripeService');
+const sendEmail = require('../utils/sendEmails');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'tonSecretIci';
 
@@ -64,7 +65,25 @@ exports.register = async (req, res) => {
 
     await diagnostiqueur.save();
 
-    // TODO: Envoyer email de confirmation à l'admin plateforme
+    // Envoyer email de confirmation au diagnostiqueur
+    try {
+      await sendEmail({
+        to: admin.email,
+        subject: 'Bienvenue sur Dimotec - Inscription réussie',
+        template: 'InscriptionDiagnostiqueur.html',
+        variables: {
+          prenom: admin.prenom,
+          nom: admin.nom,
+          nom_entreprise,
+          siret,
+          email: admin.email
+        }
+      });
+      console.log(`✅ Email d'inscription envoyé à ${admin.email}`);
+    } catch (emailError) {
+      console.error('❌ Erreur envoi email inscription:', emailError);
+      // On ne bloque pas l'inscription si l'email échoue
+    }
 
     res.status(201).json({
       message: 'Inscription réussie. Votre compte est en attente de validation.',
