@@ -3,138 +3,93 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Compte Bloqué</title>
+    <title>Compte bloqué</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7fa;
             margin: 0;
             padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
         }
         .container {
             max-width: 600px;
-            margin: 40px auto;
+            margin: 0 auto;
             background-color: #ffffff;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid #dddddd;
         }
         .header {
-            background: linear-gradient(135deg, #dc3545 0%, #c82333 100%);
+            background-color: #dc3545;
             color: #ffffff;
             text-align: center;
-            padding: 40px 20px;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 700;
+            padding: 25px;
+            font-size: 24px;
+            font-weight: bold;
         }
         .content {
-            padding: 40px 30px;
-            color: #333333;
-            line-height: 1.6;
-        }
-        .content h2 {
-            color: #dc3545;
-            font-size: 22px;
-            margin-top: 0;
-        }
-        .status-badge {
-            display: inline-block;
-            background-color: #dc3545;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 25px;
-            font-weight: 600;
+            padding: 25px;
             font-size: 16px;
-            margin: 15px 0;
+            line-height: 1.6;
         }
         .alert-box {
             background-color: #fff3cd;
             border-left: 4px solid #ffc107;
-            padding: 15px 20px;
-            margin: 20px 0;
-            border-radius: 4px;
-        }
-        .alert-box p {
-            margin: 5px 0;
-            font-size: 14px;
-            color: #856404;
-        }
-        .contact-box {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-            text-align: center;
-        }
-        .contact-box a {
-            color: #667eea;
-            text-decoration: none;
-            font-weight: 600;
+            padding: 15px;
+            margin: 15px 0;
         }
         .footer {
-            background-color: #f8f9fa;
             text-align: center;
-            padding: 25px;
+            padding: 15px;
             font-size: 12px;
-            color: #6c757d;
-        }
-        .footer a {
-            color: #667eea;
-            text-decoration: none;
+            color: #777777;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🚫 Compte Bloqué</h1>
-        </div>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                Votre compte a été bloqué
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour M. / Mme <strong>{{prenom}} {{nom}}</strong>,</p>
 
-        <div class="content">
-            <h2>Bonjour {{prenom}} {{nom}},</h2>
+                <p>Nous vous informons que votre compte diagnostiqueur <strong>{{nom_entreprise}}</strong> a été temporairement bloqué sur la plateforme <strong>Votre Devis Diagnostics</strong>.</p>
 
-            <p>Nous vous informons que votre compte <strong>{{nom_entreprise}}</strong> a été temporairement bloqué.</p>
+                <div class="alert-box">
+                    <p><strong>Raison du blocage :</strong></p>
+                    <p>{{raison}}</p>
+                </div>
 
-            <div style="text-align: center;">
-                <span class="status-badge">⛔ Compte Bloqué</span>
-            </div>
+                <p>En conséquence, vous n'avez plus accès aux fonctionnalités de la plateforme jusqu'à résolution de cette situation.</p>
 
-            <div class="alert-box">
-                <p><strong>📋 Raison du blocage :</strong></p>
-                <p>{{raison}}</p>
-            </div>
+                <p><strong>Que faire maintenant ?</strong></p>
+                <ul>
+                    <li>Examinez attentivement la raison du blocage ci-dessus</li>
+                    <li>Contactez notre équipe pour plus d'informations</li>
+                    <li>Prenez les mesures nécessaires pour régulariser votre situation</li>
+                </ul>
 
-            <p>En conséquence, vous n'avez plus accès aux fonctionnalités de la plateforme Dimotec jusqu'à résolution de cette situation.</p>
+                <p><strong>Contact :</strong></p>
+                <ul>
+                    <li><strong>Email :</strong> contact@dimotec.fr</li>
+                    <li><strong>Téléphone :</strong> 04 67 60 50 18</li>
+                </ul>
 
-            <p><strong>🔍 Que faire maintenant ?</strong></p>
-            <ul>
-                <li>Examinez attentivement la raison du blocage ci-dessus</li>
-                <li>Contactez notre équipe pour plus d'informations</li>
-                <li>Prenez les mesures nécessaires pour régulariser votre situation</li>
-            </ul>
+                <p>Notre équipe reste à votre disposition pour vous accompagner dans la résolution de cette situation.</p>
 
-            <div class="contact-box">
-                <p><strong>📞 Besoin d'aide ?</strong></p>
-                <p>Contactez-nous pour débloquer votre compte :</p>
-                <p>
-                    <a href="mailto:contact@dimotec.fr">contact@dimotec.fr</a><br>
-                    Tél : 04 67 60 50 18
-                </p>
-            </div>
+                <p>Cordialement,<br>
+                L'équipe <strong>DIMOTEC CONTROLE</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Votre Devis Diagnostics. Tous droits réservés.<br>
 
-            <p>Notre équipe reste à votre disposition pour vous accompagner.</p>
-
-            <p>Cordialement,<br><strong>L'équipe Dimotec</strong></p>
-        </div>
-
-        <div class="footer">
-            <p>© 2024 Dimotec Contrôles - Tous droits réservés</p>
-            <p>298 rue d'Alco, 34080 Montpellier | Tél : 04 67 60 50 18</p>
-            <p><a href="mailto:contact@dimotec.fr">contact@dimotec.fr</a></p>
-        </div>
-    </div>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>

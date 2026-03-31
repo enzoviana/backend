@@ -3,140 +3,95 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Compte Approuvé</title>
+    <title>Compte approuvé</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background-color: #f4f7fa;
             margin: 0;
             padding: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+            color: #222222;
         }
         .container {
             max-width: 600px;
-            margin: 40px auto;
+            margin: 0 auto;
             background-color: #ffffff;
-            border-radius: 12px;
-            overflow: hidden;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.08);
+            border: 1px solid #dddddd;
         }
         .header {
-            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
-            color: #ffffff;
-            text-align: center;
-            padding: 40px 20px;
-        }
-        .header h1 {
-            margin: 0;
-            font-size: 28px;
-            font-weight: 700;
-        }
-        .content {
-            padding: 40px 30px;
-            color: #333333;
-            line-height: 1.6;
-        }
-        .content h2 {
-            color: #28a745;
-            font-size: 22px;
-            margin-top: 0;
-        }
-        .status-badge {
-            display: inline-block;
             background-color: #28a745;
-            color: #fff;
-            padding: 10px 20px;
-            border-radius: 25px;
-            font-weight: 600;
-            font-size: 16px;
-            margin: 15px 0;
-        }
-        .cta-button {
-            display: inline-block;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #ffffff;
-            padding: 15px 40px;
-            text-decoration: none;
-            border-radius: 30px;
-            font-weight: 600;
-            font-size: 16px;
-            margin: 20px 0;
-            text-align: center;
-        }
-        .cta-button:hover {
-            opacity: 0.9;
-        }
-        .features {
-            background-color: #f8f9fa;
-            padding: 20px;
-            border-radius: 8px;
-            margin: 20px 0;
-        }
-        .features ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-        }
-        .features li {
-            padding: 8px 0;
-            font-size: 15px;
-        }
-        .footer {
-            background-color: #f8f9fa;
             text-align: center;
             padding: 25px;
-            font-size: 12px;
-            color: #6c757d;
+            font-size: 24px;
+            font-weight: bold;
         }
-        .footer a {
-            color: #667eea;
+        .content {
+            padding: 25px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .button {
+            display: inline-block;
+            background-color: #28a745;
+            color: #ffffff !important;
             text-decoration: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            font-weight: bold;
+            margin-top: 15px;
+        }
+        .footer {
+            text-align: center;
+            padding: 15px;
+            font-size: 12px;
+            color: #777777;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>✅ Votre compte est approuvé !</h1>
-        </div>
+    <table class="container" width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td class="header">
+                Votre compte diagnostiqueur est approuvé !
+            </td>
+        </tr>
+        <tr>
+            <td class="content">
+                <p>Bonjour M. / Mme <strong>{{prenom}} {{nom}}</strong>,</p>
 
-        <div class="content">
-            <h2>Félicitations {{prenom}} {{nom}} !</h2>
+                <p>Félicitations 🎉 votre entreprise <strong>{{nom_entreprise}}</strong> a été <strong>approuvée</strong> sur notre plateforme <strong>Votre Devis Diagnostics</strong> et votre compte est désormais actif.</p>
 
-            <p>Nous avons le plaisir de vous informer que votre compte <strong>{{nom_entreprise}}</strong> a été approuvé par notre équipe.</p>
+                <p>Vous pouvez dès à présent vous connecter à votre espace professionnel et commencer à recevoir des missions de diagnostic immobilier.</p>
 
-            <div style="text-align: center;">
-                <span class="status-badge">✓ Compte Actif</span>
-            </div>
+                <p>Pour accéder à votre compte :</p>
+                <p>
+                    <a href="{{login_url}}" class="button">Se connecter à mon espace</a>
+                </p>
 
-            <p>Vous pouvez dès maintenant accéder à votre espace diagnostiqueur et commencer à recevoir des missions.</p>
-
-            <div style="text-align: center;">
-                <a href="{{login_url}}" class="cta-button">🚀 Accéder à mon espace</a>
-            </div>
-
-            <div class="features">
-                <p><strong>🎯 Fonctionnalités disponibles :</strong></p>
+                <p><strong>Fonctionnalités disponibles :</strong></p>
                 <ul>
-                    <li>✅ Accès aux missions de diagnostic</li>
-                    <li>✅ Gestion de vos certifications</li>
-                    <li>✅ Suivi de vos techniciens</li>
-                    <li>✅ Tableau de bord personnalisé</li>
-                    <li>✅ Alertes pour les documents à renouveler</li>
+                    <li>Accès aux missions de diagnostic</li>
+                    <li>Gestion de vos certifications</li>
+                    <li>Suivi de vos techniciens</li>
+                    <li>Tableau de bord personnalisé</li>
+                    <li>Alertes pour les documents à renouveler</li>
                 </ul>
-            </div>
 
-            <p><strong>💡 Conseil :</strong> Complétez dès maintenant votre profil et ajoutez vos certifications pour maximiser vos opportunités de missions.</p>
+                <p>Nous vous recommandons de compléter votre profil et d'ajouter vos certifications pour maximiser vos opportunités de missions.</p>
 
-            <p>Bienvenue dans la communauté Dimotec !</p>
+                <p>Si vous avez la moindre question, notre équipe reste à votre disposition.</p>
 
-            <p>Cordialement,<br><strong>L'équipe Dimotec</strong></p>
-        </div>
+                <p>Cordialement,<br>
+                L'équipe <strong>DIMOTEC CONTROLE</strong></p>
+            </td>
+        </tr>
+        <tr>
+            <td class="footer">
+                © 2025 Votre Devis Diagnostics. Tous droits réservés.<br>
 
-        <div class="footer">
-            <p>© 2024 Dimotec Contrôles - Tous droits réservés</p>
-            <p>298 rue d'Alco, 34080 Montpellier | Tél : 04 67 60 50 18</p>
-            <p><a href="mailto:contact@dimotec.fr">contact@dimotec.fr</a></p>
-        </div>
-    </div>
+            </td>
+        </tr>
+    </table>
 </body>
 </html>
