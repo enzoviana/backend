@@ -2036,20 +2036,45 @@ exports.uploadPdfDevis = async (req, res) => {
       // Vérifier s'il y a des doublons d'email
       const duplicates = await Client.find({ email: devis.client.email });
 
+      let client;
+
       if (duplicates.length > 1) {
         console.error("❌ [UPLOAD-PDF] PLUSIEURS CLIENTS AVEC LE MÊME EMAIL DÉTECTÉS !");
         console.error(`   Email: ${devis.client.email}`);
         console.error(`   Nombre de clients: ${duplicates.length}`);
         console.error(`   Clients trouvés:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
-        console.error("   ⚠️ IMPOSSIBLE DE DÉTERMINER LE BON CLIENT - ORDRE DE MISSION NON CRÉÉ");
 
-        // Ne pas créer d'ordre de mission si doublons détectés
-        return res.status(400).json({
-          message: "Plusieurs clients avec le même email détectés. Impossible de créer l'ordre de mission automatiquement. Veuillez contacter le support."
+        // Tentative de correspondance par nom et prénom
+        const normalizeString = (str) => str?.toLowerCase().trim() || '';
+        const devisNom = normalizeString(devis.client.nom);
+        const devisPrenom = normalizeString(devis.client.prenom);
+
+        console.log(`🔍 [UPLOAD-PDF] Recherche de correspondance pour: ${devis.client.prenom} ${devis.client.nom}`);
+
+        const matchingClients = duplicates.filter(c => {
+          const clientNom = normalizeString(c.nom);
+          const clientPrenom = normalizeString(c.prenom);
+          return clientNom === devisNom && clientPrenom === devisPrenom;
         });
+
+        if (matchingClients.length === 1) {
+          console.log(`✅ [UPLOAD-PDF] Correspondance unique trouvée par nom/prénom: ${matchingClients[0].prenom} ${matchingClients[0].nom} (ID: ${matchingClients[0]._id})`);
+          client = matchingClients[0];
+        } else if (matchingClients.length > 1) {
+          console.error("   ⚠️ [UPLOAD-PDF] PLUSIEURS CLIENTS AVEC LE MÊME NOM/PRÉNOM - ORDRE DE MISSION NON CRÉÉ");
+          return res.status(400).json({
+            message: "Plusieurs clients avec le même nom/prénom détectés. Impossible de créer l'ordre de mission automatiquement."
+          });
+        } else {
+          console.error("   ⚠️ [UPLOAD-PDF] AUCUNE CORRESPONDANCE PAR NOM/PRÉNOM - ORDRE DE MISSION NON CRÉÉ");
+          return res.status(400).json({
+            message: "Impossible de déterminer le bon client parmi les doublons d'email. Veuillez contacter le support."
+          });
+        }
+      } else {
+        client = duplicates[0];
       }
 
-      const client = duplicates[0];
       if (client) {
         clientId = client._id;
 
@@ -2828,21 +2853,46 @@ exports.updateDevisInfos = async (req, res) => {
             // Vérifier s'il y a des doublons d'email
             const duplicates = await Client.find({ email: devis.client.email });
 
+            let clientExist;
+
             if (duplicates.length > 1) {
               console.error("❌ PLUSIEURS CLIENTS AVEC LE MÊME EMAIL DÉTECTÉS !");
               console.error(`   Email: ${devis.client.email}`);
               console.error(`   Nombre de clients: ${duplicates.length}`);
               console.error(`   Clients trouvés:`, duplicates.map(d => `${d._id} - ${d.prenom} ${d.nom}`));
-              console.error("   ⚠️ ORDRE DE MISSION NON CRÉÉ - Doublons d'email détectés");
 
-              // Ne pas créer l'ordre de mission si doublons
-              return res.status(200).json({
-                message: "Devis mis à jour, mais ordre de mission non créé (doublons d'email détectés)",
-                devis
+              // Tentative de correspondance par nom et prénom
+              const normalizeString = (str) => str?.toLowerCase().trim() || '';
+              const devisNom = normalizeString(devis.client.nom);
+              const devisPrenom = normalizeString(devis.client.prenom);
+
+              console.log(`🔍 Recherche de correspondance pour: ${devis.client.prenom} ${devis.client.nom}`);
+
+              const matchingClients = duplicates.filter(client => {
+                const clientNom = normalizeString(client.nom);
+                const clientPrenom = normalizeString(client.prenom);
+                return clientNom === devisNom && clientPrenom === devisPrenom;
               });
-            }
 
-            let clientExist = duplicates[0];
+              if (matchingClients.length === 1) {
+                console.log(`✅ Correspondance unique trouvée par nom/prénom: ${matchingClients[0].prenom} ${matchingClients[0].nom} (ID: ${matchingClients[0]._id})`);
+                clientExist = matchingClients[0];
+              } else if (matchingClients.length > 1) {
+                console.error("   ⚠️ PLUSIEURS CLIENTS AVEC LE MÊME NOM/PRÉNOM - ORDRE DE MISSION NON CRÉÉ");
+                return res.status(200).json({
+                  message: "Devis mis à jour, mais ordre de mission non créé (plusieurs clients avec le même nom/prénom détectés)",
+                  devis
+                });
+              } else {
+                console.error("   ⚠️ AUCUNE CORRESPONDANCE PAR NOM/PRÉNOM - ORDRE DE MISSION NON CRÉÉ");
+                return res.status(200).json({
+                  message: "Devis mis à jour, mais ordre de mission non créé (impossible de déterminer le bon client)",
+                  devis
+                });
+              }
+            } else {
+              clientExist = duplicates[0];
+            }
 
             if (!clientExist) {
               clientExist = new Client({
