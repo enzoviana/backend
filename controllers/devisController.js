@@ -1349,14 +1349,35 @@ if (data.installationGaz === true) {
     if (!dejaSelectionne) {
       
       if (data.bien === "maison" && diagGaz.tarifsParSurface?.length) {
-        const surfaceStr = (data.surfaceMaison || "0").toString();
-        const surface = parseInt(surfaceStr.replace(/\D/g, ''), 10) || 0;
+        const surfaceStr = (data.surfaceMaison || data.surface || "0").toString();
 
-        const tranche = diagGaz.tarifsParSurface.find(
-          t => surface >= t.surfaceMin && surface <= t.surfaceMax
-        );
+        let surfaceMin = 0, surfaceMax = 0;
+
+        // Gérer les plages de surface (ex: "121-150m²") et les valeurs uniques (ex: "130")
+        const surfaceCleaned = surfaceStr.replace(/[^\d-]/g, "");
+
+        if (surfaceCleaned.includes("-")) {
+          const match = surfaceCleaned.match(/(\d+)-(\d+)/);
+          surfaceMin = match ? parseInt(match[1], 10) : 0;
+          surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+        } else {
+          const valeur = parseInt(surfaceCleaned, 10) || 0;
+          surfaceMin = valeur;
+          surfaceMax = valeur;
+        }
+
+        console.log(`🔥 GAZ - Surface min=${surfaceMin}, max=${surfaceMax}, secteur=${secteur}`);
+
+        // Trouver une tranche qui overlap avec la surface demandée
+        const tranche = diagGaz.tarifsParSurface.find(t => {
+          return !(surfaceMax < t.surfaceMin || surfaceMin > t.surfaceMax);
+        });
+
         if (tranche) {
           tarifGaz = Number(tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0);
+          console.log(`✅ GAZ - Tranche trouvée: ${tranche.surfaceMin}-${tranche.surfaceMax}m², tarif=${tarifGaz}€`);
+        } else {
+          console.warn(`⚠️ GAZ - Aucune tranche trouvée pour surface ${surfaceMin}-${surfaceMax}m²`);
         }
       } 
       else if (data.bien === "appartement" && diagGaz.tarifsParAppartement?.length) {
@@ -1385,16 +1406,35 @@ if (data.installationGaz === true) {
       const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // ou nom spécifique "copropriété"
       if (diagCopro) {
         if (data.bien === "maison" && diagCopro.tarifsParSurface?.length) {
-          // 🔧 FIX: Extraire la surface comme un nombre simple (ex: "250" ou "250 m²")
-          const surfaceStr = data.surfaceMaison || "0";
-          const surface = parseInt(surfaceStr.split(" ")[0], 10) || 0;
+          const surfaceStr = (data.surfaceMaison || data.surface || "0").toString();
 
-          // Trouver la tranche tarifaire qui contient cette surface
-          const tranche = diagCopro.tarifsParSurface.find(
-            t => surface >= t.surfaceMin && surface <= t.surfaceMax
-          );
+          let surfaceMin = 0, surfaceMax = 0;
+
+          // Gérer les plages de surface (ex: "121-150m²") et les valeurs uniques (ex: "130")
+          const surfaceCleaned = surfaceStr.replace(/[^\d-]/g, "");
+
+          if (surfaceCleaned.includes("-")) {
+            const match = surfaceCleaned.match(/(\d+)-(\d+)/);
+            surfaceMin = match ? parseInt(match[1], 10) : 0;
+            surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+          } else {
+            const valeur = parseInt(surfaceCleaned, 10) || 0;
+            surfaceMin = valeur;
+            surfaceMax = valeur;
+          }
+
+          console.log(`🏢 COPRO - Surface min=${surfaceMin}, max=${surfaceMax}, secteur=${secteur}`);
+
+          // Trouver une tranche qui overlap avec la surface demandée
+          const tranche = diagCopro.tarifsParSurface.find(t => {
+            return !(surfaceMax < t.surfaceMin || surfaceMin > t.surfaceMax);
+          });
+
           if (tranche) {
-            tarifCopro = tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0;
+            tarifCopro = Number(tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0);
+            console.log(`✅ COPRO - Tranche trouvée: ${tranche.surfaceMin}-${tranche.surfaceMax}m², tarif=${tarifCopro}€`);
+          } else {
+            console.warn(`⚠️ COPRO - Aucune tranche trouvée pour surface ${surfaceMin}-${surfaceMax}m²`);
           }
         } else if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
           const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === data.surfaceAppartement);
