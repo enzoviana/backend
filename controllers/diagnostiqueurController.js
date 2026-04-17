@@ -1111,7 +1111,16 @@ exports.downloadOrdreMission = async (req, res) => {
 
     const diagnostics = [];
     if (mission.devisId?.pack?.diagnostics) {
-      diagnostics.push(...mission.devisId.pack.diagnostics);
+      // Filtrer les diagnostics du pack selon la tranche d'année du devis
+      const devisTrancheAnnee = mission.devisId.anneeConstruction;
+      const diagnosticsFiltres = mission.devisId.pack.diagnostics.filter(diag => {
+        const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
+        // Le diagnostic est compatible si :
+        // - Il a "toutes" dans ses tranches d'année, OU
+        // - Il a la même tranche d'année que le devis
+        return diagTrancheAnnee.includes("toutes") || diagTrancheAnnee.includes(devisTrancheAnnee);
+      });
+      diagnostics.push(...diagnosticsFiltres);
     }
     if (mission.devisId?.diagnosticsSelectionnes) {
       diagnostics.push(...mission.devisId.diagnosticsSelectionnes);

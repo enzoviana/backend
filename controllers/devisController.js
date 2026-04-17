@@ -2536,7 +2536,19 @@ exports.getDevisViaLien = async (req, res) => {
       let prixHT = calculerTarif(devis.pack);
       const prixTTC = +(prixHT * 1.2).toFixed(2);
 
-      const diagnosticsPack = (devis.pack.diagnostics || []).map(diag => {
+      // Filtrer les diagnostics du pack selon la tranche d'année du devis
+      const diagnosticsPackFiltres = (devis.pack.diagnostics || []).filter(diag => {
+        const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
+        const devisTrancheAnnee = devis.anneeConstruction;
+
+        // Le diagnostic est compatible si :
+        // - Il a "toutes" dans ses tranches d'année, OU
+        // - Il a la même tranche d'année que le devis
+        return diagTrancheAnnee.includes("toutes") ||
+               diagTrancheAnnee.includes(devisTrancheAnnee);
+      });
+
+      const diagnosticsPack = diagnosticsPackFiltres.map(diag => {
         const diagHT = calculerTarif(diag);
         const diagTTC = +(diagHT * 1.2).toFixed(2);
         return { nom: diag.nom, prixHT: diagHT, prixTTC: diagTTC };
