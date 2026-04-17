@@ -1115,10 +1115,21 @@ exports.downloadOrdreMission = async (req, res) => {
       const devisTrancheAnnee = mission.devisId.anneeConstruction;
       const diagnosticsFiltres = mission.devisId.pack.diagnostics.filter(diag => {
         const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
-        // Le diagnostic est compatible si :
-        // - Il a "toutes" dans ses tranches d'année, OU
-        // - Il a la même tranche d'année que le devis
-        return diagTrancheAnnee.includes("toutes") || diagTrancheAnnee.includes(devisTrancheAnnee);
+        const nomDiag = (diag.nom || '').toLowerCase();
+
+        // ❌ EXCLURE GAZ et Surface (copropriété) car ce sont des suppléments conditionnels
+        const isGaz = nomDiag.includes('gaz');
+        const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
+        if (isGaz || isSurface) {
+          return false;
+        }
+
+        // ✅ Le diagnostic est compatible UNIQUEMENT si :
+        // - Il a EXACTEMENT la même tranche d'année que le devis
+        // - On ignore les diagnostics avec "toutes"
+        const matchTranche = diagTrancheAnnee.includes(devisTrancheAnnee);
+
+        return matchTranche;
       });
       diagnostics.push(...diagnosticsFiltres);
     }
