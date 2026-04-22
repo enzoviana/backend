@@ -1117,10 +1117,11 @@ exports.downloadOrdreMission = async (req, res) => {
         const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
         const nomDiag = (diag.nom || '').toLowerCase();
 
-        // ❌ EXCLURE GAZ et Surface (copropriété) car ce sont des suppléments conditionnels
+        // ❌ EXCLURE GAZ, Surface (copropriété) et Audits car ce sont des suppléments conditionnels
         const isGaz = nomDiag.includes('gaz');
         const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
-        if (isGaz || isSurface) {
+        const isAudit = nomDiag.includes('audit');
+        if (isGaz || isSurface || isAudit) {
           return false;
         }
 

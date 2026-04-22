@@ -2542,11 +2542,12 @@ exports.getDevisViaLien = async (req, res) => {
         const devisTrancheAnnee = devis.anneeConstruction;
         const nomDiag = (diag.nom || '').toLowerCase();
 
-        // ❌ EXCLURE GAZ et Surface (copropriété) car ce sont des suppléments conditionnels
+        // ❌ EXCLURE GAZ, Surface (copropriété) et Audits car ce sont des suppléments conditionnels
         const isGaz = nomDiag.includes('gaz');
         const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
-        if (isGaz || isSurface) {
-          console.log(`🚫 [PACK FILTER] EXCLU: ${diag.nom} (supplément conditionnel)`);
+        const isAudit = nomDiag.includes('audit');
+        if (isGaz || isSurface || isAudit) {
+          console.log(`🚫 [PACK FILTER] EXCLU: ${diag.nom} (supplément conditionnel ou audit)`);
           return false;
         }
 
