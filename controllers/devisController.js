@@ -1400,48 +1400,72 @@ if (data.installationGaz === true) {
   }
 }
 
-    // --- Diagnostic Copropriété si applicable ---
+    // --- Diagnostic Surface (Copropriété) si applicable ---
+    // Pour tous les types de biens SAUF maison
+    // Uniquement pour le mode diagnostic à la carte (pas pour les packs)
     let tarifCopro = 0;
-    if (data.copropriete === true) {
-      const diagCopro = await Diagnostic.findOne({ nom: /surface/i }); // ou nom spécifique "copropriété"
+    if (data.copropriete === true && data.bien !== "maison" && data.type === "diagnostic") {
+      // Chercher le diagnostic Surface correspondant au type de bien et à la transaction
+      const diagCopro = await Diagnostic.findOne({
+        nom: /surface/i,
+        typeBien: data.bien,
+        typeOperation: data.transaction
+      });
+
       if (diagCopro) {
-        if (data.bien === "maison" && diagCopro.tarifsParSurface?.length) {
-          const surfaceStr = (data.surfaceMaison || data.surface || "0").toString();
+        const dejaSelectionne = data.diagnosticsSelectionnes?.includes(diagCopro._id.toString());
+        if (!dejaSelectionne) {
 
-          let surfaceMin = 0, surfaceMax = 0;
+          // Pour appartements
+          if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
+            const mappingAppartement = {
+              "moins 20m²": "<20m2", "20-40m²": "20-40m2",
+              "T1": "T1", "T2": "T2", "T3": "T3", "T4": "T4", "T5": "T5"
+            };
+            const typeAppart = mappingAppartement[data.surfaceAppartement] || data.surfaceAppartement;
+            const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+            if (tps) {
+              tarifCopro = Number(tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0);
+              console.log(`✅ SURFACE (COPRO) - Appartement type ${typeAppart}, tarif=${tarifCopro}€`);
+            }
+          }
+          // Pour autres types de biens (locaux commerciaux, terrains, etc.)
+          else if (data.bien !== "appartement" && diagCopro.tarifsParSurface?.length) {
+            const surfaceStr = (data.surfaceMaison || data.surface || "0").toString();
+            let surfaceMin = 0, surfaceMax = 0;
 
-          // Gérer les plages de surface (ex: "121-150m²") et les valeurs uniques (ex: "130")
-          const surfaceCleaned = surfaceStr.replace(/[^\d-]/g, "");
+            const surfaceCleaned = surfaceStr.replace(/[^\d-]/g, "");
 
-          if (surfaceCleaned.includes("-")) {
-            const match = surfaceCleaned.match(/(\d+)-(\d+)/);
-            surfaceMin = match ? parseInt(match[1], 10) : 0;
-            surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
-          } else {
-            const valeur = parseInt(surfaceCleaned, 10) || 0;
-            surfaceMin = valeur;
-            surfaceMax = valeur;
+            if (surfaceCleaned.includes("-")) {
+              const match = surfaceCleaned.match(/(\d+)-(\d+)/);
+              surfaceMin = match ? parseInt(match[1], 10) : 0;
+              surfaceMax = match ? parseInt(match[2], 10) : surfaceMin;
+            } else {
+              const valeur = parseInt(surfaceCleaned, 10) || 0;
+              surfaceMin = valeur;
+              surfaceMax = valeur;
+            }
+
+            console.log(`🏢 SURFACE (COPRO) - Surface min=${surfaceMin}, max=${surfaceMax}, secteur=${secteur}`);
+
+            const tranche = diagCopro.tarifsParSurface.find(t => {
+              return !(surfaceMax < t.surfaceMin || surfaceMin > t.surfaceMax);
+            });
+
+            if (tranche) {
+              tarifCopro = Number(tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0);
+              console.log(`✅ SURFACE (COPRO) - Tranche trouvée: ${tranche.surfaceMin}-${tranche.surfaceMax}m², tarif=${tarifCopro}€`);
+            } else {
+              console.warn(`⚠️ SURFACE (COPRO) - Aucune tranche trouvée pour surface ${surfaceMin}-${surfaceMax}m²`);
+            }
           }
 
-          console.log(`🏢 COPRO - Surface min=${surfaceMin}, max=${surfaceMax}, secteur=${secteur}`);
-
-          // Trouver une tranche qui overlap avec la surface demandée
-          const tranche = diagCopro.tarifsParSurface.find(t => {
-            return !(surfaceMax < t.surfaceMin || surfaceMin > t.surfaceMax);
-          });
-
-          if (tranche) {
-            tarifCopro = Number(tranche.tarifs?.[secteur] ?? tranche.tarifs?.autre ?? 0);
-            console.log(`✅ COPRO - Tranche trouvée: ${tranche.surfaceMin}-${tranche.surfaceMax}m², tarif=${tarifCopro}€`);
-          } else {
-            console.warn(`⚠️ COPRO - Aucune tranche trouvée pour surface ${surfaceMin}-${surfaceMax}m²`);
-          }
-        } else if (data.bien === "appartement" && diagCopro.tarifsParAppartement?.length) {
-          const tps = diagCopro.tarifsParAppartement.find(t => t.typeAppartement === data.surfaceAppartement);
-          if (tps) tarifCopro = tps.tarifs?.[secteur] ?? tps.tarifs?.autre ?? 0;
+          totalAvantRemise = Number(totalAvantRemise) + tarifCopro;
+          data.diagnosticsSelectionnes.push(diagCopro._id.toString());
         }
+      } else {
+        console.warn(`⚠️ Aucun diagnostic SURFACE trouvé pour ${data.bien} / ${data.transaction}`);
       }
-      totalAvantRemise += tarifCopro;
     }
 
     // 🚚 Frais de déplacement (appliqué selon le choix de l'admin, pour tous les types)
