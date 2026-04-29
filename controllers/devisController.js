@@ -2566,12 +2566,18 @@ exports.getDevisViaLien = async (req, res) => {
         const devisTrancheAnnee = devis.anneeConstruction;
         const nomDiag = (diag.nom || '').toLowerCase();
 
-        // ❌ EXCLURE GAZ, Surface (copropriété) et Audits car ce sont des suppléments conditionnels
+        // ❌ EXCLURE GAZ et Audits car ce sont des suppléments conditionnels
         const isGaz = nomDiag.includes('gaz');
-        const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
         const isAudit = nomDiag.includes('audit');
-        if (isGaz || isSurface || isAudit) {
+        if (isGaz || isAudit) {
           console.log(`🚫 [PACK FILTER] EXCLU: ${diag.nom} (supplément conditionnel ou audit)`);
+          return false;
+        }
+
+        // ❌ EXCLURE Surface uniquement pour les MAISONS
+        const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
+        if (isSurface && devis.bien === 'maison') {
+          console.log(`🚫 [PACK FILTER] EXCLU: ${diag.nom} (Surface non applicable pour maison)`);
           return false;
         }
 
