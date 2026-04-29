@@ -627,10 +627,11 @@ exports.updateStatutOrdreMission = async (req, res) => {
 
     /*
     ────────────────────────────────
-       💰 Crédit cagnotte si Payée
+       💰 Crédit cagnotte si Payée/Payé
     ────────────────────────────────
     */
-    if (ordre.statut === "Payée") {
+    if ((statut === "Payée" || statut === "Payé") && (ordre.statut !== "Payée" && ordre.statut !== "Payé")) {
+      // ✅ Créditer UNIQUEMENT si le statut passe de "non payé" à "payé" (éviter les doubles crédits)
       const devis = await Devis.findById(ordre.devisId);
       if (!devis) return res.status(404).json({ message: "Devis lié introuvable." });
 
@@ -639,30 +640,53 @@ exports.updateStatutOrdreMission = async (req, res) => {
 
       if (!agence) return res.status(404).json({ message: "Agence introuvable." });
 
+      console.log(`💰 Crédit cagnotte pour ordre ${ordre.numero} : ${montantCredit}€ (3% de ${devis.montantTTC}€)`);
+
       if (agence.type_cagnotte === "individuelle" && ordre.creePar.type === "Employe") {
         const employe = await Employe.findById(ordre.creePar.id);
         if (employe) {
-          employe.cagnotte += montantCredit;
-          employe.transactions_cagnotte.push({
+          // Vérifier si ce gain n'existe pas déjà
+          const dejaCredite = employe.transactions_cagnotte.some(t =>
+            t.reference && t.reference.toString() === ordre._id.toString()
+          );
+
+          if (!dejaCredite) {
+            employe.cagnotte += montantCredit;
+            employe.transactions_cagnotte.push({
+              montant: montantCredit,
+              type: "gain",
+              description: `3% du devis ${devis.numero} (Ordre ${ordre.numero})`,
+              reference: ordre._id,
+              date: new Date()
+            });
+            await employe.save();
+            console.log(`✅ Cagnotte employé ${employe._id} créditée de ${montantCredit}€`);
+          } else {
+            console.log(`⚠️ Cagnotte employé ${employe._id} déjà créditée pour cet ordre`);
+          }
+        }
+      } else {
+        // Vérifier si ce gain n'existe pas déjà dans l'historique de l'agence
+        if (!agence.historiqueCagnotte) agence.historiqueCagnotte = [];
+
+        const dejaCredite = agence.historiqueCagnotte.some(h =>
+          h.description && h.description.includes(`Ordre ${ordre.numero}`)
+        );
+
+        if (!dejaCredite) {
+          agence.cagnotte = (agence.cagnotte || 0) + montantCredit;
+          agence.historiqueCagnotte.push({
             montant: montantCredit,
             type: "gain",
             description: `3% du devis ${devis.numero} (Ordre ${ordre.numero})`,
-            reference: ordre._id,
+            par: agence.nom_commercial,
             date: new Date()
           });
-          await employe.save();
+          await agence.save();
+          console.log(`✅ Cagnotte agence ${agence.nom_commercial} créditée de ${montantCredit}€`);
+        } else {
+          console.log(`⚠️ Cagnotte agence ${agence.nom_commercial} déjà créditée pour cet ordre`);
         }
-      } else {
-        if (!agence.historiqueCagnotte) agence.historiqueCagnotte = [];
-        agence.cagnotte = (agence.cagnotte || 0) + montantCredit;
-        agence.historiqueCagnotte.push({
-          montant: montantCredit,
-          type: "gain",
-          description: `3% du devis ${devis.numero} (Ordre ${ordre.numero})`,
-          par: agence.nom_commercial,
-          date: new Date()
-        });
-        await agence.save();
       }
     }
 

@@ -1041,7 +1041,7 @@ exports.filterPacks = async (req, res) => {
       ? await computeDiagnosticTarif("gaz", typeBienNorm, surfaceMinDemande, surfaceMaxDemande, typeAppartement, secteur)
       : null;
 
-    const diagnosticCoproTarif = copropriete && typeBienNorm !== "appartement"
+    const diagnosticCoproTarif = copropriete && typeBienNorm !== "maison"
       ? await computeDiagnosticTarif("surface", typeBienNorm, surfaceMinDemande, surfaceMaxDemande, typeAppartement, secteur)
       : null;
 
