@@ -205,7 +205,25 @@ exports.forgotPassword = async (req, res) => {
 
     await diagnostiqueur.save();
 
-    // TODO: Envoyer email avec lien de réinitialisation
+    // Envoyer email avec lien de réinitialisation
+    const resetUrl = `${process.env.FRONTEND_DIAGNOSTIQUEUR_URL || 'https://diagnostiqueur.dimotec.fr'}/reset-password/${resetToken}`;
+
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Réinitialisation de votre mot de passe - Dimotec',
+        template: 'ResetPassword.html',
+        variables: {
+          nomClient: `${diagnostiqueur.admin.prenom} ${diagnostiqueur.admin.nom}`,
+          lienReinitialisation: resetUrl
+        }
+      });
+      console.log(`✅ Email de réinitialisation envoyé à ${email}`);
+    } catch (emailError) {
+      console.error('❌ Erreur envoi email réinitialisation:', emailError);
+      // On retourne une erreur si l'email n'a pas pu être envoyé
+      return res.status(500).json({ message: 'Erreur lors de l\'envoi de l\'email de réinitialisation.' });
+    }
 
     res.json({ message: 'Un email de réinitialisation a été envoyé.' });
 

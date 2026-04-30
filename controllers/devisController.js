@@ -1401,10 +1401,10 @@ if (data.installationGaz === true) {
 }
 
     // --- Diagnostic Surface (Copropriété) si applicable ---
-    // Pour tous les types de biens SAUF maison
-    // Uniquement pour le mode diagnostic à la carte (pas pour les packs)
+    // - Pour MAISONS uniquement : toujours en supplément (car exclu du pack)
+    // - Pour AUTRES : automatiquement dans le pack, pas de supplément
     let tarifCopro = 0;
-    if (data.copropriete === true && data.bien !== "maison" && data.type === "diagnostic") {
+    if (data.copropriete === true && data.bien === "maison") {
       // Chercher le diagnostic Surface correspondant au type de bien et à la transaction
       const diagCopro = await Diagnostic.findOne({
         nom: /surface/i,
