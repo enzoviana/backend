@@ -1291,6 +1291,77 @@ exports.getDevisDetail = async (req, res) => {
       return res.status(404).json({ message: 'Devis non trouvé.' });
     }
 
+    // Calculer les tarifs pour chaque diagnostic
+    const secteur = (devis.agenceId?.alerte_secteur || devis.secteur || 'autre')
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '');
+
+    const surfaceStr = devis.surfaceMaison || devis.surfaceAppartement || devis.surface || '0';
+    const surface = parseInt(surfaceStr.split(' ')[0], 10) || 0;
+
+    const getTypeAppartement = (surfaceAppartement) => {
+      const mappingAppartement = {
+        'moins 20m²': '<20m2',
+        '20-40m²': '20-40m2',
+        'T1': 'T1',
+        'T2': 'T2',
+        'T3': 'T3',
+        'T4': 'T4',
+        'T5': 'T5'
+      };
+      return mappingAppartement[surfaceAppartement] || surfaceAppartement;
+    };
+
+    const typeAppart = devis.bien === 'appartement' ? getTypeAppartement(devis.surfaceAppartement) : null;
+
+    const calculerTarif = (item) => {
+      let tarifTTC = 0;
+
+      if (devis.bien === 'maison' && item.tarifsParSurface?.length) {
+        const tranche = item.tarifsParSurface.find(t => surface >= t.surfaceMin && surface <= t.surfaceMax);
+        tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+
+      } else if (devis.bien === 'appartement' && item.tarifsParAppartement?.length) {
+        const tranche = item.tarifsParAppartement.find(t => t.typeAppartement === typeAppart);
+        tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+
+      } else if (item.tarifsParSurface?.length) {
+        const tranche = item.tarifsParSurface.find(t => surface >= t.surfaceMin && surface <= t.surfaceMax);
+        tarifTTC = tranche?.tarifs?.[secteur] ?? tranche?.tarifs?.autre ?? 0;
+      } else {
+        tarifTTC = Number(item.prixTTC || item.prixHT || 0);
+      }
+
+      return +(tarifTTC / 1.2).toFixed(2); // Retour HT
+    };
+
+    // Ajouter les prix calculés aux diagnostics
+    if (devis.diagnosticsSelectionnes?.length) {
+      devis.diagnosticsSelectionnes = devis.diagnosticsSelectionnes.map(diag => {
+        const diagObj = diag.toObject ? diag.toObject() : diag;
+        const prixHT = calculerTarif(diagObj);
+        const prixTTC = +(prixHT * 1.2).toFixed(2);
+        return { ...diagObj, prixHT, prixTTC };
+      });
+    }
+
+    // Ajouter les prix calculés aux suppléments
+    if (devis.supplementsSelectionnes?.length) {
+      devis.supplementsSelectionnes = devis.supplementsSelectionnes.map(sup => {
+        const supObj = sup.toObject ? sup.toObject() : sup;
+
+        // Pour les suppléments, utiliser directement le tarif selon le secteur
+        let prixTTC = 0;
+        if (supObj.tarifs) {
+          prixTTC = supObj.tarifs[secteur] ?? supObj.tarifs.autre ?? 0;
+        }
+
+        const prixHT = +(prixTTC / 1.2).toFixed(2);
+        return { ...supObj, prixHT, prixTTC };
+      });
+    }
+
     res.json({ devis });
 
   } catch (error) {
