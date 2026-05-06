@@ -366,6 +366,35 @@ async function getAlertesActives(diagnostiqueurId) {
   }
 }
 
+/**
+ * Résout toutes les alertes actives pour un document spécifique
+ */
+async function resoudreAlertesDocument(documentRef, documentModel) {
+  try {
+    const result = await AlerteDocument.updateMany(
+      {
+        documentRef,
+        documentModel,
+        statut: 'active'
+      },
+      {
+        $set: {
+          statut: 'resolue',
+          dateResolution: new Date()
+        }
+      }
+    );
+
+    console.log(`✅ ${result.modifiedCount} alerte(s) résolue(s) pour le document ${documentRef}`);
+
+    return result;
+
+  } catch (error) {
+    console.error('Erreur resoudreAlertesDocument:', error);
+    throw error;
+  }
+}
+
 module.exports = {
   verifierTousLesDocuments,
   verifierCertifications,
@@ -375,5 +404,6 @@ module.exports = {
   envoyerNotificationsSeuilCertification,
   envoyerNotificationsSeuilAssurance,
   envoyerEmailAlerte,
-  getAlertesActives
+  getAlertesActives,
+  resoudreAlertesDocument
 };

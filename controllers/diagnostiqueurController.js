@@ -375,6 +375,9 @@ exports.addDocument = async (req, res) => {
       resource_type: 'auto'
     });
 
+    // Vérifier si un document du même type existe déjà
+    const existingIndex = diagnostiqueur.documents.findIndex(doc => doc.type === type);
+
     const document = {
       type,
       nom: req.file.originalname,
@@ -385,7 +388,18 @@ exports.addDocument = async (req, res) => {
       statut: 'valide'
     };
 
-    diagnostiqueur.documents.push(document);
+    if (existingIndex !== -1) {
+      // Résoudre les alertes de l'ancien document
+      const oldDocumentId = diagnostiqueur.documents[existingIndex]._id;
+      await alerteService.resoudreAlertesDocument(oldDocumentId, 'Diagnostiqueur');
+
+      // Remplacer l'ancien document
+      diagnostiqueur.documents[existingIndex] = document;
+    } else {
+      // Ajouter le nouveau document
+      diagnostiqueur.documents.push(document);
+    }
+
     await diagnostiqueur.save();
 
     res.status(201).json({
@@ -749,6 +763,11 @@ exports.updateCertification = async (req, res) => {
 
     await certification.save();
 
+    // Si la date d'expiration a été modifiée, résoudre les anciennes alertes
+    if (updates.dateExpiration) {
+      await alerteService.resoudreAlertesDocument(certificationId, 'Certification');
+    }
+
     const certificationPopulated = await Certification.findById(certification._id)
       .populate('technicien')
       .populate('domaine');
@@ -845,7 +864,8 @@ exports.getMissionDetail = async (req, res) => {
         path: 'devisId',
         populate: [
           { path: 'pack', populate: 'diagnostics' },
-          { path: 'diagnosticsSelectionnes' }
+          { path: 'diagnosticsSelectionnes' },
+          { path: 'supplementsSelectionnes' }
         ]
       })
       .populate('clientId')
@@ -1817,6 +1837,10 @@ exports.uploadAssurance = async (req, res) => {
     };
 
     if (existingIndex !== -1) {
+      // Résoudre les alertes de l'ancien document
+      const oldDocumentId = diagnostiqueur.documents[existingIndex]._id;
+      await alerteService.resoudreAlertesDocument(oldDocumentId, 'Diagnostiqueur');
+
       // Remplacer l'ancienne assurance
       diagnostiqueur.documents[existingIndex] = newDocument;
     } else {
