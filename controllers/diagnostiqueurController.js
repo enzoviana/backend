@@ -1336,33 +1336,33 @@ exports.getDevisDetail = async (req, res) => {
       return +(tarifTTC / 1.2).toFixed(2); // Retour HT
     };
 
-    // Ajouter les prix calculés aux diagnostics
-    if (devis.diagnosticsSelectionnes?.length) {
-      devis.diagnosticsSelectionnes = devis.diagnosticsSelectionnes.map(diag => {
-        const diagObj = diag.toObject ? diag.toObject() : diag;
-        const prixHT = calculerTarif(diagObj);
+    // Convertir le devis en objet plain JavaScript
+    const devisObj = devis.toObject();
+
+    // Calculer les prix pour les diagnostics
+    if (devisObj.diagnosticsSelectionnes?.length) {
+      devisObj.diagnosticsSelectionnes = devisObj.diagnosticsSelectionnes.map(diag => {
+        const prixHT = calculerTarif(diag);
         const prixTTC = +(prixHT * 1.2).toFixed(2);
-        return { ...diagObj, prixHT, prixTTC };
+        return { ...diag, prixHT, prixTTC };
       });
     }
 
-    // Ajouter les prix calculés aux suppléments
-    if (devis.supplementsSelectionnes?.length) {
-      devis.supplementsSelectionnes = devis.supplementsSelectionnes.map(sup => {
-        const supObj = sup.toObject ? sup.toObject() : sup;
-
+    // Calculer les prix pour les suppléments
+    if (devisObj.supplementsSelectionnes?.length) {
+      devisObj.supplementsSelectionnes = devisObj.supplementsSelectionnes.map(sup => {
         // Pour les suppléments, utiliser directement le tarif selon le secteur
         let prixTTC = 0;
-        if (supObj.tarifs) {
-          prixTTC = supObj.tarifs[secteur] ?? supObj.tarifs.autre ?? 0;
+        if (sup.tarifs) {
+          prixTTC = sup.tarifs[secteur] ?? sup.tarifs.autre ?? 0;
         }
 
         const prixHT = +(prixTTC / 1.2).toFixed(2);
-        return { ...supObj, prixHT, prixTTC };
+        return { ...sup, prixHT, prixTTC };
       });
     }
 
-    res.json({ devis });
+    res.json({ devis: devisObj });
 
   } catch (error) {
     console.error('Erreur getDevisDetail:', error);

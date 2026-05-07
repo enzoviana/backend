@@ -556,10 +556,21 @@ exports.updateStatutOrdreMission = async (req, res) => {
     }
 
     // Mise à jour de la date de rendez-vous si fournie
-    let envoyerMail = false;
+let envoyerMail = false;
     if (rdvDate) {
-      ordre.rdvDate = new Date(rdvDate);
-      envoyerMail = true;
+      const nouvelleDate = new Date(rdvDate).getTime();
+      const ancienneDate = ordre.rdvDate ? new Date(ordre.rdvDate).getTime() : null;
+
+      // On n'envoie le mail QUE si la date est vraiment différente du RDV actuel
+      if (nouvelleDate !== ancienneDate) {
+        ordre.rdvDate = new Date(rdvDate);
+        
+        // On n'envoie PAS l'email si on est en train de passer en "Payé" 
+        // (car le RDV est probablement déjà passé ou c'est juste une clôture)
+        if (statut !== "Payée" && statut !== "Payé") {
+          envoyerMail = true;
+        }
+      }
     }
 
     // Impossible de passer En Cours sans RDV
