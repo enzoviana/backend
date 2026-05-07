@@ -580,6 +580,9 @@ let envoyerMail = false;
       });
     }
 
+    // Sauvegarder l'ancien statut AVANT modification (pour la logique de cagnotte)
+    const ancienStatut = ordre.statut;
+
     // Mise à jour du statut
     ordre.statut = statut;
 
@@ -641,17 +644,20 @@ let envoyerMail = false;
        💰 Crédit cagnotte si Payée/Payé
     ────────────────────────────────
     */
-    if ((statut === "Payée" || statut === "Payé") && (ordre.statut !== "Payée" && ordre.statut !== "Payé")) {
+    if ((statut === "Payée" || statut === "Payé") && (ancienStatut !== "Payée" && ancienStatut !== "Payé")) {
       // ✅ Créditer UNIQUEMENT si le statut passe de "non payé" à "payé" (éviter les doubles crédits)
       const devis = await Devis.findById(ordre.devisId);
       if (!devis) return res.status(404).json({ message: "Devis lié introuvable." });
 
       const agence = await Agence.findById(ordre.agenceId);
-      const montantCredit = +(devis.montantTTC * 0.03).toFixed(2);
+
+      // Utiliser le bon montant (priorité : totalFinal > totalApresReduction > montantTTC)
+      const montantDevis = devis.totalFinal ?? devis.totalApresReduction ?? devis.montantTTC ?? 0;
+      const montantCredit = +(montantDevis * 0.03).toFixed(2);
 
       if (!agence) return res.status(404).json({ message: "Agence introuvable." });
 
-      console.log(`💰 Crédit cagnotte pour ordre ${ordre.numero} : ${montantCredit}€ (3% de ${devis.montantTTC}€)`);
+      console.log(`💰 Crédit cagnotte pour ordre ${ordre.numero} : ${montantCredit}€ (3% de ${montantDevis}€)`);
 
       if (agence.type_cagnotte === "individuelle" && ordre.creePar.type === "Employe") {
         const employe = await Employe.findById(ordre.creePar.id);
