@@ -255,7 +255,85 @@ exports.getClassementAgences = async (req, res) => {
   }
 };
 
+/**
+ * Récupérer les détails d'une agence avec historique cagnotte
+ */
+exports.getAgenceDetails = async (req, res) => {
+  try {
+    const { agenceId } = req.params;
 
+    const agence = await Agence.findById(agenceId).lean();
+    if (!agence) {
+      return res.status(404).json({ message: 'Agence non trouvée.' });
+    }
+
+    // Récupération des employés
+    const employes = await Employe.find({ agence: agence._id }).lean();
+    const employeIds = employes.map(e => e._id);
+
+    // Récupération des devis
+    const devisListe = await Devis.find({
+      $or: [
+        { agenceId: agence._id },
+        { _id: { $in: agence.devis } },
+        { 'creePar.id': { $in: employeIds } }
+      ]
+    })
+    .sort({ dateCreation: -1 })
+    .limit(50)
+    .lean();
+
+    // Calcul des statistiques
+    const devisAvecMontant = devisListe.map(d => ({
+      numero: d.numero,
+      dateCreation: d.dateCreation,
+      montant: d.totalFinal ?? d.montantTTC ?? d.totalApresReduction ?? 0,
+      statut: d.statut,
+      montantCagnotteUtilisee: d.montantCagnotteUtilisee || 0,
+      client: d.client
+    }));
+
+    const nombreDevis = devisAvecMontant.length;
+    const devisAccepte = devisAvecMontant.filter(d => d.statut.toLowerCase() === 'accepté').length;
+    const tauxConversion = nombreDevis > 0 ? (devisAccepte / nombreDevis) * 100 : 0;
+
+    // Historique cagnotte (dernier 10 devis avec utilisation)
+    const historiqueCagnotte = devisAvecMontant
+      .filter(d => d.montantCagnotteUtilisee > 0)
+      .slice(0, 10);
+
+    // Cagnotte totale
+    let cagnotteTotale = agence.cagnotte || 0;
+    if (cagnotteTotale === 0) {
+      const sommeEmployes = employes.reduce((acc, e) => acc + (e.cagnotte || 0), 0);
+      cagnotteTotale = sommeEmployes;
+    }
+
+    res.status(200).json({
+      agence: {
+        id: agence._id,
+        nom_commercial: agence.nom_commercial,
+        nom_responsable: agence.nom_responsable,
+        cagnotte: cagnotteTotale,
+        cagnotteEnAttente: agence.cagnotteEnAttente || 0,
+        email: agence.emails_contact?.[0]?.email || agence.admin?.email || '',
+        telephone: agence.admin?.telephone_portable || agence.telephone_fixe || ''
+      },
+      statistiques: {
+        nombreDevis,
+        devisAccepte,
+        tauxConversion: parseFloat(tauxConversion.toFixed(2)),
+        nombreEmployes: employes.length
+      },
+      historiqueCagnotte,
+      derniersDevis: devisAvecMontant.slice(0, 10)
+    });
+
+  } catch (error) {
+    console.error('Erreur récupération détails agence:', error);
+    res.status(500).json({ message: 'Erreur serveur lors de la récupération des détails.' });
+  }
+};
 
 
 /**

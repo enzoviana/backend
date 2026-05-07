@@ -54,6 +54,7 @@ router.post('/createAgence', authMiddleware, adminController.createAgence);
 // Récupérer toutes les agences (protégé)
 router.get('/agences', authMiddleware, adminController.getAllAgences);
 router.get('/classement-agences', authMiddleware, adminController.getClassementAgences);
+router.get('/agences/:agenceId/details', authMiddleware, adminController.getAgenceDetails);
 
 router.put("/agences/:id", authMiddleware, adminController.updateAgence);
 router.delete("/agences/:id", authMiddleware, adminController.deleteAgence);
