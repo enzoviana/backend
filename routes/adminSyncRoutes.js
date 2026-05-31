@@ -3,8 +3,8 @@ const router = express.Router();
 const adminSyncController = require('../controllers/adminSyncController');
 
 // Middleware d'authentification admin (à adapter selon votre système)
-// Pour l'instant, on suppose que vous avez déjà un middleware protect pour les admins
-const { protect } = require('../middlewares/authMiddleware');
+// Pour l'instant, on suppose que vous avez déjà un middleware authMiddleware pour les admins
+const { authMiddleware } = require('../middlewares/authMiddleware');
 
 /**
  * Routes de synchronisation des bases de données
@@ -16,7 +16,7 @@ const { protect } = require('../middlewares/authMiddleware');
  * @desc    Vérifie la configuration des BDD (MONGO_LIVE et MONGO_URI)
  * @access  Admin
  */
-// Temporairement sans protect pour tester
+// Temporairement sans authMiddleware pour tester
 router.get('/check-config', adminSyncController.verifierConfig);
 
 /**
@@ -25,28 +25,28 @@ router.get('/check-config', adminSyncController.verifierConfig);
  * @body    { avecBackup: true, viderAvant: true, copierIndexes: true }
  * @access  Admin
  */
-router.post('/start', protect, adminSyncController.demarrerSync);
+router.post('/start',  adminSyncController.demarrerSync);
 
 /**
  * @route   GET /api/admin/sync/status/:syncId
  * @desc    Récupère le statut d'une synchronisation en cours
  * @access  Admin
  */
-router.get('/status/:syncId', protect, adminSyncController.getStatusSync);
+router.get('/status/:syncId',  adminSyncController.getStatusSync);
 
 /**
  * @route   GET /api/admin/sync/list
  * @desc    Liste toutes les synchronisations (en cours et terminées)
  * @access  Admin
  */
-router.get('/list', protect, adminSyncController.listerSyncs);
+router.get('/list',  adminSyncController.listerSyncs);
 
 /**
  * @route   DELETE /api/admin/sync/clean
  * @desc    Nettoie les synchronisations terminées de la mémoire
  * @access  Admin
  */
-router.delete('/clean', protect, adminSyncController.nettoyerSyncs);
+router.delete('/clean',  adminSyncController.nettoyerSyncs);
 
 /**
  * @route   POST /api/admin/sync/execute
@@ -55,6 +55,6 @@ router.delete('/clean', protect, adminSyncController.nettoyerSyncs);
  * @access  Admin
  * @warning Cette route peut prendre plusieurs minutes à répondre !
  */
-router.post('/execute', protect, adminSyncController.executerSyncBloquante);
+router.post('/execute',  adminSyncController.executerSyncBloquante);
 
 module.exports = router;

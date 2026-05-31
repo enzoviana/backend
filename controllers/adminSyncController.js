@@ -311,11 +311,4 @@ exports.executerSyncBloquante = async (req, res) => {
   }
 };
 
-module.exports = {
-  demarrerSync,
-  getStatusSync,
-  listerSyncs,
-  nettoyerSyncs,
-  verifierConfig,
-  executerSyncBloquante
-};
+
