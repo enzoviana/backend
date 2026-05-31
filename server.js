@@ -110,16 +110,30 @@ const listRoutes = () => {
 /* =====================================================
    7️⃣ CONNEXION MONGODB
 ===================================================== */
-const MONGO_LIVE = process.env.MONGO_LIVE ;
+const MONGO_LIVE = process.env.MONGO_LIVE;
+
+// Optionnel: Petit check de sécurité si la variable est vide
+if (!MONGO_LIVE) {
+  console.error('\x1b[31m%s\x1b[0m', '❌ ERREUR: La variable d\'environnement MONGO_LIVE n\'est pas définie !');
+}
 
 mongoose.connect(MONGO_LIVE)
 .then(() => {
-  console.log('MongoDB connecté');
+  // Récupération des infos de connexion via l'objet mongoose
+  const dbName = mongoose.connection.name;
+  const dbHost = mongoose.connection.host;
+
+  console.log(`\n\x1b[32m=========================================\x1b[0m`);
+  console.log(`\x1b[32m🟩 MongoDB connecté avec succès ! 🟩\x1b[0m`);
+  console.log(`\x1b[35m[BDD] Nom de la base : ${dbName}\x1b[0m`);
+  console.log(`\x1b[35m[HÔTE] Connecté sur  : ${dbHost}\x1b[0m`);
+  console.log(`\x1b[32m=========================================\x1b[0m\n`);
+
   console.log('📅 Initialisation des jobs planifiés...');
   scheduledJobs.init();
 })
 .catch(err => {
-  console.error('Erreur MongoDB :', err);
+  console.error('\x1b[31m%s\x1b[0m', `❌ Erreur de connexion MongoDB : ${err.message}`);
 });
 
 /* =====================================================
