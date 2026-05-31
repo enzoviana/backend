@@ -71,13 +71,10 @@ async function verifierEligibilite(diagnostiqueurId, devisId) {
 
     if (!assurancesOk.rc.valide) {
       resultat.eligible = false;
-      resultat.raisonsIneligibilite.push('Assurance RC expirée ou absente');
+      resultat.raisonsIneligibilite.push('Assurance RC Pro expirée ou absente');
     }
 
-    if (!assurancesOk.decennale.valide) {
-      resultat.eligible = false;
-      resultat.raisonsIneligibilite.push('Assurance décennale expirée ou absente');
-    }
+    // Note: L'assurance décennale n'est plus requise depuis 2026
 
     // 2. Vérifier le pack si présent
     if (devis.pack) {
@@ -151,15 +148,15 @@ async function verifierEligibilite(diagnostiqueurId, devisId) {
 
 /**
  * Vérifie les assurances d'un diagnostiqueur
+ * Note: Depuis 2026, seule l'assurance RC Pro est requise
  */
 async function verifierAssurances(diagnostiqueur) {
   const maintenant = new Date();
   const resultat = {
-    rc: { valide: false, dateExpiration: null },
-    decennale: { valide: false, dateExpiration: null }
+    rc: { valide: false, dateExpiration: null }
   };
 
-  // Vérifier RC
+  // Vérifier RC Pro
   const assuranceRC = diagnostiqueur.documents.find(
     doc => doc.type === 'assurance_rc' && doc.dateExpiration
   );
@@ -169,15 +166,7 @@ async function verifierAssurances(diagnostiqueur) {
     resultat.rc.valide = assuranceRC.dateExpiration > maintenant && assuranceRC.statut === 'valide';
   }
 
-  // Vérifier décennale
-  const assuranceDecennale = diagnostiqueur.documents.find(
-    doc => doc.type === 'assurance_decennale' && doc.dateExpiration
-  );
-
-  if (assuranceDecennale) {
-    resultat.decennale.dateExpiration = assuranceDecennale.dateExpiration;
-    resultat.decennale.valide = assuranceDecennale.dateExpiration > maintenant && assuranceDecennale.statut === 'valide';
-  }
+  // Note: L'assurance décennale n'est plus vérifiée depuis 2026
 
   return resultat;
 }
@@ -428,14 +417,31 @@ async function verifierEligibiliteDiagnostic(diagnostiqueur, diagnosticId) {
       };
     }
 
-    if (domaine.code === 'SURFACE') {
-      console.log("✅ Domaine SURFACE → pas besoin de certification");
+    // Domaines qui ne requièrent pas de certification
+    const domainesSansCertification = ['SURFACE', 'ERP', 'CARREZ', 'BOUTIN'];
+
+    if (domainesSansCertification.includes(domaine.code)) {
+      console.log(`✅ Domaine ${domaine.code} → pas besoin de certification`);
       return {
         eligible: true,
         raison: null,
-        domaineCode: 'SURFACE',
+        domaineCode: domaine.code,
         nomDomaine: domaine.nom,
-        certificationTrouvee: true
+        certificationTrouvee: true,
+        noCertificationRequired: true
+      };
+    }
+
+    // Vérifier si le domaine a explicitement requiresCertification à false
+    if (domaine.requiresCertification === false) {
+      console.log(`✅ Domaine ${domaine.code} → requiresCertification = false`);
+      return {
+        eligible: true,
+        raison: null,
+        domaineCode: domaine.code,
+        nomDomaine: domaine.nom,
+        certificationTrouvee: true,
+        noCertificationRequired: true
       };
     }
 

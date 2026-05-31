@@ -636,10 +636,6 @@ exports.deleteTechnicien = async (req, res) => {
  */
 exports.addCertification = async (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'Aucun fichier fourni.' });
-    }
-
     const {
       technicienId,
       domaineId,
@@ -653,6 +649,24 @@ exports.addCertification = async (req, res) => {
 
     const diagnostiqueur = req.diagnostiqueur;
 
+    // Vérifier si le domaine requiert une certification
+    const DomaineActivite = require('../models/DomaineActivite');
+    const domaine = await DomaineActivite.findById(domaineId);
+
+    if (!domaine) {
+      return res.status(404).json({ message: 'Domaine non trouvé.' });
+    }
+
+    // Domaines qui ne requièrent pas de certification (ERP, Carrez, Boutin)
+    const domainesSansCertification = ['ERP', 'CARREZ', 'BOUTIN'];
+    const requiresCertification = !domainesSansCertification.includes(domaine.code) &&
+                                  domaine.requiresCertification !== false;
+
+    // Si le domaine requiert une certification, le fichier est obligatoire
+    if (requiresCertification && !req.file) {
+      return res.status(400).json({ message: 'Un document de certification est requis pour ce diagnostic.' });
+    }
+
     // Vérifier que le technicien appartient au diagnostiqueur
     const technicien = await TechnicienDiagnostiqueur.findOne({
       _id: technicienId,
@@ -663,54 +677,67 @@ exports.addCertification = async (req, res) => {
       return res.status(404).json({ message: 'Technicien non trouvé.' });
     }
 
-    // Upload sur Cloudinary
-    console.log('📤 Upload Cloudinary en cours...', {
-      filePath: req.file.path,
-      fileName: req.file.originalname,
-      folder: `diagnostiqueurs/${diagnostiqueur._id}/certifications`
-    });
+    // Upload sur Cloudinary (si fichier fourni)
+    let documentData = null;
 
-    const result = await cloudinary.uploader.upload(req.file.path, {
-      folder: `diagnostiqueurs/${diagnostiqueur._id}/certifications`,
-      resource_type: 'auto'
-    });
+    if (req.file) {
+      console.log('📤 Upload Cloudinary en cours...', {
+        filePath: req.file.path,
+        fileName: req.file.originalname,
+        folder: `diagnostiqueurs/${diagnostiqueur._id}/certifications`
+      });
 
-    console.log('✅ Upload Cloudinary réussi:', {
-      url: result.secure_url,
-      public_id: result.public_id
-    });
+      const result = await cloudinary.uploader.upload(req.file.path, {
+        folder: `diagnostiqueurs/${diagnostiqueur._id}/certifications`,
+        resource_type: 'auto'
+      });
 
-    // Vérifier que l'URL est bien présente
-    if (!result.secure_url) {
-      throw new Error('URL Cloudinary non générée après upload');
-    }
+      console.log('✅ Upload Cloudinary réussi:', {
+        url: result.secure_url,
+        public_id: result.public_id
+      });
 
-    // Créer la certification en attente d'approbation
-    const certification = await Certification.create({
-      technicien: technicienId,
-      diagnostiqueur: diagnostiqueur._id,
-      domaine: domaineId,
-      numeroCertification,
-      organisme,
-      dateObtention: new Date(dateObtention),
-      dateExpiration: new Date(dateExpiration),
-      mentionSpeciale: mentionSpeciale || null,
-      notes: notes || '',
-      document: {
+      // Vérifier que l'URL est bien présente
+      if (!result.secure_url) {
+        throw new Error('URL Cloudinary non générée après upload');
+      }
+
+      documentData = {
         nom: req.file.originalname,
         url: result.secure_url,
         public_id: result.public_id,
         dateDepot: new Date()
-      },
-      statut: 'en_attente',
+      };
+    }
+
+    // Créer la certification
+    const certificationData = {
+      technicien: technicienId,
+      diagnostiqueur: diagnostiqueur._id,
+      domaine: domaineId,
+      numeroCertification: numeroCertification || 'N/A',
+      organisme: organisme || 'N/A',
+      dateObtention: dateObtention ? new Date(dateObtention) : new Date(),
+      dateExpiration: dateExpiration ? new Date(dateExpiration) : new Date('2099-12-31'),
+      mentionSpeciale: mentionSpeciale || null,
+      notes: notes || '',
+      statut: requiresCertification ? 'en_attente' : 'valide',
       approbation: {
-        statutApprobation: 'en_attente',
+        // Auto-approuver pour les domaines sans certification requise (ERP, Carrez, Boutin)
+        statutApprobation: requiresCertification ? 'en_attente' : 'approuve',
         approuvePar: null,
-        dateApprobation: null,
+        dateApprobation: requiresCertification ? null : new Date(),
         raisonRejet: null,
-        commentaireAdmin: null
+        commentaireAdmin: requiresCertification ? null : 'Auto-approuvé (aucune certification requise)'
       }
-    });
+    };
+
+    // Ajouter le document seulement s'il existe
+    if (documentData) {
+      certificationData.document = documentData;
+    }
+
+    const certification = await Certification.create(certificationData);
 
     // Ajouter la certification au technicien
     technicien.certifications.push(certification._id);
@@ -720,8 +747,12 @@ exports.addCertification = async (req, res) => {
       .populate('technicien')
       .populate('domaine');
 
+    const message = requiresCertification
+      ? 'Certification ajoutée et en attente d\'approbation par l\'administrateur.'
+      : 'Certification ajoutée et approuvée automatiquement (aucune certification requise pour ce diagnostic).';
+
     res.status(201).json({
-      message: 'Certification ajoutée et en attente d\'approbation par l\'administrateur.',
+      message,
       certification: certificationPopulated
     });
 
