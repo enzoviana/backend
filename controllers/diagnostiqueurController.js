@@ -269,14 +269,48 @@ exports.resetPassword = async (req, res) => {
  * PROFIL - Récupérer
  */
 exports.getMe = async (req, res) => {
+  // 1. Log d'entrée : Est-ce que la route est bien appelée ?
+  console.log('\n=== [Backend] Appel de la route getMe ===');
+  
   try {
+    // 2. Log de vérification du middleware d'authentification
+    // Permet de voir si l'ID a bien été extrait du token JWT et injecté dans req
+    console.log('[Backend] req.diagnostiqueur reçu du middleware :', req.diagnostiqueur);
+
+    if (!req.diagnostiqueur || !req.diagnostiqueur._id) {
+      console.warn('[Backend] ⚠️ Attention : Aucun ID trouvé dans req.diagnostiqueur. Le token est peut-être mal décodé.');
+    } else {
+      console.log(`[Backend] Recherche en base de données pour l'ID : ${req.diagnostiqueur._id}`);
+    }
+
+    // Requête MongoDB
     const diagnostiqueur = await Diagnostiqueur.findById(req.diagnostiqueur._id)
       .select('-admin.mot_de_passe -admin.resetPasswordToken -admin.resetPasswordExpires');
 
+    // 3. Log du résultat de la recherche
+    if (!diagnostiqueur) {
+      console.error(`[Backend] ❌ Aucun diagnostiqueur trouvé en BDD pour l'ID : ${req.diagnostiqueur?._id}`);
+      // Si la BDD ne trouve rien, on renvoie souvent un 404 ou 403 selon la config du middleware
+      return res.status(404).json({ message: 'Diagnostiqueur introuvable.' });
+    }
+
+    console.log('[Backend] ✅ Diagnostiqueur trouvé avec succès. Données renvoyées :', {
+      id: diagnostiqueur._id,
+      email: diagnostiqueur.email,
+      nom: diagnostiqueur.nom,
+      prenom: diagnostiqueur.prenom,
+      statutAbonnement: diagnostiqueur.typeAbonnement // Pour vérifier pourquoi l'upgrade bloquait
+    });
+
+    // Envoi de la réponse au front-end
     res.json(diagnostiqueur);
 
   } catch (error) {
-    console.error('Erreur getMe:', error);
+    // 4. Log d'erreur ultra-détaillé
+    console.error('[Backend] ❌ Erreur critique dans getMe :');
+    console.error('- Message:', error.message);
+    console.error('- Stack trace:', error.stack);
+    
     res.status(500).json({ message: 'Erreur lors de la récupération du profil.' });
   }
 };

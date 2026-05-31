@@ -153,6 +153,15 @@ async function handleCheckoutCompleted(session) {
     diagnostiqueur.stripeSubscriptionStatus = subscription.status;
     await diagnostiqueur.save();
 
+    // 🌟 SÉCURISATION DES DATES CONTRE LES VALEURS UNDEFINED / NaN 🌟
+    const dateDebut = subscription.current_period_start 
+      ? new Date(subscription.current_period_start * 1000) 
+      : new Date();
+
+    const prochainePeriode = subscription.current_period_end 
+      ? new Date(subscription.current_period_end * 1000) 
+      : new Date(Date.now() + 30 * 24 * 60 * 60 * 1000); // + 30 jours par défaut
+
     // Créer ou mettre à jour l'abonnement
     let abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueurId });
 
@@ -163,16 +172,16 @@ async function handleCheckoutCompleted(session) {
         stripeSubscriptionId: subscriptionId,
         stripePriceId: PLANS.PRO.priceId,
         statut: subscription.status,
-        dateDebut: new Date(subscription.current_period_start * 1000),
-        prochainePeriode: new Date(subscription.current_period_end * 1000)
+        dateDebut: dateDebut,
+        prochainePeriode: prochainePeriode
       });
     } else {
       abonnement.type = 'PRO';
       abonnement.stripeSubscriptionId = subscriptionId;
       abonnement.stripePriceId = PLANS.PRO.priceId;
       abonnement.statut = subscription.status;
-      abonnement.dateDebut = new Date(subscription.current_period_start * 1000);
-      abonnement.prochainePeriode = new Date(subscription.current_period_end * 1000);
+      abonnement.dateDebut = dateDebut;
+      abonnement.prochainePeriode = prochainePeriode;
     }
 
     // Ajouter à l'historique
@@ -199,7 +208,6 @@ async function handleCheckoutCompleted(session) {
  */
 async function handleSubscriptionUpdated(subscription) {
   try {
-    // Vérifier si c'est un abonnement de contrat de maintenance
     if (subscription.metadata && subscription.metadata.type === 'contrat_maintenance') {
       console.log('📄 Mise à jour abonnement contrat de maintenance');
       const contratController = require('../controllers/contratController');
@@ -207,7 +215,6 @@ async function handleSubscriptionUpdated(subscription) {
       return;
     }
 
-    // Sinon, c'est un abonnement diagnostiqueur
     const diagnostiqueur = await Diagnostiqueur.findOne({ stripeSubscriptionId: subscription.id });
 
     if (!diagnostiqueur) {
@@ -215,10 +222,8 @@ async function handleSubscriptionUpdated(subscription) {
       return;
     }
 
-    // Mettre à jour le statut
     diagnostiqueur.stripeSubscriptionStatus = subscription.status;
 
-    // Si annulé ou expiré, downgrade vers STANDARD
     if (subscription.status === 'canceled' || subscription.status === 'incomplete_expired') {
       diagnostiqueur.typeAbonnement = 'STANDARD';
       diagnostiqueur.stripeSubscriptionId = null;
@@ -226,12 +231,15 @@ async function handleSubscriptionUpdated(subscription) {
 
     await diagnostiqueur.save();
 
-    // Mettre à jour l'abonnement
     const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueur._id });
 
     if (abonnement) {
       abonnement.statut = subscription.status;
-      abonnement.prochainePeriode = new Date(subscription.current_period_end * 1000);
+      
+      // 🌟 Sécurisation de la date de prochaine période
+      if (subscription.current_period_end) {
+        abonnement.prochainePeriode = new Date(subscription.current_period_end * 1000);
+      }
 
       if (subscription.status === 'canceled') {
         abonnement.type = 'STANDARD';
@@ -269,7 +277,6 @@ async function handleInvoicePaymentSucceeded(invoice) {
       return;
     }
 
-    // Trouver le diagnostiqueur
     const diagnostiqueur = await Diagnostiqueur.findOne({ stripeSubscriptionId: subscriptionId });
 
     if (!diagnostiqueur) {
@@ -277,15 +284,17 @@ async function handleInvoicePaymentSucceeded(invoice) {
       return;
     }
 
-    // Ajouter la facture à l'abonnement
     const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueur._id });
 
     if (abonnement) {
+      // 🌟 Sécurisation de la date de facture
+      const dateFacture = invoice.created ? new Date(invoice.created * 1000) : new Date();
+
       const factureData = {
         stripeInvoiceId: invoice.id,
         montant: invoice.amount_paid,
         statut: invoice.status,
-        dateFacture: new Date(invoice.created * 1000),
+        dateFacture: dateFacture,
         pdfUrl: invoice.invoice_pdf
       };
 
@@ -312,12 +321,10 @@ async function annulerAbonnement(diagnostiqueurId) {
       throw new Error('Abonnement non trouvé');
     }
 
-    // Annuler à la fin de la période
     await stripe.subscriptions.update(diagnostiqueur.stripeSubscriptionId, {
       cancel_at_period_end: true
     });
 
-    // Mettre à jour l'abonnement
     const abonnement = await AbonnementDiagnostiqueur.findOne({ diagnostiqueur: diagnostiqueurId });
 
     if (abonnement) {
