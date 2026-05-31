@@ -10,6 +10,7 @@ const dashboardRoutes = require('./routes/dashboardRoutes');
 const chatbotRoutes = require('./routes/chatbotRoutes');
 const diagnostiqueurRoutes = require('./routes/diagnostiqueurRoutes');
 const stripeRoutes = require('./routes/stripeRoutes');
+const adminSyncRoutes = require('./routes/adminSyncRoutes');
 
 const scheduledJobs = require('./jobs/scheduledJobs');
 
@@ -47,6 +48,7 @@ app.use(express.urlencoded({ limit: '50mb', extended: true }));
 /* =====================================================
    5️⃣ ROUTES API
 ===================================================== */
+app.use('/api/sync', adminSyncRoutes); // ⚠️ IMPORTANT: Les routes spécifiques AVANT les routes génériques
 app.use('/api/admin', adminRoutes);
 app.use('/api/agency', agencyRoutes);
 app.use('/api/client', devisRoutes);
@@ -112,7 +114,7 @@ const MONGO_LIVE = process.env.MONGO_LIVE || 'mongodb://127.0.0.1:27017/diag_pla
 
 mongoose.connect(MONGO_LIVE)
 .then(() => {
-  console.log('MongoDB connecté ✅');
+  console.log('MongoDB connecté');
   console.log('📅 Initialisation des jobs planifiés...');
   scheduledJobs.init();
 })

@@ -4,7 +4,10 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "migrate:cloudinary": "node scripts/migrateCloudinaryToDatabase.js",
+    "verify:migration": "node scripts/verifyMigration.js",
+    "sync:databases": "node scripts/syncDatabases.js"
   },
   "keywords": [],
   "author": "",

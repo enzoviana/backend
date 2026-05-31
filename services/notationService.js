@@ -28,8 +28,9 @@ async function creerNotation(agenceId, diagnostiqueurId, ordreMissionId, data) {
       throw new Error('Mission non trouvée');
     }
 
-    if (mission.statutAcceptation !== 'termine') {
-      throw new Error('La mission doit être terminée pour être notée');
+    // Vérifier que la mission est au moins "Traité" pour être notée
+    if (mission.statut !== 'Traité' && mission.statut !== 'Payée') {
+      throw new Error('La mission doit être traitée ou payée pour être notée');
     }
 
     // Vérifier qu'il n'existe pas déjà une notation pour cette mission
@@ -55,11 +56,19 @@ async function creerNotation(agenceId, diagnostiqueurId, ordreMissionId, data) {
       dateNotation: new Date()
     });
 
-    // Recalculer la note globale du diagnostiqueur
-    await recalculerNoteGlobale(diagnostiqueurId);
+    // Recalculer la note globale du diagnostiqueur (ne pas bloquer si échec)
+    try {
+      await recalculerNoteGlobale(diagnostiqueurId);
+    } catch (err) {
+      console.error('⚠️ Erreur lors du recalcul de la note globale (non bloquant):', err);
+    }
 
-    // Notifier le diagnostiqueur
-    await notifierDiagnostiqueurNouvelleNotation(notation);
+    // Notifier le diagnostiqueur (ne pas bloquer si échec)
+    try {
+      await notifierDiagnostiqueurNouvelleNotation(notation);
+    } catch (err) {
+      console.error('⚠️ Erreur lors de la notification email (non bloquant):', err);
+    }
 
     return notation;
 
