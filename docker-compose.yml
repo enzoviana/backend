@@ -9,25 +9,20 @@ services:
     container_name: dimotec-backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
-    environment:
-      # Variables d'environnement (à configurer selon vos besoins)
-      - NODE_ENV=production
-      - PORT=3000
-      - MONGO_LIVE=mongodb://mongo:27017/diag_platform
-      # Ajoutez vos autres variables d'environnement ici
-      # ou utilisez un fichier .env avec env_file
+      - "${PORT}:${PORT}" # 💡 Dynamique : utilise le PORT défini dans ton .env (ex: 3000:3000)
     env_file:
-      - .env
+      - .env # 🟩 Charge TOUTES les variables de ton .env (y compris MONGO_LIVE, STRIPE, etc.)
+    environment:
+      - NODE_ENV=production # On garde uniquement ce qui est propre à l'exécution Docker
     depends_on:
-      - mongo
+      mongo:
+        condition: service_healthy # 💡 Plus robuste : attend que MongoDB soit VRAIMENT prêt (grâce au healthcheck)
     networks:
       - dimotec-network
     volumes:
-      # Optionnel: pour persister les logs ou uploads
       - ./logs:/app/logs
     healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/"]
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:${PORT}/"] # 💡 Dynamique aussi
       interval: 30s
       timeout: 10s
       retries: 3
@@ -43,7 +38,6 @@ services:
     environment:
       - MONGO_INITDB_DATABASE=diag_platform
     volumes:
-      # Persister les données MongoDB
       - mongo-data:/data/db
       - mongo-config:/data/configdb
     networks:
