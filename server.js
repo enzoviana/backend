@@ -110,14 +110,14 @@ const listRoutes = () => {
 /* =====================================================
    7️⃣ CONNEXION MONGODB
 ===================================================== */
-const MONGO_LIVE = process.env.MONGO_LIVE;
+const MONGO_URI = process.env.MONGO_URI;
 
 // Optionnel: Petit check de sécurité si la variable est vide
-if (!MONGO_LIVE) {
-  console.error('\x1b[31m%s\x1b[0m', '❌ ERREUR: La variable d\'environnement MONGO_LIVE n\'est pas définie !');
+if (!MONGO_URI) {
+  console.error('\x1b[31m%s\x1b[0m', '❌ ERREUR: La variable d\'environnement MONGO_URI n\'est pas définie !');
 }
 
-mongoose.connect(MONGO_LIVE)
+mongoose.connect(MONGO_URI)
 .then(() => {
   // Récupération des infos de connexion via l'objet mongoose
   const dbName = mongoose.connection.name;
