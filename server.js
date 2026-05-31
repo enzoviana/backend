@@ -110,7 +110,7 @@ const listRoutes = () => {
 /* =====================================================
    7️⃣ CONNEXION MONGODB
 ===================================================== */
-const MONGO_LIVE = process.env.MONGO_LIVE || 'mongodb://127.0.0.1:27017/diag_platform';
+const MONGO_LIVE = process.env.MONGO_LIVE ;
 
 mongoose.connect(MONGO_LIVE)
 .then(() => {
