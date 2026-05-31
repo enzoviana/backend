@@ -82,17 +82,41 @@ exports.createCheckoutSession = async (req, res) => {
  */
 exports.createPortalSession = async (req, res) => {
   try {
-    const { diagnostiqueurId, returnUrl } = req.body;
+    // 1. Sécurisation contre le req.body undefined (évite le crash de destructuration)
+    const { diagnostiqueurId, returnUrl } = req.body || {};
 
-    const session = await stripeService.creerPortalSession(diagnostiqueurId, returnUrl);
+    // 2. Récupération intelligente de l'ID :
+    // Si le front-end a envoyé 'null', on prend l'ID extrait du token JWT par votre middleware auth (req.diagnostiqueur)
+    const finalDiagnostiqueurId = diagnostiqueurId || (req.diagnostiqueur && req.diagnostiqueur._id);
 
+    // 3. Validation de sécurité
+    if (!finalDiagnostiqueurId) {
+      console.error('[Backend] ❌ Impossible de créer le portail : Aucun ID de diagnostiqueur trouvé (body ou token).');
+      return res.status(400).json({ 
+        message: 'Identification du diagnostiqueur impossible. Vérifiez votre session.' 
+      });
+    }
+
+    console.log(`[Backend] 🔄 Demande de session Portal Stripe pour le diagnostiqueur ID : ${finalDiagnostiqueurId}`);
+    console.log(`[Backend] ↩️ URL de retour configurée : ${returnUrl}`);
+
+    // Appel de votre service Stripe (qui attend l'ID corrigé)
+    const session = await stripeService.creerPortalSession(finalDiagnostiqueurId, returnUrl);
+
+    // Renvoi de l'URL au front-end Vue
     res.json({
       sessionUrl: session.url
     });
 
   } catch (error) {
-    console.error('Erreur createPortalSession:', error);
-    res.status(500).json({ message: 'Erreur lors de la création de la session portal.' });
+    // Log ultra-précis pour voir si Stripe rejette la demande (ex: si le customer ID n'existe pas chez eux)
+    console.error('❌ Erreur critique createPortalSession:', error.message);
+    console.error(error.stack);
+    
+    res.status(500).json({ 
+      message: 'Erreur lors de la création de la session portal.',
+      error: error.message 
+    });
   }
 };
 
