@@ -9,22 +9,13 @@ const mongoose = require('mongoose');
  */
 
 const stats = {
-  collections: {
-    total: 0,
-    reussies: 0,
-    erreurs: 0
-  },
-  documents: {
-    total: 0,
-    copies: 0,
-    erreurs: 0
-  },
+  collections: { total: 0, reussies: 0, erreurs: 0 },
+  documents: { total: 0, copies: 0, erreurs: 0 },
   detailsParCollection: {},
   debut: null,
   fin: null
 };
 
-// Connexions aux deux bases de données
 let connexionSource = null;
 let connexionDestination = null;
 
@@ -37,26 +28,20 @@ async function creerConnexions() {
   const sourceUri = process.env.MONGO_LIVE;
   const destUri = process.env.MONGO_URI;
 
-  if (!sourceUri) {
-    throw new Error('❌ MONGO_LIVE non défini dans .env');
-  }
-
-  if (!destUri) {
-    throw new Error('❌ MONGO_URI non défini dans .env');
+  if (!sourceUri || !destUri) {
+    throw new Error('❌ MONGO_LIVE ou MONGO_URI non défini dans le fichier .env');
   }
 
   console.log(`📡 Source (Atlas):       ${sourceUri.substring(0, 30)}...`);
   console.log(`💾 Destination (Docker): ${destUri}\n`);
 
   try {
-    // Connexion à la source (Atlas)
     connexionSource = await mongoose.createConnection(sourceUri, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
     }).asPromise();
     console.log('✅ Connecté à MongoDB Atlas (source)\n');
 
-    // Connexion à la destination (Docker)
     connexionDestination = await mongoose.createConnection(destUri, {
       maxPoolSize: 10,
       serverSelectionTimeoutMS: 5000,
@@ -69,14 +54,13 @@ async function creerConnexions() {
 }
 
 /**
- * Liste toutes les collections de la base source
+ * Liste toutes les collections de la base source (en excluant le système et les backups)
  */
 async function listerCollections() {
   const collections = await connexionSource.db.listCollections().toArray();
-  return collections.map(col => col.name).filter(name => {
-    // Exclure les collections système
-    return !name.startsWith('system.');
-  });
+  return collections
+    .map(col => col.name)
+    .filter(name => !name.startsWith('system.') && !name.startsWith('backup_'));
 }
 
 /**
@@ -92,7 +76,8 @@ async function creerBackup() {
     let totalDocs = 0;
 
     for (const col of collections) {
-      if (col.name.startsWith('system.')) continue;
+      // EXCLUSION : On ne ré-essaye pas de sauvegarder d'anciens backups ou fichiers système
+      if (col.name.startsWith('system.') || col.name.startsWith('backup_')) continue;
 
       const sourceCollection = connexionDestination.db.collection(col.name);
       const backupCollection = connexionDestination.db.collection(`${backupName}_${col.name}`);
@@ -114,7 +99,7 @@ async function creerBackup() {
 }
 
 /**
- * Supprime toutes les collections de la destination
+ * Supprime toutes les collections de la destination (hors backups et système)
  */
 async function viderDestination() {
   console.log('🗑️  Suppression des collections de la destination...\n');
@@ -123,7 +108,7 @@ async function viderDestination() {
 
   for (const col of collections) {
     if (col.name.startsWith('system.') || col.name.startsWith('backup_')) {
-      continue; // Garder les backups et collections système
+      continue; 
     }
 
     try {
@@ -145,7 +130,6 @@ async function copierCollection(nomCollection) {
     const sourceCollection = connexionSource.db.collection(nomCollection);
     const destCollection = connexionDestination.db.collection(nomCollection);
 
-    // Compter les documents
     const count = await sourceCollection.countDocuments();
 
     if (count === 0) {
@@ -154,10 +138,9 @@ async function copierCollection(nomCollection) {
       return;
     }
 
-    // Récupérer tous les documents
     const documents = await sourceCollection.find({}).toArray();
 
-    // Insérer dans la destination
+    // ordered: false permet de continuer l'insertion même si un document provoque une erreur (ex: doublon d'index)
     await destCollection.insertMany(documents, { ordered: false });
 
     stats.collections.reussies++;
@@ -189,12 +172,10 @@ async function copierIndex(nomCollection) {
     const sourceCollection = connexionSource.db.collection(nomCollection);
     const destCollection = connexionDestination.db.collection(nomCollection);
 
-    // Récupérer les index de la source
     const indexes = await sourceCollection.indexes();
 
-    // Créer les index dans la destination (sauf _id qui existe déjà)
     for (const index of indexes) {
-      if (index.name === '_id_') continue; // Index par défaut
+      if (index.name === '_id_') continue; 
 
       try {
         await destCollection.createIndex(index.key, {
@@ -204,7 +185,7 @@ async function copierIndex(nomCollection) {
           background: true
         });
       } catch (error) {
-        // Ignorer les erreurs d'index (peuvent déjà exister)
+        // Ignoré si l'index existe déjà
       }
     }
 
@@ -244,13 +225,10 @@ function afficherRapport() {
   });
 
   console.log('='.repeat(70));
-
-  if (stats.collections.erreurs === 0) {
-    console.log('✅ SYNCHRONISATION TERMINÉE AVEC SUCCÈS !');
-  } else {
-    console.log(`⚠️  SYNCHRONISATION TERMINÉE AVEC ${stats.collections.erreurs} ERREUR(S)`);
-  }
-
+  console.log(stats.collections.erreurs === 0 
+    ? '✅ SYNCHRONISATION TERMINÉE AVEC SUCCÈS !' 
+    : `⚠️  SYNCHRONISATION TERMINÉE AVEC ${stats.collections.erreurs} ERREUR(S)`
+  );
   console.log('='.repeat(70) + '\n');
 }
 
@@ -272,21 +250,17 @@ async function synchroniserBases(options = {}) {
     console.log('⚠️  ATTENTION: Cette opération va ÉCRASER la base locale !\n');
     console.log('='.repeat(70) + '\n');
 
-    // 1. Créer les connexions
     await creerConnexions();
 
-    // 2. Backup de la destination (optionnel)
     let backupName = null;
     if (avecBackup) {
       backupName = await creerBackup();
     }
 
-    // 3. Vider la destination
     if (viderAvant) {
       await viderDestination();
     }
 
-    // 4. Lister les collections à copier
     const collections = await listerCollections();
     stats.collections.total = collections.length;
 
@@ -294,22 +268,18 @@ async function synchroniserBases(options = {}) {
     collections.forEach(col => console.log(`   - ${col}`));
     console.log();
 
-    // 5. Copier chaque collection
     console.log('🔄 Copie des collections...\n');
 
     for (let i = 0; i < collections.length; i++) {
       const collection = collections[i];
-
       console.log(`[${i + 1}/${collections.length}] ${collection}`);
 
       await copierCollection(collection);
 
-      // Copier les index si demandé
       if (copierIndexes) {
         await copierIndex(collection);
       }
 
-      // Callback de progression
       if (progressCallback) {
         progressCallback({
           collection,
@@ -321,8 +291,6 @@ async function synchroniserBases(options = {}) {
     }
 
     stats.fin = Date.now();
-
-    // 6. Afficher le rapport
     afficherRapport();
 
     return {
@@ -334,29 +302,17 @@ async function synchroniserBases(options = {}) {
 
   } catch (error) {
     console.error('\n❌ ERREUR FATALE:', error.message);
-    console.error(error.stack);
-
-    return {
-      success: false,
-      error: error.message,
-      stats
-    };
+    return { success: false, error: error.message, stats };
 
   } finally {
-    // Fermer les connexions
-    if (connexionSource) {
-      await connexionSource.close();
-      console.log('👋 Déconnexion de MongoDB Atlas');
-    }
-    if (connexionDestination) {
-      await connexionDestination.close();
-      console.log('👋 Déconnexion de MongoDB Docker\n');
-    }
+    if (connexionSource) await connexionSource.close();
+    if (connexionDestination) await connexionDestination.close();
+    console.log('👋 Connexions MongoDB fermées proprement.\n');
   }
 }
 
 /**
- * Fonction de confirmation interactive (si lancé manuellement)
+ * Confirmation interactive
  */
 async function demanderConfirmation() {
   const readline = require('readline').createInterface({
@@ -375,12 +331,8 @@ async function demanderConfirmation() {
   });
 }
 
-/**
- * Exécution du script
- */
 if (require.main === module) {
   (async () => {
-    // Demander confirmation
     const confirme = await demanderConfirmation();
 
     if (!confirme) {
