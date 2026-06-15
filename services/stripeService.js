@@ -91,8 +91,18 @@ async function creerCheckoutSession(diagnostiqueurId, returnUrl, cancelUrl) {
 async function creerPortalSession(diagnostiqueurId, returnUrl) {
   try {
     const diagnostiqueur = await Diagnostiqueur.findById(diagnostiqueurId);
-    if (!diagnostiqueur || !diagnostiqueur.stripeCustomerId) {
-      throw new Error('Customer Stripe non trouvé');
+
+    if (!diagnostiqueur) {
+      const error = new Error('Diagnostiqueur non trouvé');
+      error.code = 'DIAGNOSTIQUEUR_NOT_FOUND';
+      throw error;
+    }
+
+    // Vérifier si le diagnostiqueur a déjà un customer Stripe (= a déjà souscrit)
+    if (!diagnostiqueur.stripeCustomerId) {
+      const error = new Error('Aucun abonnement actif. Veuillez d\'abord souscrire à un abonnement.');
+      error.code = 'NO_SUBSCRIPTION';
+      throw error;
     }
 
     const session = await stripe.billingPortal.sessions.create({

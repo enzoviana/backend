@@ -112,10 +112,26 @@ exports.createPortalSession = async (req, res) => {
     // Log ultra-précis pour voir si Stripe rejette la demande (ex: si le customer ID n'existe pas chez eux)
     console.error('❌ Erreur critique createPortalSession:', error.message);
     console.error(error.stack);
-    
-    res.status(500).json({ 
+
+    // Gérer le cas où l'utilisateur n'a jamais souscrit d'abonnement
+    if (error.code === 'NO_SUBSCRIPTION') {
+      return res.status(400).json({
+        code: 'NO_SUBSCRIPTION',
+        message: error.message,
+        redirectToCheckout: true
+      });
+    }
+
+    if (error.code === 'DIAGNOSTIQUEUR_NOT_FOUND') {
+      return res.status(404).json({
+        code: 'DIAGNOSTIQUEUR_NOT_FOUND',
+        message: error.message
+      });
+    }
+
+    res.status(500).json({
       message: 'Erreur lors de la création de la session portal.',
-      error: error.message 
+      error: error.message
     });
   }
 };
