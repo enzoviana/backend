@@ -1596,3 +1596,39 @@ exports.migrationInitTechniciens = async (req, res) => {
     });
   }
 };
+
+/**
+ * MIGRATION CLOUDINARY TO DATABASE
+ * Exécute le script de migration des fichiers Cloudinary vers MongoDB
+ */
+exports.migrationCloudinaryToDatabase = async (req, res) => {
+  try {
+    console.log('🚀 Démarrage de la migration Cloudinary → MongoDB');
+
+    // Importer le script de migration
+    const { migrerTousLesDocuments } = require('../scripts/migrateCloudinaryToDatabase');
+
+    // Exécuter la migration de manière asynchrone
+    migrerTousLesDocuments()
+      .then(() => {
+        console.log('✅ Migration Cloudinary → MongoDB terminée avec succès');
+      })
+      .catch((error) => {
+        console.error('❌ Erreur lors de la migration Cloudinary:', error);
+      });
+
+    // Répondre immédiatement au client
+    res.json({
+      success: true,
+      message: 'Migration lancée en arrière-plan. Consultez les logs du serveur pour suivre la progression.'
+    });
+
+  } catch (error) {
+    console.error('❌ Erreur lors du lancement de la migration:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors du lancement de la migration',
+      error: error.message
+    });
+  }
+};

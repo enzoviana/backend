@@ -1220,30 +1220,30 @@ exports.downloadOrdreMission = async (req, res) => {
         const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
         const nomDiag = (diag.nom || '').toLowerCase();
 
-        // ❌ EXCLURE GAZ et Audits car ce sont des suppléments conditionnels
+        // ❌ EXCLURE GAZ, Surface (copropriété) et Audits car ce sont des suppléments conditionnels
         const isGaz = nomDiag.includes('gaz');
-        const isAudit = nomDiag.includes('audit');
-        if (isGaz || isAudit) {
-          return false;
-        }
-
-        // ❌ EXCLURE Surface uniquement pour les MAISONS
         const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
-        if (isSurface && mission.devisId.bien === 'maison') {
+        const isAudit = nomDiag.includes('audit');
+        if (isGaz || isSurface || isAudit) {
           return false;
         }
 
-        // ✅ Le diagnostic est compatible UNIQUEMENT si :
-        // - Il a EXACTEMENT la même tranche d'année que le devis
-        // - On ignore les diagnostics avec "toutes"
+        // ✅ Le diagnostic est compatible si il a la tranche d'année qui correspond au devis
         const matchTranche = diagTrancheAnnee.includes(devisTrancheAnnee);
 
         return matchTranche;
       });
       diagnostics.push(...diagnosticsFiltres);
     }
+
+    // 2) Ajouter les diagnostics sélectionnés individuellement
     if (mission.devisId?.diagnosticsSelectionnes) {
       diagnostics.push(...mission.devisId.diagnosticsSelectionnes);
+    }
+
+    // 3) ✅ Ajouter les suppléments sélectionnés (GAZ, Surface copropriété, etc.)
+    if (mission.devisId?.supplementsSelectionnes) {
+      diagnostics.push(...mission.devisId.supplementsSelectionnes);
     }
 
     if (diagnostics.length > 0) {

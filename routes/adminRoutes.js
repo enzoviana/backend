@@ -239,4 +239,8 @@ router.post('/plans-abonnement/verifier-limites', authMiddleware, adminPlanAbonn
 // Initialiser les techniciens manquants pour tous les diagnostiqueurs
 router.post('/migration/init-techniciens', authMiddleware, adminController.migrationInitTechniciens);
 
+// ========== MIGRATION CLOUDINARY TO DATABASE ==========
+// Migrer tous les documents de Cloudinary vers MongoDB
+router.post('/migration/cloudinary-to-database', authMiddleware, adminController.migrationCloudinaryToDatabase);
+
 module.exports = router;
