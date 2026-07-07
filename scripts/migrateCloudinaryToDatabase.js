@@ -270,14 +270,17 @@ async function migrerDocumentsOrdreMission(mission) {
 /**
  * Script principal de migration
  */
+/**
+ * Script principal de migration
+ */
 async function migrerTousLesDocuments() {
   try {
     console.log('🚀 Début de la migration Cloudinary → MongoDB\n');
     console.log('=' .repeat(60));
 
-    // Connexion à MongoDB
-    await mongoose.connect(process.env.MONGO_LIVE || process.env.MONGO_LIVE);
-    console.log('✅ Connecté à MongoDB\n');
+    // COMMANTÉ : Le serveur Express gère déjà la connexion globale à MongoDB.
+    // await mongoose.connect(process.env.MONGO_LIVE || process.env.MONGO_LIVE);
+    // console.log('✅ Connecté à MongoDB\n');
 
     // 1. Migrer tous les diagnostiqueurs
     console.log('\n📦 MIGRATION DES DIAGNOSTIQUEURS');
@@ -350,8 +353,11 @@ async function migrerTousLesDocuments() {
     console.error('\n❌ Erreur lors de la migration:', error);
     throw error;
   } finally {
-    await mongoose.disconnect();
-    console.log('\n👋 Déconnexion de MongoDB');
+    // CONDITIONNÉ : On ne déconnecte Mongoose que si le script tourne en Standalone (CLI), pas via l'API Web.
+    if (require.main === module) {
+      await mongoose.disconnect();
+      console.log('\n👋 Déconnexion de MongoDB');
+    }
   }
 }
 
