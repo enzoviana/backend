@@ -96,7 +96,23 @@ surfaceMaison: {
   type: String,
   set: val => {
     if (!val) return val;
-    return val.replace(/\s*-\s*/, " - ").replace(/m²$/, " m²");
+
+    // ✅ FIX BUG SURFACE : Normaliser tous les formats possibles
+    // Gérer : "250", "250m2", "250m²", "250 m²", "71-90m²", etc.
+
+    // 1. Si c'est déjà au bon format, on garde
+    if (val.match(/^\d+(\s*-\s*\d+)?\s*m²$/)) {
+      return val.replace(/\s*-\s*/, " - "); // Juste normaliser les tirets
+    }
+
+    // 2. Enlever "m2" ou "m²" existants et espaces à la fin
+    let cleaned = val.trim().replace(/\s*m2?²?\s*$/i, '');
+
+    // 3. Normaliser les tirets pour les tranches
+    cleaned = cleaned.replace(/\s*-\s*/, " - ");
+
+    // 4. Ajouter " m²" à la fin
+    return cleaned + " m²";
   },
 },
 

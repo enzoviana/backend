@@ -959,6 +959,12 @@ exports.createDevis = async (req, res) => {
     console.log("===== Nouveau devis reçu =====", req.body);
     let data = req.body.data ? JSON.parse(req.body.data) : req.body;
 
+    // 🔍 DEBUG: Log pour diagnostiquer le problème de surface null
+    console.log('🔍 DEBUG BACKEND - bien:', data.bien);
+    console.log('🔍 DEBUG BACKEND - surfaceMaison:', data.surfaceMaison);
+    console.log('🔍 DEBUG BACKEND - surfaceAppartement:', data.surfaceAppartement);
+    console.log('🔍 DEBUG BACKEND - type of surfaceMaison:', typeof data.surfaceMaison);
+
     if (!data.client || !data.type || !data.bien) {
       return res.status(400).json({ message: "Client, type de devis et type de bien requis." });
     }
@@ -1608,6 +1614,12 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
 
 
     // 🧾 Création du devis avec les données du client récupéré/créé
+    // 🔍 DEBUG: Vérification avant création du devis
+    console.log('🔍 DEBUG AVANT CREATION DEVIS:');
+    console.log('  - bien:', data.bien);
+    console.log('  - surfaceMaison (raw):', data.surfaceMaison);
+    console.log('  - surfaceAppartement (raw):', data.surfaceAppartement);
+
     const devis = new Devis({
       agenceId,
       shareAgency: shareAgencyId,
@@ -1670,6 +1682,12 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
     console.log('💾 Avant sauvegarde - diagnostiqueurAssigne:', data.diagnostiqueurAssigne?.toString() || 'NULL');
 
     await devis.save();
+
+    // 🔍 DEBUG: Vérification après sauvegarde
+    console.log('🔍 DEBUG APRES SAUVEGARDE:');
+    console.log('  - bien:', devis.bien);
+    console.log('  - surfaceMaison (saved):', devis.surfaceMaison);
+    console.log('  - surfaceAppartement (saved):', devis.surfaceAppartement);
 
     console.log('✅ Devis créé:', {
       numero: devis.numero,
