@@ -1212,37 +1212,17 @@ exports.downloadOrdreMission = async (req, res) => {
     doc.moveDown(0.5);
     doc.fontSize(10).font('Helvetica');
 
+    // ⚠️ IMPORTANT : L'ordre de mission doit afficher EXACTEMENT ce qui est dans le devis
+    // On ne refait PAS de filtrage du pack, on prend uniquement ce qui a été explicitement sélectionné
     const diagnostics = [];
-    if (mission.devisId?.pack?.diagnostics) {
-      // Filtrer les diagnostics du pack selon la tranche d'année du devis
-      const devisTrancheAnnee = mission.devisId.anneeConstruction;
-      const diagnosticsFiltres = mission.devisId.pack.diagnostics.filter(diag => {
-        const diagTrancheAnnee = Array.isArray(diag.trancheAnnee) ? diag.trancheAnnee : [];
-        const nomDiag = (diag.nom || '').toLowerCase();
 
-        // ❌ EXCLURE GAZ, Surface (copropriété) et Audits car ce sont des suppléments conditionnels
-        const isGaz = nomDiag.includes('gaz');
-        const isSurface = nomDiag.includes('surface') || nomDiag.includes('copropriét');
-        const isAudit = nomDiag.includes('audit');
-        if (isGaz || isSurface || isAudit) {
-          return false;
-        }
-
-        // ✅ Le diagnostic est compatible si il a la tranche d'année qui correspond au devis
-        const matchTranche = diagTrancheAnnee.includes(devisTrancheAnnee);
-
-        return matchTranche;
-      });
-      diagnostics.push(...diagnosticsFiltres);
-    }
-
-    // 2) Ajouter les diagnostics sélectionnés individuellement
-    if (mission.devisId?.diagnosticsSelectionnes) {
+    // 1) Diagnostics sélectionnés individuellement (ceux qui ont été validés dans le devis)
+    if (mission.devisId?.diagnosticsSelectionnes?.length) {
       diagnostics.push(...mission.devisId.diagnosticsSelectionnes);
     }
 
-    // 3) ✅ Ajouter les suppléments sélectionnés (GAZ, Surface copropriété, etc.)
-    if (mission.devisId?.supplementsSelectionnes) {
+    // 2) Suppléments sélectionnés (GAZ, Surface copropriété, Audit, etc.)
+    if (mission.devisId?.supplementsSelectionnes?.length) {
       diagnostics.push(...mission.devisId.supplementsSelectionnes);
     }
 

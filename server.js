@@ -149,7 +149,13 @@ app.use((err, req, res, next) => {
 ===================================================== */
 const PORT = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`Serveur démarré sur http://localhost:${PORT} 🚀`);
   listRoutes(); // ✅ appelé ici seulement (100% safe)
 });
+
+// ✅ FIX BUG #3 : Augmentation du timeout à 10 minutes pour les uploads volumineux (50 Mo)
+server.timeout = 600000; // 10 minutes (en millisecondes)
+server.keepAliveTimeout = 610000; // 10 min + 10 sec (doit être > timeout)
+server.headersTimeout = 620000; // 10 min + 20 sec (doit être > keepAliveTimeout)
+console.log('⏱️  Timeout serveur configuré : 10 minutes (uploads jusqu\'à 50 Mo)');

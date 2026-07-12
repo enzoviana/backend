@@ -123,9 +123,19 @@ exports.getOrdreMissionById = async (req, res) => {
     }
 
     // 🔎 Recherche + populate
+    // ✅ FIX DÉSYNCHRONISATION : Populate les diagnostics de l'OM ET du Devis
     const ordre = await OrdreMission.findOne(query)
       .populate({
-        path: "devisId",
+        path: "pack", // Diagnostics de l'OM (snapshot au moment de création)
+        populate: [
+          { path: "obligatoireDansPacks", model: "Diagnostic" },
+          { path: "diagnostics", model: "Diagnostic" }
+        ]
+      })
+      .populate("diagnosticsSelectionnes") // Diagnostics de l'OM (snapshot)
+      .populate("supplementsSelectionnes") // Suppléments de l'OM (snapshot)
+      .populate({
+        path: "devisId", // Devis pour infos complémentaires
         populate: [
           {
             path: "pack",
@@ -186,6 +196,14 @@ exports.updateMissionInfos = async (req, res) => {
       return res.status(404).json({ message: "Devis introuvable." });
     }
 
+    // ✅ FIX BUG #6 : Initialiser les objets imbriqués si nécessaire
+    if (!devis.client) {
+      devis.client = {};
+    }
+    if (!devis.adresseBien) {
+      devis.adresseBien = {};
+    }
+
     // --- 1) Mise à jour du VRAI CLIENT dans la collection Client ---
     if (mission.clientId && client) {
       await Client.findByIdAndUpdate(
@@ -202,7 +220,7 @@ exports.updateMissionInfos = async (req, res) => {
             pays: client.pays
           }
         },
-        { new: true }
+        { new: true, runValidators: true }
       );
     }
 
@@ -223,11 +241,12 @@ exports.updateMissionInfos = async (req, res) => {
       if (bien.bien) devis.bien = bien.bien;
       if (bien.anneeConstruction) devis.anneeConstruction = bien.anneeConstruction;
 
-      // Surface selon type
-      if (devis.bien === "maison") {
-        devis.surfaceMaison = bien.surface || devis.surfaceMaison;
-      } else {
+      // ✅ FIX BUG #6 + #1 : Surface selon type (inclut locaux commerciaux)
+      if (devis.bien === "appartement") {
         devis.surfaceAppartement = bien.surface || devis.surfaceAppartement;
+      } else {
+        // Maisons ET autres types (locaux commerciaux, terrains, etc.)
+        devis.surfaceMaison = bien.surface || devis.surfaceMaison;
       }
 
       // Adresse du bien
@@ -245,6 +264,8 @@ exports.updateMissionInfos = async (req, res) => {
 
     await devis.save();
 
+    console.log("✅ Mission infos mises à jour avec succès :", devis.numero);
+
     return res.status(200).json({
       message: "✔️ Client + Bien mis à jour avec succès.",
       devis
@@ -252,7 +273,18 @@ exports.updateMissionInfos = async (req, res) => {
 
   } catch (error) {
     console.error("❌ Erreur updateMissionInfos :", error);
-    res.status(500).json({ message: "Erreur serveur lors de la mise à jour." });
+    // ✅ FIX BUG #6 : Renvoyer le détail de l'erreur pour debugging
+    const errorMessage = error.message || "Erreur inconnue";
+    const errorDetails = error.errors ? Object.keys(error.errors).map(key => ({
+      field: key,
+      message: error.errors[key].message
+    })) : [];
+
+    res.status(500).json({
+      message: "Erreur lors de l'enregistrement des modifications.",
+      error: errorMessage,
+      details: errorDetails.length > 0 ? errorDetails : undefined
+    });
   }
 };
 

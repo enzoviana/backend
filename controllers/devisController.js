@@ -1709,6 +1709,7 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
       const agenceData = await Agence.findById(devis.agenceId);
       const diagnostiqueurId = devis.diagnostiqueurAssigne || agenceData?.diagnostiqueurParDefaut || null;
 
+      // ✅ FIX DÉSYNCHRONISATION : Copier les diagnostics du Devis dans l'OM
       const ordre = new OrdreMission({
         devisId: devis._id,
         agenceId: devis.agenceId,
@@ -1718,7 +1719,15 @@ let montantCagnotteUtilisee = (typeof data.montantCagnotteUtilisee === 'boolean'
         statut: "Commande",
         creePar,
         diagnostiqueur: diagnostiqueurId,
-        statutAcceptation: diagnostiqueurId ? 'en_attente' : null
+        statutAcceptation: diagnostiqueurId ? 'en_attente' : null,
+        // 🔹 Snapshot des diagnostics
+        pack: devis.pack || null,
+        diagnosticsSelectionnes: devis.diagnosticsSelectionnes || [],
+        supplementsSelectionnes: devis.supplementsSelectionnes || [],
+        chauffageGaz: devis.chauffageGaz || false,
+        tarifGaz: devis.tarifGaz || 0,
+        copropriete: devis.copropriete || false,
+        tarifCopropriete: devis.tarifCopropriete || 0
       });
 
       if (req.file) {
@@ -2155,6 +2164,7 @@ exports.uploadPdfDevis = async (req, res) => {
     const agenceData = await Agence.findById(devis.agenceId);
     const diagnostiqueurId = devis.diagnostiqueurAssigne || agenceData?.diagnostiqueurParDefaut || null;
 
+    // ✅ FIX DÉSYNCHRONISATION : Copier les diagnostics du Devis dans l'OM
     const ordre = new OrdreMission({
       devisId: devis._id,
       agenceId: devis.agenceId,
@@ -2164,7 +2174,15 @@ exports.uploadPdfDevis = async (req, res) => {
       statut: "Commande",
       creePar: devis.creePar,
       diagnostiqueur: diagnostiqueurId,
-      statutAcceptation: diagnostiqueurId ? 'en_attente' : null
+      statutAcceptation: diagnostiqueurId ? 'en_attente' : null,
+      // 🔹 Snapshot des diagnostics
+      pack: devis.pack || null,
+      diagnosticsSelectionnes: devis.diagnosticsSelectionnes || [],
+      supplementsSelectionnes: devis.supplementsSelectionnes || [],
+      chauffageGaz: devis.chauffageGaz || false,
+      tarifGaz: devis.tarifGaz || 0,
+      copropriete: devis.copropriete || false,
+      tarifCopropriete: devis.tarifCopropriete || 0
     });
     await ordre.save();
     console.log("✅ [UPLOAD-PDF] Ordre de mission créé:", ordre.numero);
@@ -3018,6 +3036,7 @@ exports.updateDevisInfos = async (req, res) => {
           const agenceData = await Agence.findById(devis.agenceId);
           const diagnostiqueurId = devis.diagnostiqueurAssigne || agenceData?.diagnostiqueurParDefaut || null;
 
+          // ✅ FIX DÉSYNCHRONISATION : Copier les diagnostics du Devis dans l'OM
           const nouvelOrdreMission = new OrdreMission({
             devisId: devis._id,
             agenceId: devis.agenceId || null,
@@ -3030,7 +3049,15 @@ exports.updateDevisInfos = async (req, res) => {
               type: req.user.role === "admin" ? "Admin" : req.user.role === "agence" ? "Agence" : "Employe"
             },
             diagnostiqueur: diagnostiqueurId,
-            statutAcceptation: diagnostiqueurId ? 'en_attente' : null
+            statutAcceptation: diagnostiqueurId ? 'en_attente' : null,
+            // 🔹 Snapshot des diagnostics
+            pack: devis.pack || null,
+            diagnosticsSelectionnes: devis.diagnosticsSelectionnes || [],
+            supplementsSelectionnes: devis.supplementsSelectionnes || [],
+            chauffageGaz: devis.chauffageGaz || false,
+            tarifGaz: devis.tarifGaz || 0,
+            copropriete: devis.copropriete || false,
+            tarifCopropriete: devis.tarifCopropriete || 0
           });
 
           await nouvelOrdreMission.save();

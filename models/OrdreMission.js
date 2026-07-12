@@ -7,6 +7,32 @@ const OrdreMissionSchema = new mongoose.Schema({
   description: { type: String },
   dateCreation: { type: Date, default: Date.now },
 
+  // ✅ FIX DÉSYNCHRONISATION : Snapshot des diagnostics au moment de la création de l'OM
+  // Ces champs stockent une copie des diagnostics du Devis à l'instant T
+  // pour préserver l'historique même si le Devis est modifié plus tard
+  pack: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Pack',
+    default: null
+  },
+  diagnosticsSelectionnes: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Diagnostic'
+    }
+  ],
+  supplementsSelectionnes: [
+    {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Supplement'
+    }
+  ],
+  // Informations financières snapshot
+  chauffageGaz: { type: Boolean, default: false },
+  tarifGaz: { type: Number, default: 0 },
+  copropriete: { type: Boolean, default: false },
+  tarifCopropriete: { type: Number, default: 0 },
+
 statut: {
   type: String,
   enum: ['Commande', 'En Attente', 'En Cours', 'Traité', 'Payée', 'Payé', 'Annulé'],
